@@ -481,8 +481,9 @@ SIDEBOARD
    means to actually play the game.
    ============================================================ */
 
-/* ---- fill this in after deploying the Worker (see the README) ---- */
-const API_BASE = "https://proxytable-api.YOUR-SUBDOMAIN.workers.dev";
+/* Deployed Worker API. Override at runtime if needed by setting
+   window.PT_API_BASE before this script runs. */
+const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
