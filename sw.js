@@ -45,7 +45,10 @@ self.addEventListener("fetch", e => {
   if (url.origin === location.origin){
     e.respondWith(
       fetch(req).then(res => {
-        if (res.ok) caches.open(SHELL).then(c => c.put(req, res.clone()));
+        if (res.ok){
+          const copy = res.clone();
+          caches.open(SHELL).then(c => c.put(req, copy));
+        }
         return res;
       }).catch(() => caches.match(req).then(r => r || caches.match("./index.html")))
     );
