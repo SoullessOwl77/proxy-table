@@ -195,6 +195,13 @@ label:first-child{margin-top:0;}
 .missrow .mq{color:var(--parchment-dim);font-size:11px;font-variant-numeric:tabular-nums;min-width:24px;}
 .missrow .mn{flex:1;font-size:13px;}
 .missrow .ms{font-size:10px;letter-spacing:.1em;color:var(--parchment-dim);}
+.preview{position:fixed;inset:0;background:#000e;display:none;align-items:center;justify-content:center;
+  z-index:85;flex-direction:column;gap:10px;padding:12px;}
+.preview.on{display:flex;}
+.preview img{max-height:88%;max-width:92%;border-radius:9px;box-shadow:0 14px 40px #000;}
+.preview .pvbar{display:flex;gap:8px;align-items:center;}
+.preview .pvname{font-family:Fraunces,serif;font-size:15px;text-align:center;max-width:80vw;}
+
 .toast{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:#000d;
   border:1px solid var(--brass-dim);color:var(--parchment);padding:7px 14px;border-radius:20px;
   font-size:12px;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none;max-width:88vw;text-align:center;}
@@ -275,6 +282,10 @@ label:first-child{margin-top:0;}
     <div class="life" id="oppLife">
       <span class="who" id="oppName">practice</span>
       <span class="n mono" id="oppLifeN">20</span>
+      <div class="pm" id="oppPm" style="display:none;">
+        <button aria-label="Opponent gains life" data-od="1"></button>
+        <button aria-label="Opponent loses life" data-od="-1"></button>
+      </div>
     </div>
     <div class="sync">
       <div class="k" id="syncWho">solo table</div>
@@ -296,7 +307,7 @@ label:first-child{margin-top:0;}
   <div class="tray">
     <div class="zones">
       <button class="zone lib" id="zLib"><div class="lbl"><div class="c mono" id="libN">0</div><div class="z">Library</div></div></button>
-      <button class="zone" id="zCmd" style="display:none;border-color:var(--brass);"><div class="lbl"><div class="c mono" id="cmdN">0</div><div class="z">Command</div></div></button>
+      <button class="zone" id="zCmd" style="display:none;border-color:var(--brass);"><img id="cmdArt" alt=""><div class="lbl"><div class="c mono" id="cmdN">0</div><div class="z">Command</div></div></button>
     </div>
     <div class="hand" id="hand"></div>
     <div class="zones">
@@ -427,6 +438,17 @@ SIDEBOARD
     </div>
     <label>Starting life</label><input id="gmLife" type="number" value="20" style="max-width:120px;">
     <div class="hint" id="gmLegal"></div>
+
+    <div id="soloBlock">
+      <label>Second seat — play both sides</label>
+      <select id="gmOppDeck"></select>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn gold" id="gmOppDeal">Deal to the other seat</button>
+        <button class="btn" id="gmSwap">Swap seats</button>
+        <button class="btn" id="gmOppHand">See other hand</button>
+      </div>
+      <div class="hint">You control whichever seat is on the bottom. Swap to take the other side's turn — hand, library, and zones all follow the seat you're in.</div>
+    </div>
   </div>
 </div></div>
 
@@ -436,6 +458,14 @@ SIDEBOARD
     <button class="btn sm" data-close>Close</button></header>
   <div class="content"><div class="grid" id="listGrid"></div></div>
 </div></div>
+
+<div class="preview" id="preview">
+  <img id="previewImg" alt="">
+  <div class="pvbar">
+    <span class="pvname" id="previewName"></span>
+    <button class="btn sm" id="previewFlip" style="display:none;">Other face</button>
+  </div>
+</div>
 
 <div class="cardmenu" id="cardMenu"></div>
 <div class="toast" id="toast"></div>
@@ -452,7 +482,7 @@ SIDEBOARD
    ============================================================ */
 
 /* ---- fill this in after deploying the Worker (see the README) ---- */
-const API_BASE = "https://proxytable-api.proxytable.workers.dev";
+const API_BASE = "https://proxytable-api.YOUR-SUBDOMAIN.workers.dev";
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -478,7 +508,7 @@ const FORMATS = {
   freeform:{life:20,size:0,max:99,label:"Freeform"}
 };
 
-let decks = [], G = null, opp = null;
+let decks = [], G = null, G2 = null, opp = null, twoSided = false;
 let currentUser = null, currentMatch = null, oppName = null, playerName = "Player";
 let syncTimer = null, statePushTimer = null, statePushWanted = false;
 
@@ -683,7 +713,10 @@ $("#newDeckBtn").onclick = () => { editIndex = -1; $("#deckModalTitle").textCont
 
 $("#deckList").onclick = async e => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.play !== undefined){ currentMatch = null; startGame(decks[+b.dataset.play]); goTable(); }
+  if (b.dataset.play !== undefined){
+    currentMatch = null; G2 = null; twoSided = false; opp = null;
+    startGame(decks[+b.dataset.play]); goTable();
+  }
   if (b.dataset.del !== undefined){
     const d = decks[+b.dataset.del];
     decks.splice(+b.dataset.del,1); renderDecks();
@@ -836,7 +869,10 @@ function renderMatches(matches){
     </div>`).join("");
   el.onclick = e => { const b = e.target.closest("button[data-rejoin]"); if (b) rejoinMatch(b.dataset.rejoin); };
 }
-function rejoinMatch(matchId){ currentMatch = matchId; G = null; opp = null; goTable(); }
+function rejoinMatch(matchId){
+  currentMatch = matchId; G = null; G2 = null; twoSided = false; opp = null;
+  goTable();
+}
 
 $("#menuChallenge").onclick = () => { switchTab("tabName"); open("#challengeModal"); };
 $("#menuCode").onclick = () => { switchTab("tabCode"); open("#challengeModal"); };
@@ -922,7 +958,21 @@ function startGame(deck, life){
 /* ============================================================
    RENDER
    ============================================================ */
-function renderAll(){ if(!G) return; renderField(); renderHand(); renderZones(); renderLife(); renderOpp(); }
+/* In solo play the second seat is a real game state we also control, shaped
+   into the same read-only view the networked opponent uses so one renderer
+   serves both. */
+function oppView(g){
+  if (!g) return null;
+  return {name: g.deckName || "other seat", deckName: g.deckName, life: g.life,
+    hand: g.hand.length, library: g.library.length, command: g.command.length,
+    field: g.field, grave: g.grave, exile: g.exile};
+}
+function renderAll(){
+  if(!G) return;
+  if (twoSided) opp = oppView(G2);
+  renderField(); renderHand(); renderZones(); renderLife(); renderOpp();
+  if (!currentMatch) setSyncStatus(false, null);
+}
 function mkCardEl(c){
   const el = document.createElement("div");
   el.className = "card"; el.dataset.id = c.id;
@@ -964,13 +1014,18 @@ function renderZones(){
   $("#exN").textContent = G.exile.length;
   $("#cmdN").textContent = G.command.length;
   $("#zCmd").style.display = (G.format === "commander" || G.command.length) ? "" : "none";
-  const top = G.grave[G.grave.length-1], art = $("#gyArt");
-  if (top){ art.src = top.img; art.style.display = "block"; } else { art.removeAttribute("src"); art.style.display = "none"; }
+  const setArt = (el, card) => {
+    if (card && card.img){ el.src = card.img; el.style.display = "block"; }
+    else { el.removeAttribute("src"); el.style.display = "none"; }
+  };
+  setArt($("#gyArt"), G.grave[G.grave.length-1]);
+  setArt($("#cmdArt"), G.command[0]);
 }
 function renderLife(){
   $("#myLifeN").textContent = G ? G.life : 20;
   $("#myLifeN").classList.toggle("hurt", !!G && G.life <= 5);
-  $("#myName").textContent = playerName;
+  $("#myName").textContent = twoSided && G ? (G.deckName || "this seat") : playerName;
+  $("#oppPm").style.display = twoSided ? "" : "none";
 }
 function renderOpp(){
   const f = $("#oppField");
@@ -990,14 +1045,33 @@ function renderOpp(){
   $("#oppEx").onclick = () => showList("Opponent's exile", opp.exile, false);
   syncField(f, opp.field,
     (el,c) => { el.style.left = (100-c.x)+"%"; el.style.top = (100-c.y)+"%"; },
-    (el,c) => { el.onclick = () => { if (!c.faceDown) showList(c.name, [c], false); }; });
+    (el,c) => { el.onclick = () => { if (!c.faceDown) preview(c); }; });
 }
 
 /* ============================================================
    DRAG + CARD MENU
    ============================================================ */
+/* ============================================================
+   CARD PREVIEW — full-size look at any card
+   ============================================================ */
+let pvCard = null, pvFace = 0;
+function preview(c){
+  if (!c || !c.img) return;
+  pvCard = c; pvFace = (c.flipped && c.back) ? 1 : 0;
+  paintPreview();
+  $("#previewFlip").style.display = c.back ? "" : "none";
+  open("#preview");
+}
+function paintPreview(){
+  const src = (pvFace === 1 && pvCard.back) ? pvCard.back : pvCard.img;
+  $("#previewImg").src = src;
+  $("#previewName").textContent = pvCard.name || "";
+}
+$("#previewFlip").onclick = e => { e.stopPropagation(); pvFace = pvFace ? 0 : 1; paintPreview(); };
+$("#preview").onclick = () => close("#preview");
+
 function attachDrag(el, c){
-  let sx, sy, ox, oy, bw, bh, moved = false, dragging = false, timer = null;
+  let sx, sy, ox, oy, bw, bh, moved = false, dragging = false, timer = null, lastTap = 0;
   el.addEventListener("pointerdown", e => {
     el.setPointerCapture(e.pointerId);
     sx = e.clientX; sy = e.clientY; ox = c.x; oy = c.y; moved = false;
@@ -1018,9 +1092,19 @@ function attachDrag(el, c){
     el.style.left = c.x+"%"; el.style.top = c.y+"%";
     pushState();
   });
-  const finish = () => { clearTimeout(timer);
-    if (sx !== undefined && !moved){ c.tapped = !c.tapped; paint(el,c); }
-    sx = undefined; dragging = false; el.classList.remove("drag"); pushState(); };
+  const finish = () => {
+    clearTimeout(timer);
+    if (sx !== undefined && !moved){
+      const now = Date.now();
+      if (now - lastTap < 320){
+        /* second tap: undo the first tap's toggle and show the card instead */
+        c.tapped = !c.tapped; paint(el, c); lastTap = 0; preview(c);
+      } else {
+        lastTap = now; c.tapped = !c.tapped; paint(el, c);
+      }
+    }
+    sx = undefined; dragging = false; el.classList.remove("drag"); pushState();
+  };
   el.addEventListener("pointerup", finish);
   el.addEventListener("pointercancel", finish);
 }
@@ -1029,7 +1113,7 @@ function openCardMenu(c, from, el){
   const act = (l,wide) => `<button data-a="${l}"${wide?' class="wide"':""}>${l}</button>`;
   const cmdZone = (G.format === "commander" || G.command.length) ? act("To command zone") : "";
   m.innerHTML = from === "hand"
-    ? act("Play")+act("Play face down")+act("Play tapped")+act("Reveal")+
+    ? act("Zoom", true)+act("Play")+act("Play face down")+act("Play tapped")+
       act("Discard")+act("Exile")+act("To top of library")+act("To bottom")
     : act("Tap / untap")+act("Add counter")+act("Remove counter")+act("Flip face")+
       act("Turn face down")+act("Copy")+act("To hand")+act("To graveyard")+
@@ -1054,7 +1138,6 @@ function doAction(a, c, from){
     case "Play":             moveOut(c,from); Object.assign(c,{x:44,y:58,tapped:false,faceDown:false}); G.field.push(c); break;
     case "Play face down":   moveOut(c,from); Object.assign(c,{x:44,y:58,faceDown:true}); G.field.push(c); break;
     case "Play tapped":      moveOut(c,from); Object.assign(c,{x:44,y:58,tapped:true}); G.field.push(c); break;
-    case "Reveal":           toast("Revealed — point it out to your buddy."); return;
     case "Discard": case "To graveyard": moveOut(c,from); reset(c); G.grave.push(c); break;
     case "Exile": case "To exile":       moveOut(c,from); reset(c); G.exile.push(c); break;
     case "To top of library": case "To library top": moveOut(c,from); reset(c); G.library.push(c); break;
@@ -1067,7 +1150,7 @@ function doAction(a, c, from){
     case "Flip face":        c.flipped = !c.flipped; break;
     case "Turn face down":   c.faceDown = !c.faceDown; break;
     case "Copy":             G.field.push({...c, id:uid(), x:clamp(c.x+9,0,90)}); break;
-    case "Zoom":              showList(c.name, [c], false); return;
+    case "Zoom":             preview(c); return;
   }
   renderAll(); pushState();
 }
@@ -1094,9 +1177,26 @@ function showList(title, cards, zone){
   $("#listShuffle").style.display = (zone === "library") ? "" : "none";
   const g = $("#listGrid");
   g.innerHTML = cards.map((c,i) => `<div class="card" data-i="${i}"><img src="${c.img}" alt="${esc(c.name)}"></div>`).join("");
+  /* long-press previews, tap moves — so you can read a card before committing */
+  let lpTimer = null, lpFired = false;
+  g.onpointerdown = e => {
+    const el = e.target.closest(".card"); if (!el) return;
+    lpFired = false;
+    lpTimer = setTimeout(() => { lpFired = true; preview(cards[+el.dataset.i]); }, 400);
+  };
+  g.onpointerup = g.onpointercancel = () => clearTimeout(lpTimer);
   g.onclick = e => {
-    const el = e.target.closest(".card"); if (!el || !listCtx) return;
+    const el = e.target.closest(".card"); if (!el) return;
+    if (lpFired){ lpFired = false; return; }
+    if (!listCtx){ preview(cards[+el.dataset.i]); return; }
     const c = listCtx.cards[+el.dataset.i];
+    if (listCtx.zone === "opphand"){
+      G2.hand.splice(G2.hand.indexOf(c),1);
+      Object.assign(c,{x:44,y:58,tapped:false,faceDown:false}); G2.field.push(c);
+      close("#listModal"); renderAll();
+      toast("Played to the other seat's board.");
+      return;
+    }
     if (listCtx.zone === "command"){
       G.command.splice(G.command.indexOf(c),1); reset(c);
       Object.assign(c,{x:44,y:58}); G.field.push(c);
@@ -1120,8 +1220,13 @@ $("#myLife").addEventListener("click", e => {
    TABLE MENU
    ============================================================ */
 $("#menuBtn").onclick = () => {
-  $("#gmDeck").innerHTML = decks.map((d,i) =>
+  const opts = decks.map((d,i) =>
     `<option value="${i}"${G && d.id===G.deckId?" selected":""}>${esc(d.name)}</option>`).join("");
+  $("#gmDeck").innerHTML = opts;
+  $("#gmOppDeck").innerHTML = decks.map((d,i) =>
+    `<option value="${i}"${G2 && d.id===G2.deckId?" selected":""}>${esc(d.name)}</option>`).join("");
+  $("#soloBlock").style.display = currentMatch ? "none" : "";
+  $("#gmNudge").style.display = currentMatch ? "" : "none";
   const d = G && decks.find(x => x.id === G.deckId);
   $("#gmLegal").textContent = d ? (checkLegal(d).join("  ·  ") || "Deck is legal for its format.") : "";
   open("#gameModal");
@@ -1159,11 +1264,38 @@ $("#gmNudge").onclick = async () => {
   try{ await postEvent("nudge", {message: `${currentUser}: your move`}); toast("Nudge sent."); }
   catch(e){ toast("Couldn't send the nudge — check your connection."); }
 };
+
+/* ---- second seat (solo practice only) ---- */
+$("#gmOppDeal").onclick = () => {
+  const d = decks[+$("#gmOppDeck").value];
+  if (!d) return toast("Add a deck first.");
+  G2 = newGameState(d, FORMATS[d.format].life);
+  twoSided = true;
+  close("#gameModal"); renderAll();
+  toast(`${d.name} dealt to the other seat. Swap seats to play it.`);
+};
+$("#gmSwap").onclick = () => {
+  if (!twoSided || !G2) return toast("Deal a deck to the other seat first.");
+  const t = G; G = G2; G2 = t;
+  close("#gameModal"); renderAll();
+  toast(`Now playing ${G.deckName || "the other seat"}.`);
+};
+$("#gmOppHand").onclick = () => {
+  if (!twoSided || !G2) return toast("Deal a deck to the other seat first.");
+  close("#gameModal");
+  showList(`${G2.deckName || "Other seat"} — hand`, G2.hand, "opphand");
+};
+$("#oppLife").addEventListener("click", e => {
+  const b = e.target.closest("button[data-od]");
+  if (!b || !twoSided || !G2) return;
+  G2.life += +b.dataset.od; renderAll();
+});
 $("#gmMenu").onclick = () => { close("#gameModal"); stopSync(); show("#menuScreen"); loadMatches(); };
 
 async function goTable(){
   show("#tableScreen");
-  G = null; opp = null;
+  /* note: G and opp are cleared by rejoinMatch before it calls this — don't
+     clear them here, or starting a practice game wipes the deck we just dealt */
   $("#syncWho").textContent = currentMatch ? "connecting…" : "practice table";
   setSyncStatus(!!currentMatch, null);
   renderAll(); renderOpp();
@@ -1181,9 +1313,15 @@ async function goTable(){
    and rejoining just re-reads it instead of replaying history.
    ============================================================ */
 function setSyncStatus(ok, name){
-  $("#syncWho").textContent = name || (currentMatch ? "match" : "practice table");
+  if (!currentMatch){
+    $("#syncWho").textContent = twoSided ? "both seats" : "practice table";
+    const s = $("#syncState");
+    s.textContent = twoSided ? "tap Menu to swap" : "not synced";
+    s.className = "s";
+    return;
+  }
+  $("#syncWho").textContent = name || "match";
   const s = $("#syncState");
-  if (!currentMatch){ s.textContent = "not synced"; s.className = "s"; return; }
   s.textContent = ok ? "synced" : "offline — retrying";
   s.className = "s " + (ok ? "live" : "bad");
 }
