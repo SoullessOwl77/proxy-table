@@ -126,14 +126,23 @@ label:first-child{margin-top:0;}
   text-transform:uppercase;color:#ffffff14;pointer-events:none;}
 .field.opp::after{top:5px;} .field.mine::after{bottom:5px;}
 
-.seamrow{flex:0 0 var(--seam);display:flex;align-items:center;gap:8px;position:relative;
+.seamrow{flex:0 0 var(--seam);display:flex;align-items:center;gap:8px;position:relative;flex-wrap:nowrap;
   padding-left:calc(10px + var(--edge-l));padding-right:calc(10px + var(--edge-r));
   background:linear-gradient(180deg,#0000 0%,#00000055 50%,#0000 100%);
   border-top:1px solid #c39a4e33;border-bottom:1px solid #c39a4e33;}
+/* every seam child holds its size; only the centre readout gives ground */
+.seamrow > .life,.seamrow > .btn{flex:0 0 auto;white-space:nowrap;}
+.seamrow > .sync{flex:1 1 auto;min-width:0;overflow:hidden;}
 .seamrow::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;
   background:linear-gradient(90deg,#0000,var(--brass-dim) 18%,var(--brass) 50%,var(--brass-dim) 82%,#0000);opacity:.5;}
 .life{position:relative;display:flex;flex-direction:column;align-items:center;width:74px;
-  background:var(--felt-3);border:1px solid #c39a4e2e;border-radius:9px;padding:2px 0;}
+  background:var(--felt-3);border:1px solid #c39a4e2e;border-radius:9px;padding:2px 0;z-index:1;}
+@media (max-width:760px){
+  .seamrow{gap:5px;}
+  .life{width:60px;}
+  .life .n{font-size:22px;}
+  .seamrow > .btn{padding:5px 7px;font-size:10px;}
+}
 .life .who{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--parchment-dim);
   max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .life .n{font-family:Fraunces,serif;font-weight:900;font-size:26px;line-height:1;}
@@ -225,6 +234,7 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
   box-shadow:0 12px 26px #000c;opacity:.92;transform:translate(-50%,-50%) scale(1.06);}
 .ghost img{width:100%;height:100%;object-fit:cover;display:block;}
 .dropzone{outline:2px dashed var(--brass);outline-offset:-6px;}
+.zone.dropzone,#hand.dropzone{outline-offset:-2px;background-color:#c39a4e22;}
 
 .oppbar{position:absolute;left:0;top:0;display:flex;gap:5px;padding:4px 6px;z-index:5;}
 .pill{background:#0009;border:1px solid #ffffff18;border-radius:20px;padding:2px 8px;font-size:10px;
@@ -555,7 +565,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v3.6";
+const BUILD = "v3.7";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1094,7 +1104,6 @@ function renderHand(){
    drag still scrolls the hand, and a plain tap still opens the card menu. */
 function attachHandDrag(el, c){
   let sx, sy, decided = null, ghost = null;
-  const field = () => $("#myField");
   el.addEventListener("pointerdown", e => {
     if (pinching) return;
     sx = e.clientX; sy = e.clientY; decided = null;
@@ -1122,18 +1131,17 @@ function attachHandDrag(el, c){
     if (decided !== "lift") return;
     ghost.style.left = e.clientX + "px";
     ghost.style.top = e.clientY + "px";
-    const over = inRect(e.clientX, e.clientY, field().getBoundingClientRect());
-    field().classList.toggle("dropzone", over);
+    highlightDrop(dropTargetAt(e.clientX, e.clientY));
   });
   const finish = e => {
     if (decided === "lift"){
+      const target = dropTargetAt(e.clientX, e.clientY);
       const box = $("#myFieldInner").getBoundingClientRect();
-      const dropped = inRect(e.clientX, e.clientY, field().getBoundingClientRect());
       if (ghost) ghost.remove();
       ghost = null;
       el.style.opacity = "";
-      field().classList.remove("dropzone");
-      if (dropped){
+      highlightDrop(null);
+      if (target === "field"){
         const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-w")) || 64;
         const ch = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-h")) || 89;
         G.hand.splice(G.hand.indexOf(c), 1);
@@ -1142,6 +1150,10 @@ function attachHandDrag(el, c){
         c.tapped = false; c.faceDown = false;
         G.field.push(c);
         renderAll(); pushState();
+      } else if (target && target !== "hand"){
+        const where = dropInto(c, "hand", target);
+        renderAll(); pushState();
+        toast(`${c.name} to ${where}.`);
       }
     } else if (decided === null && sx !== undefined){
       openCardMenu(c, "hand", el);   // a plain tap
@@ -1151,11 +1163,46 @@ function attachHandDrag(el, c){
   el.addEventListener("pointerup", finish);
   el.addEventListener("pointercancel", () => {
     if (ghost){ ghost.remove(); ghost = null; }
-    el.style.opacity = ""; $("#myField").classList.remove("dropzone");
+    el.style.opacity = ""; highlightDrop(null);
     sx = undefined; decided = null;
   });
 }
 const inRect = (x, y, r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+
+/* Where a dragged card would land if released here. Zones are checked before
+   the field because they sit outside it in the tray. */
+function dropTargetAt(x, y){
+  const over = sel => {
+    const el = $(sel);
+    if (!el || el.offsetParent === null) return false;
+    return inRect(x, y, el.getBoundingClientRect());
+  };
+  if (over("#zGy"))  return "grave";
+  if (over("#zEx"))  return "exile";
+  if (over("#zCmd")) return "command";
+  if (over("#zLib")) return "library";
+  if (over("#hand")) return "hand";
+  if (over("#myField")) return "field";
+  return null;
+}
+const DROP_EL = {grave:"#zGy", exile:"#zEx", command:"#zCmd", library:"#zLib", hand:"#hand", field:"#myField"};
+function highlightDrop(target){
+  Object.values(DROP_EL).forEach(sel => $(sel).classList.remove("dropzone"));
+  if (target) $(DROP_EL[target]).classList.add("dropzone");
+}
+/* Moves a card into a zone from wherever it is. Returns a label for the toast. */
+function dropInto(c, from, target){
+  const src = from === "hand" ? G.hand : G.field;
+  const i = src.indexOf(c); if (i >= 0) src.splice(i, 1);
+  switch(target){
+    case "grave":   reset(c); G.grave.push(c);   return "graveyard";
+    case "exile":   reset(c); G.exile.push(c);   return "exile";
+    case "command": reset(c); G.command.push(c); return "command zone";
+    case "library": reset(c); G.library.push(c); return "top of library";
+    case "hand":    reset(c); G.hand.push(c);    return "hand";
+  }
+  return "";
+}
 function renderOppHand(n){
   const s = $("#oppHandStrip");
   const shown = Math.min(n, 12);
@@ -1279,17 +1326,18 @@ function attachDrag(el, c){
     c.x = clamp(ox + dx/bw*100, -2, 96);
     c.y = clamp(oy + dy/bh*100, -2, 92);
     el.style.left = c.x+"%"; el.style.top = c.y+"%";
-    $(".tray").classList.toggle("dropzone", inRect(lastX, lastY, $(".tray").getBoundingClientRect()));
+    const t = dropTargetAt(lastX, lastY);
+    highlightDrop(t === "field" ? null : t);
     pushState();
   });
   const finish = () => {
     clearTimeout(timer);
-    $(".tray").classList.remove("dropzone");
-    /* dropped onto the hand tray: put it back in hand */
-    if (dragging && lastY !== null && inRect(lastX, lastY, $(".tray").getBoundingClientRect())){
-      G.field.splice(G.field.indexOf(c), 1); reset(c); G.hand.push(c);
+    highlightDrop(null);
+    const target = (dragging && lastY !== null) ? dropTargetAt(lastX, lastY) : null;
+    if (target && target !== "field"){
+      const where = dropInto(c, "field", target);
       sx = undefined; dragging = false; el.classList.remove("drag");
-      renderAll(); pushState(); toast(`${c.name} back to hand.`);
+      renderAll(); pushState(); toast(`${c.name} to ${where}.`);
       return;
     }
     if (sx !== undefined && !moved && !pinching){
