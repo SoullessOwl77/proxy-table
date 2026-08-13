@@ -12,12 +12,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cards.scryfall.io" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Archivo:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
 <style>
 :root{
   --felt:#141d1b; --felt-2:#1b2825; --felt-3:#233330; --ink:#0a0f0e;
   --brass:#c39a4e; --brass-dim:#7d6433;
-  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c;
+  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
   --card-w:64px; --card-h:89px; --seam:56px;
   --edge-l:env(safe-area-inset-left,0px);
   --edge-r:env(safe-area-inset-right,0px);
@@ -43,8 +42,36 @@ input,textarea{-webkit-user-select:text;user-select:text;}
 .btn.gold{background:var(--brass);color:#191207;font-weight:700;}
 .btn.ghost{background:none;border:1px solid var(--brass-dim);color:var(--brass);}
 .btn.sm{padding:5px 9px;font-size:11px;}
+.btn:disabled{opacity:.45;}
 .btn:focus-visible,.zone:focus-visible,.card:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
 .spacer{flex:1;}
+
+.center{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;
+  padding-left:calc(20px + var(--edge-l));padding-right:calc(20px + var(--edge-r));}
+.panel{width:100%;max-width:380px;background:var(--felt-2);border:1px solid var(--brass-dim);
+  border-radius:12px;padding:22px;}
+.panel h1{font-family:Fraunces,serif;font-size:26px;margin:0 0 3px;font-weight:900;}
+.panel .tag{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--parchment-dim);margin-bottom:18px;}
+.err{color:var(--blood);font-size:12px;margin-top:7px;min-height:15px;}
+.ok{color:var(--good);}
+
+#menuScreen .body{flex:1;overflow-y:auto;padding:14px;
+  padding-left:calc(14px + var(--edge-l));padding-right:calc(14px + var(--edge-r));}
+.section{margin-bottom:22px;}
+.section h2{font-family:Fraunces,serif;font-size:14px;font-weight:600;letter-spacing:.04em;
+  color:var(--parchment-dim);text-transform:uppercase;margin:0 0 9px;}
+.matchrow{display:flex;align-items:center;gap:10px;background:var(--felt-2);border:1px solid #000;
+  border-radius:9px;padding:10px 12px;margin-bottom:7px;}
+.matchrow .who{font-family:Fraunces,serif;font-size:16px;font-weight:600;}
+.matchrow .when{font-size:11px;color:var(--parchment-dim);}
+.actionrow{display:flex;gap:9px;flex-wrap:wrap;}
+.bigbtn{flex:1;min-width:150px;background:var(--felt-2);border:1px solid var(--brass-dim);
+  border-radius:10px;padding:16px;text-align:left;}
+.bigbtn .t{font-family:Fraunces,serif;font-size:16px;font-weight:600;display:block;margin-bottom:2px;}
+.bigbtn .d{font-size:11.5px;color:var(--parchment-dim);}
+.bigbtn:active{background:var(--brass-dim);}
+.banner{background:#3a2418;border:1px solid var(--blood);border-radius:8px;padding:9px 12px;
+  font-size:12px;margin-bottom:14px;}
 
 #deckScreen .body{flex:1;overflow-y:auto;padding:14px;display:grid;
   grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;align-content:start;
@@ -61,9 +88,6 @@ input,textarea{-webkit-user-select:text;user-select:text;}
 .modal.on{display:flex;}
 .sheet{background:var(--felt-2);border:1px solid var(--brass-dim);border-radius:12px;width:100%;
   max-width:560px;max-height:100%;display:flex;flex-direction:column;overflow:hidden;}
-
-/* keyboard open: trade padding and helper text for field space, header and
-   footer stay pinned so the save button is always reachable */
 body.kbd .modal{padding:5px;align-items:flex-start;}
 body.kbd .sheet{border-radius:9px;}
 body.kbd .sheet header{padding:6px 11px;}
@@ -73,7 +97,6 @@ body.kbd .sheet footer{padding:7px 11px;}
 body.kbd label{margin:8px 0 3px;font-size:10px;}
 body.kbd input,body.kbd select,body.kbd textarea{padding:7px 9px;}
 body.kbd .content .hint{display:none;}
-body.kbd #connLog{display:block;}
 body.kbd textarea{min-height:108px;}
 .sheet header{padding:12px 14px;border-bottom:1px solid #0007;display:flex;align-items:center;gap:10px;}
 .sheet header h2{font-family:Fraunces,serif;font-size:18px;margin:0;font-weight:600;}
@@ -86,6 +109,14 @@ label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase
   color:var(--parchment-dim);margin:12px 0 5px;}
 label:first-child{margin-top:0;}
 .hint{font-size:11.5px;color:var(--parchment-dim);line-height:1.5;margin-top:6px;}
+.tabs{display:flex;gap:6px;margin-bottom:12px;}
+.tabs button{flex:1;padding:8px;border-radius:7px;background:var(--felt-3);font-size:12px;font-weight:600;}
+.tabs button.on{background:var(--brass);color:#191207;}
+.tabpane{display:none;}
+.tabpane.on{display:block;}
+.codebig{font-family:Fraunces,serif;font-size:30px;letter-spacing:.3em;text-indent:.3em;
+  color:var(--brass);text-align:center;background:var(--ink);border:1px solid var(--brass-dim);
+  border-radius:8px;padding:14px 0;margin:10px 0;}
 
 #tableScreen{background:radial-gradient(120% 90% at 50% 50%,var(--felt-2) 0%,var(--felt) 62%,var(--ink) 100%);}
 .field{position:relative;flex:1;min-height:0;overflow:hidden;
@@ -109,11 +140,12 @@ label:first-child{margin-top:0;}
 .life .n.hurt{color:var(--blood);}
 .life .pm{position:absolute;inset:0;display:flex;flex-direction:column;}
 .life .pm button{flex:1;}
-.code{flex:1;text-align:center;position:relative;}
-.code .k{font-family:Fraunces,serif;font-size:22px;letter-spacing:.34em;font-weight:600;
-  color:var(--brass);text-indent:.34em;}
-.code .s{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--parchment-dim);}
-.code .s.live{color:#6bbf8a;}
+.sync{flex:1;text-align:center;position:relative;}
+.sync .k{font-size:11px;letter-spacing:.05em;color:var(--parchment-dim);}
+.sync .s{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--parchment-dim);}
+.sync .s.live{color:var(--good);}
+.sync .s.bad{color:var(--blood);}
+.sync button{position:absolute;inset:0;}
 
 .card{position:absolute;width:var(--card-w);height:var(--card-h);border-radius:4px;
   background:#0b0f0e;box-shadow:0 3px 7px #000a;transition:transform .13s ease,box-shadow .13s;
@@ -176,13 +208,62 @@ label:first-child{margin-top:0;}
 </head>
 <body>
 
-<div class="screen on" id="deckScreen">
+<div class="screen on" id="loginScreen"><div class="center"><div class="panel">
+  <h1>Proxy Table</h1>
+  <div class="tag">Sign in</div>
+  <label>Your name</label>
+  <input id="loginName" placeholder="Kyle" maxlength="20" autocomplete="off">
+  <div class="hint">No password — the name is the account. Pick one you and your buddy will both recognize. Taken by someone else already? Pick another; there's no way to change it later.</div>
+  <div class="err" id="loginErr"></div>
+  <div class="actionrow" style="margin-top:10px;">
+    <button class="btn gold" id="loginGo" style="flex:1;padding:11px;">Continue</button>
+  </div>
+</div></div></div>
+
+<div class="screen" id="menuScreen">
   <div class="bar">
-    <h1>Proxy Table</h1><span class="sub">Decks</span>
+    <h1>Proxy Table</h1><span class="sub" id="menuWho"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="menuNotif">Notifications</button>
+    <button class="btn" id="menuSwitch">Switch account</button>
+  </div>
+  <div class="body">
+    <div class="banner" id="menuBanner" style="display:none;"></div>
+
+    <div class="section">
+      <h2>Your matches</h2>
+      <div id="matchList"><p class="hint">No matches yet — challenge someone below.</p></div>
+    </div>
+
+    <div class="section">
+      <h2>Start a match</h2>
+      <div class="actionrow">
+        <button class="bigbtn" id="menuChallenge"><span class="t">Challenge by name</span>
+          <span class="d">Sends a notification if they've enabled them.</span></button>
+        <button class="bigbtn" id="menuCode"><span class="t">Code</span>
+          <span class="d">Works with no notifications — text the code over yourself.</span></button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Solo</h2>
+      <div class="actionrow">
+        <button class="bigbtn" id="menuPractice"><span class="t">Practice table</span>
+          <span class="d">Play a deck alone — draw, shuffle, test lines. Nothing is synced.</span></button>
+        <button class="bigbtn" id="menuDecks"><span class="t">Deck manager</span>
+          <span class="d">Add, edit, and check decks.</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="deckScreen">
+  <div class="bar">
+    <button class="btn" id="deckBack">Menu</button>
+    <h1>Decks</h1>
     <span class="spacer"></span>
     <button class="btn" id="backupBtn">Backup</button>
-    <button class="btn" id="newDeckBtn">Add deck</button>
-    <button class="btn gold" id="toTableBtn">Go to table</button>
+    <button class="btn gold" id="newDeckBtn">Add deck</button>
   </div>
   <div class="body" id="deckList"></div>
 </div>
@@ -192,13 +273,12 @@ label:first-child{margin-top:0;}
 
   <div class="seamrow">
     <div class="life" id="oppLife">
-      <span class="who" id="oppName">waiting</span>
+      <span class="who" id="oppName">practice</span>
       <span class="n mono" id="oppLifeN">20</span>
     </div>
-    <div class="code">
-      <div class="k mono" id="roomCode">————</div>
-      <div class="s" id="roomState">tap to open a table</div>
-      <button style="position:absolute;inset:0;" id="roomBtn" aria-label="Connection"></button>
+    <div class="sync">
+      <div class="k" id="syncWho">solo table</div>
+      <div class="s" id="syncState">not synced</div>
     </div>
     <div class="life" id="myLife">
       <span class="who" id="myName">you</span>
@@ -244,13 +324,15 @@ label:first-child{margin-top:0;}
       <option value="freeform">Freeform — no checks</option>
     </select>
     <label>Decklist</label>
-    <textarea id="dList" placeholder="4 Lightning Bolt
-4 Monastery Swiftspear
+    <textarea id="dList" placeholder="1 Scarlet Witch, Chaotic Avenger
+
+DECK
+4 Lightning Bolt
 20 Mountain
 
 SIDEBOARD
 2 Smash to Smithereens"></textarea>
-    <div class="hint">One card per line, quantity first. A line reading SIDEBOARD, COMMANDER, or MAYBEBOARD starts that section. Set codes in brackets pick a printing, like 4 Lightning Bolt [2x2]. Card data and art come from Scryfall.</div>
+    <div class="hint">One card per line, quantity first. A line reading SIDEBOARD, COMMANDER, or MAYBEBOARD starts that section. Moxfield and Archidekt exports paste straight in.</div>
   </div>
   <footer>
     <span id="importStatus" class="hint" style="margin:0;flex:1;text-align:left;"></span>
@@ -259,51 +341,41 @@ SIDEBOARD
   </footer>
 </div></div>
 
-<div class="modal" id="connModal"><div class="sheet">
-  <header><h2>Two-player table</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+<div class="modal" id="challengeModal"><div class="sheet">
+  <header><h2>Start a match</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
   <div class="content">
-    <label>Your table name</label><input id="playerName" placeholder="Kyle" maxlength="14">
-    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:190px;">
-        <label>Open a table</label>
-        <button class="btn gold" id="hostBtn" style="width:100%;padding:11px;">Get a code</button>
-        <div class="hint">Your buddy types the code on his end. The code only introduces the two phones — after that the connection is direct.</div>
-      </div>
-      <div style="flex:1;min-width:190px;">
-        <label>Join a table</label>
-        <input id="joinCode" placeholder="ABCD" maxlength="4" autocomplete="off"
-          style="text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:19px;">
-        <button class="btn" id="joinBtn" style="width:100%;margin-top:7px;padding:11px;">Sit down</button>
-      </div>
+    <div class="tabs" id="chTabs">
+      <button class="on" data-tab="tabName">By name</button>
+      <button data-tab="tabCode">By code</button>
     </div>
-    <div class="hint" id="connLog" style="margin-top:14px;"></div>
-  </div>
-</div></div>
 
-<div class="modal" id="gameModal"><div class="sheet">
-  <header><h2>Table menu</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
-  <div class="content">
-    <label>Deck in play</label><select id="gmDeck"></select>
-    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">
-      <button class="btn" id="gmNew">New game</button>
-      <button class="btn" id="gmMull">Mulligan</button>
-      <button class="btn" id="gmShuffle">Shuffle</button>
-      <button class="btn" id="gmUntap">Untap all</button>
-      <button class="btn" id="gmToken">Add token</button>
-      <button class="btn" id="gmCoin">Flip coin</button>
-      <button class="btn" id="gmDie">Roll d20</button>
-      <button class="btn" id="gmDecks">Deck manager</button>
+    <div class="tabpane on" id="tabName">
+      <label>Their username</label>
+      <input id="chName" placeholder="Alex" autocomplete="off">
+      <button class="btn gold" id="chSend" style="width:100%;margin-top:9px;padding:11px;">Send challenge</button>
+      <div class="hint" id="chNameStatus"></div>
     </div>
-    <label>Starting life</label><input id="gmLife" type="number" value="20" style="max-width:120px;">
-    <div class="hint" id="gmLegal"></div>
-  </div>
-</div></div>
 
-<div class="modal" id="listModal"><div class="sheet">
-  <header><h2 id="listTitle">Library</h2><span class="spacer"></span>
-    <button class="btn sm" id="listShuffle">Shuffle</button>
-    <button class="btn sm" data-close>Close</button></header>
-  <div class="content"><div class="grid" id="listGrid"></div></div>
+    <div class="tabpane" id="tabCode">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:170px;">
+          <label>Open a table</label>
+          <button class="btn gold" id="chGetCode" style="width:100%;padding:11px;">Get a code</button>
+        </div>
+        <div style="flex:1;min-width:170px;">
+          <label>Have a code</label>
+          <input id="chJoinCode" placeholder="ABC123" maxlength="6" autocomplete="off"
+            style="text-transform:uppercase;letter-spacing:.2em;text-align:center;">
+          <button class="btn" id="chJoin" style="width:100%;margin-top:7px;padding:11px;">Join</button>
+        </div>
+      </div>
+      <div id="codeBox" style="display:none;">
+        <div class="codebig mono" id="codeBig"></div>
+        <button class="btn" id="codeCopy" style="width:100%;">Copy to send as a text</button>
+      </div>
+      <div class="hint" id="chCodeStatus"></div>
+    </div>
+  </div>
 </div></div>
 
 <div class="modal" id="missModal"><div class="sheet">
@@ -322,7 +394,7 @@ SIDEBOARD
 <div class="modal" id="backupModal"><div class="sheet">
   <header><h2>Backup</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
   <div class="content">
-    <p class="hint" style="margin:0 0 12px;">Decks live in this browser only. Clearing site data wipes them, and they don't follow you to another phone. A backup file is the fix for both.</p>
+    <p class="hint" style="margin:0 0 12px;">Decks are saved to your account on the server, so they already follow you between devices. This is a plain-file copy on top of that.</p>
     <label>Save a copy</label>
     <div style="display:flex;gap:7px;flex-wrap:wrap;">
       <button class="btn gold" id="bkExport">Export all decks</button>
@@ -333,10 +405,36 @@ SIDEBOARD
     <input type="file" id="bkFile" accept=".json,.txt,application/json,text/plain">
     <div style="display:flex;gap:7px;margin-top:8px;">
       <button class="btn" id="bkAdd">Add to my decks</button>
-      <button class="btn" id="bkReplace">Replace everything</button>
     </div>
     <div class="hint" id="bkStatus"></div>
   </div>
+</div></div>
+
+<div class="modal" id="gameModal"><div class="sheet">
+  <header><h2>Table menu</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <label>Deck in play</label><select id="gmDeck"></select>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">
+      <button class="btn" id="gmNew">New game</button>
+      <button class="btn" id="gmMull">Mulligan</button>
+      <button class="btn" id="gmShuffle">Shuffle</button>
+      <button class="btn" id="gmUntap">Untap all</button>
+      <button class="btn" id="gmToken">Add token</button>
+      <button class="btn" id="gmCoin">Flip coin</button>
+      <button class="btn" id="gmDie">Roll d20</button>
+      <button class="btn gold" id="gmNudge">Nudge buddy</button>
+      <button class="btn" id="gmMenu">Main menu</button>
+    </div>
+    <label>Starting life</label><input id="gmLife" type="number" value="20" style="max-width:120px;">
+    <div class="hint" id="gmLegal"></div>
+  </div>
+</div></div>
+
+<div class="modal" id="listModal"><div class="sheet">
+  <header><h2 id="listTitle">Library</h2><span class="spacer"></span>
+    <button class="btn sm" id="listShuffle">Shuffle</button>
+    <button class="btn sm" data-close>Close</button></header>
+  <div class="content"><div class="grid" id="listGrid"></div></div>
 </div></div>
 
 <div class="cardmenu" id="cardMenu"></div>
@@ -346,32 +444,28 @@ SIDEBOARD
 
 <script>
 /* ============================================================
-   Proxy Table v2 — honor-system MTG playtest tabletop.
-   No rules engine: the app tracks objects and zones, the two
-   humans agree on what actually happens.
+   Proxy Table v3 — honor-system MTG playtest tabletop with a
+   server backend for accounts, decks, and two-player matches.
+   Rules stay off-app: the server tracks objects and an ordered
+   history of who changed what; the two humans agree on what it
+   means to actually play the game.
    ============================================================ */
+
+/* ---- fill this in after deploying the Worker (see the README) ---- */
+const API_BASE = "https://proxytable-api.YOUR-SUBDOMAIN.workers.dev";
+
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const uid = () => Math.random().toString(36).slice(2,10);
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-/* ---------- storage (falls back to memory) ---------- */
-const mem = {};
-const store = {
-  async get(k){ try{ const r = await window.storage.get(k); return r ? JSON.parse(r.value) : null; }
-    catch(e){ try{ const v = localStorage.getItem("pt_"+k); return v ? JSON.parse(v) : (mem[k] ?? null); }
-              catch(e2){ return mem[k] ?? null; } } },
-  /* returns true only if the write landed somewhere that survives a restart */
-  async set(k,v){
-    const s = JSON.stringify(v);
-    try{ await window.storage.set(k, s); return true; }catch(e){}
-    try{ localStorage.setItem("pt_"+k, s); return true; }catch(e){}
-    mem[k] = v; return false;
-  }
-};
-/* ask Android not to evict our decks when storage gets tight */
-if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+async function api(path, opts){
+  const res = await fetch(API_BASE + path, { headers: {"Content-Type":"application/json"}, ...opts });
+  let data = null;
+  try{ data = await res.json(); }catch(e){}
+  if (!res.ok) throw Object.assign(new Error((data && data.error) || ("request failed: "+res.status)), {status:res.status, data});
+  return data;
+}
 
 const FORMATS = {
   commander:{life:40,size:100,max:1,label:"Commander"},
@@ -385,33 +479,91 @@ const FORMATS = {
 };
 
 let decks = [], G = null, opp = null;
-let peer = null, conn = null, myCode = "", playerName = "Player";
+let currentUser = null, currentMatch = null, oppName = null, playerName = "Player";
+let syncTimer = null, statePushTimer = null, statePushWanted = false;
 
 /* ============================================================
-   DECK IMPORT
+   ACCOUNTS — no password; typing a name is the whole sign-in
    ============================================================ */
-/* Reads one decklist line. Handles the shapes Moxfield and Archidekt export:
-     1 Card Name
-     1 Card Name (SET) 123
-     1 Card Name (SET) 123 *F*
-     1 Card Name [SET] 123 [Category{noPrice}]
-   Returns quantity, name, set code, and collector number. */
+function getStoredUser(){ try{ return localStorage.getItem("pt_user") || null; }catch(e){ return null; } }
+function setStoredUser(u){ try{ u ? localStorage.setItem("pt_user", u) : localStorage.removeItem("pt_user"); }catch(e){} }
+
+$("#loginGo").onclick = async () => {
+  const name = $("#loginName").value.trim();
+  $("#loginErr").textContent = "";
+  if (!/^[A-Za-z0-9_ -]{2,20}$/.test(name)){
+    $("#loginErr").textContent = "2-20 characters: letters, numbers, spaces, - or _."; return;
+  }
+  $("#loginGo").disabled = true;
+  try{
+    try{
+      await api("/api/account", {method:"POST", body: JSON.stringify({username:name})});
+    }catch(e){
+      if (e.status !== 409) throw e;
+      // already registered — with no password, typing the name back in IS the sign-in
+    }
+    setStoredUser(name);
+    await enterAsUser(name);
+  }catch(e){
+    if (e.data && e.data.error) $("#loginErr").textContent = e.data.error;
+    else $("#loginErr").textContent = "Couldn't reach the server. Check the connection and try again.";
+  }
+  $("#loginGo").disabled = false;
+};
+$("#loginName").addEventListener("keydown", e => { if (e.key === "Enter") $("#loginGo").click(); });
+
+$("#menuSwitch").onclick = () => {
+  stopSync(); setStoredUser(null); currentUser = null;
+  show("#loginScreen"); $("#loginName").value = ""; $("#loginName").focus();
+};
+
+async function enterAsUser(name){
+  currentUser = name; playerName = name;
+  show("#menuScreen"); $("#menuWho").textContent = name;
+  await Promise.all([loadDecks(), loadMatches()]);
+}
+
+/* ============================================================
+   DECKS (server-backed, cached locally for offline viewing)
+   ============================================================ */
+function cacheKey(){ return "pt_decks_" + currentUser; }
+async function loadDecks(){
+  try{
+    const d = await api("/api/decks?username=" + encodeURIComponent(currentUser));
+    decks = d.decks;
+    try{ localStorage.setItem(cacheKey(), JSON.stringify(decks)); }catch(e){}
+    setBanner(null);
+  }catch(e){
+    try{ decks = JSON.parse(localStorage.getItem(cacheKey()) || "[]"); }catch(e2){ decks = []; }
+    setBanner("Couldn't reach the server — showing the last-known copy of your decks. Changes won't save until you're back online.");
+  }
+  renderDecks();
+}
+function setBanner(msg){ $("#menuBanner").style.display = msg ? "" : "none"; $("#menuBanner").textContent = msg || ""; }
+async function saveDeckToServer(deck){
+  await api("/api/decks/" + deck.id, {
+    method:"PUT",
+    body: JSON.stringify({username:currentUser, name:deck.name, format:deck.format, raw:deck.raw,
+      cards:deck.cards, main:deck.main, side:deck.side, commander:deck.commander})
+  });
+  try{ localStorage.setItem(cacheKey(), JSON.stringify(decks)); }catch(e){}
+}
+
+/* ============================================================
+   DECK IMPORT — parsing and Scryfall lookup
+   ============================================================ */
 function parseLine(line){
   let s = line.trim();
-  s = s.replace(/\s*\*[A-Za-z]{1,3}\*/g, "");        // *F* foil, *E* etched
-  s = s.replace(/\s*\^[^^]*\^/g, "");                // ^Have,#colour^ Archidekt flags
-  s = s.replace(/\s*<[^>]*>/g, "");                  // <tag> variants
+  s = s.replace(/\s*\*[A-Za-z]{1,3}\*/g, "");
+  s = s.replace(/\s*\^[^^]*\^/g, "");
+  s = s.replace(/\s*<[^>]*>/g, "");
   const q = s.match(/^(\d+)\s*[xX]?\s+/);
   const qty = q ? parseInt(q[1],10) : 1;
   if (q) s = s.slice(q[0].length);
   let set = "", cn = "";
   const sm = s.match(/[([]([A-Za-z0-9]{2,6})[)\]]\s*([A-Za-z0-9\u2605-]+)?/);
-  if (sm){
-    set = sm[1].toLowerCase();
-    cn = (sm[2] || "").trim();
-    s = s.slice(0, sm.index);
-  }
-  s = s.replace(/\s*\[[^\]]*\]\s*$/, "");            // trailing Archidekt categories
+  if (sm){ set = sm[1].toLowerCase(); cn = (sm[2] || "").trim(); s = s.slice(0, sm.index); }
+  s = s.replace(/\s*\[[^\]]*\]\s*$/, "");
   s = s.replace(/\s*\{[^}]*\}\s*$/, "");
   return {qty, name:s.trim(), set, cn};
 }
@@ -434,9 +586,6 @@ function parseList(text){
   }
   return out;
 }
-/* Two passes against Scryfall. First by the most precise identifier the line
-   gives us, then a name-only retry for anything that missed — which is what
-   rescues cards whose printing carries a set code Scryfall doesn't use. */
 async function lookup(entries, onProgress){
   const byKey = new Map();
   const keyOf = e => (e.set && e.cn) ? "s:"+e.set+"|"+e.cn.toLowerCase() : "n:"+e.name.toLowerCase();
@@ -448,12 +597,10 @@ async function lookup(entries, onProgress){
     if (c.card_faces && c.card_faces[0]) byKey.set("n:"+c.card_faces[0].name.toLowerCase(), c);
   };
   const resolve = e => byKey.get(keyOf(e)) || byKey.get("n:"+e.name.toLowerCase()) || null;
-
   const want = new Map();
   entries.forEach(e => { if (!want.has(keyOf(e))) want.set(keyOf(e), e); });
   const all = [...want.values()];
   let done = 0, total = all.length;
-
   async function pass(list, makeId){
     for (let i=0; i<list.length; i+=75){
       const chunk = list.slice(i, i+75);
@@ -469,7 +616,6 @@ async function lookup(entries, onProgress){
       if (i+75 < list.length) await new Promise(r => setTimeout(r,120));
     }
   }
-
   await pass(all, idOf);
   const retry = all.filter(e => !resolve(e));
   if (retry.length){ done = Math.max(0, total - retry.length); await pass(retry, e => ({name:e.name})); }
@@ -506,8 +652,6 @@ function checkLegal(deck){
 /* ============================================================
    DECK SCREEN
    ============================================================ */
-async function loadDecks(){ decks = (await store.get("decks")) || []; renderDecks(); }
-async function saveDecks(){ const ok = await store.set("decks", decks); renderDecks(); return ok; }
 function renderDecks(){
   const el = $("#deckList");
   if (!decks.length){
@@ -521,26 +665,30 @@ function renderDecks(){
     return `<div class="deckcard"><h3>${esc(d.name)}</h3>
       <div class="meta">${FORMATS[d.format].label} · ${n} cards ·
         ${issues.length ? `<span style="color:var(--blood)">${issues.length} note${issues.length>1?"s":""}</span>`
-                        : `<span style="color:#6bbf8a">legal</span>`}</div>
+                        : `<span style="color:var(--good)">legal</span>`}</div>
       <div class="row">
-        <button class="btn gold sm" data-play="${i}">Play this</button>
+        <button class="btn gold sm" data-play="${i}">Practice</button>
         <button class="btn sm" data-edit="${i}">Edit</button>
         <button class="btn sm" data-check="${i}">Check</button>
         <button class="btn sm" data-del="${i}">Delete</button>
       </div></div>`;
   }).join("");
 }
-
 let editIndex = -1;
+$("#deckBack").onclick = () => show("#menuScreen");
+$("#menuDecks").onclick = () => show("#deckScreen");
+$("#menuPractice").onclick = () => show("#deckScreen");
 $("#newDeckBtn").onclick = () => { editIndex = -1; $("#deckModalTitle").textContent = "Add a deck";
   $("#dName").value=""; $("#dList").value=""; $("#importStatus").textContent=""; open("#deckModal"); };
 
-$("#deckList").onclick = e => {
+$("#deckList").onclick = async e => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.play !== undefined){ startGame(decks[+b.dataset.play]); goTable(); }
+  if (b.dataset.play !== undefined){ currentMatch = null; startGame(decks[+b.dataset.play]); goTable(); }
   if (b.dataset.del !== undefined){
-    decks.splice(+b.dataset.del,1);
-    saveDecks().then(ok => { if (!ok) toast("Deleted here, but the change didn't save to storage.", 4000); });
+    const d = decks[+b.dataset.del];
+    decks.splice(+b.dataset.del,1); renderDecks();
+    try{ await api("/api/decks/"+d.id+"?username="+encodeURIComponent(currentUser), {method:"DELETE"}); }
+    catch(e){ toast("Deleted here, but the server didn't confirm it — check your connection.", 4000); }
   }
   if (b.dataset.check !== undefined){
     const n = checkLegal(decks[+b.dataset.check]);
@@ -566,27 +714,20 @@ $("#dSave").onclick = async () => {
       $("#importStatus").textContent = `Looking up cards… ${a}/${b}`);
     pending = {name, format, raw, p, resolve};
     $("#importStatus").textContent = "";
-    if (missing.length) showMissing(missing, p);
-    else commitDeck();
+    if (missing.length) showMissing(missing, p); else commitDeck();
   }catch(err){
     $("#importStatus").textContent = "Import failed: " + err.message + ". Check the card names and try again.";
   }
   $("#dSave").disabled = false;
 };
-
-function countCards(p){
-  return [...p.main, ...p.commander].reduce((a,e) => a + e.qty, 0);
-}
 function showMissing(missing, p){
   const lost = missing.reduce((a,e) => a + e.qty, 0);
-  const want = countCards(p);
+  const want = [...p.main, ...p.commander].reduce((a,e) => a + e.qty, 0);
   $("#missCount").textContent =
     `${want - lost} of ${want} cards found. These ${missing.length} line${missing.length>1?"s":""} didn't match anything on Scryfall:`;
   $("#missList").innerHTML = missing.map(e =>
-    `<div class="missrow"><span class="mq">${e.qty}×</span>
-       <span class="mn">${esc(e.name)}</span>
-       ${e.set ? `<span class="ms">${esc(e.set.toUpperCase())}${e.cn ? " "+esc(e.cn) : ""}</span>` : ""}
-     </div>`).join("");
+    `<div class="missrow"><span class="mq">${e.qty}×</span><span class="mn">${esc(e.name)}</span>
+       ${e.set ? `<span class="ms">${esc(e.set.toUpperCase())}${e.cn ? " "+esc(e.cn) : ""}</span>` : ""}</div>`).join("");
   open("#missModal");
 }
 $("#missBack").onclick = () => { close("#missModal"); pending = null; };
@@ -598,21 +739,23 @@ async function commitDeck(){
   const cards = {};
   const fix = list => list.map(e => {
     const c = resolve(e); if (!c) return null;
-    cards[c.name] = slim(c);
-    return {qty:e.qty, name:c.name};
+    cards[c.name] = slim(c); return {qty:e.qty, name:c.name};
   }).filter(Boolean);
-  const deck = {id:uid(), name, format, raw, cards,
+  const deck = {id: editIndex >= 0 ? decks[editIndex].id : uid(), name, format, raw, cards,
     main:fix(p.main), side:fix(p.side), commander:fix(p.commander)};
-  if (editIndex >= 0) decks[editIndex] = deck; else decks.push(deck);
-  const ok = await saveDecks();
-  pending = null; close("#deckModal");
   const n = deck.main.reduce((a,c)=>a+c.qty,0) + deck.commander.reduce((a,c)=>a+c.qty,0);
-  toast(ok ? `${deck.name} saved — ${n} cards.`
-           : "Cards loaded, but saving failed. Storage may be full — export a backup and clear space.", 5000);
+  if (editIndex >= 0) decks[editIndex] = deck; else decks.push(deck);
+  renderDecks(); pending = null; close("#deckModal");
+  try{
+    await saveDeckToServer(deck);
+    toast(`${deck.name} saved — ${n} cards.`);
+  }catch(e){
+    toast("Cards loaded, but saving to the server failed — check your connection and try again from Edit.", 5000);
+  }
 }
 
 /* ============================================================
-   BACKUP
+   BACKUP (local file, on top of the server copy)
    ============================================================ */
 $("#backupBtn").onclick = () => { $("#bkStatus").textContent = ""; open("#backupModal"); };
 function saveFile(filename, text, type){
@@ -625,14 +768,13 @@ const stamp = () => new Date().toISOString().slice(0,10);
 $("#bkExport").onclick = () => {
   if (!decks.length) return $("#bkStatus").textContent = "No decks to export yet.";
   saveFile(`proxytable-decks-${stamp()}.json`,
-    JSON.stringify({app:"proxytable", version:1, saved:new Date().toISOString(), decks}, null, 1),
-    "application/json");
-  $("#bkStatus").textContent = `Exported ${decks.length} deck${decks.length>1?"s":""} to your Downloads folder.`;
+    JSON.stringify({app:"proxytable", version:1, saved:new Date().toISOString(), decks}, null, 1), "application/json");
+  $("#bkStatus").textContent = `Exported ${decks.length} deck${decks.length>1?"s":""}.`;
 };
 $("#bkExportTxt").onclick = () => {
   if (!decks.length) return $("#bkStatus").textContent = "No decks to export yet.";
-  const txt = decks.map(d => `=== ${d.name} (${FORMATS[d.format].label}) ===\n${d.raw||""}`).join("\n\n");
-  saveFile(`proxytable-decklists-${stamp()}.txt`, txt, "text/plain");
+  saveFile(`proxytable-decklists-${stamp()}.txt`,
+    decks.map(d => `=== ${d.name} (${FORMATS[d.format].label}) ===\n${d.raw||""}`).join("\n\n"), "text/plain");
   $("#bkStatus").textContent = "Decklists exported as plain text.";
 };
 let incoming = null;
@@ -645,34 +787,113 @@ $("#bkFile").onchange = async e => {
       const list = Array.isArray(data) ? data : data.decks;
       if (!Array.isArray(list)) throw new Error("no decks in that file");
       incoming = list;
-      $("#bkStatus").textContent =
-        `${list.length} deck${list.length>1?"s":""} ready. Choose add or replace.`;
+      $("#bkStatus").textContent = `${list.length} deck${list.length>1?"s":""} ready — tap Add to my decks.`;
     } else {
       $("#dName").value = f.name.replace(/\.txt$/,"");
-      $("#dList").value = text;
-      incoming = null; close("#backupModal"); editIndex = -1;
+      $("#dList").value = text; incoming = null; close("#backupModal"); editIndex = -1;
       $("#deckModalTitle").textContent = "Add a deck"; open("#deckModal");
       toast("Decklist loaded — pick a format and fetch the cards.");
     }
-  }catch(err){
-    $("#bkStatus").textContent = "Couldn't read that file: " + err.message;
-  }
+  }catch(err){ $("#bkStatus").textContent = "Couldn't read that file: " + err.message; }
 };
 $("#bkAdd").onclick = async () => {
   if (!incoming) return $("#bkStatus").textContent = "Pick a backup file first.";
-  incoming.forEach(d => decks.push({...d, id:uid()}));
-  const ok = await saveDecks();
-  $("#bkStatus").textContent = ok ? `Added ${incoming.length}.` : "Added, but the save failed — storage may be full.";
+  let ok = 0;
+  for (const d of incoming){
+    const deck = {...d, id: uid()};
+    decks.push(deck);
+    try{ await saveDeckToServer(deck); ok++; }catch(e){}
+  }
+  renderDecks();
+  $("#bkStatus").textContent = ok === incoming.length ? `Added ${ok}.` : `Added ${ok} of ${incoming.length} — the rest failed to save.`;
   incoming = null;
 };
-$("#bkReplace").onclick = async () => {
-  if (!incoming) return $("#bkStatus").textContent = "Pick a backup file first.";
-  if (!confirm(`Replace all ${decks.length} deck(s) with the ${incoming.length} in the file?`)) return;
-  decks = incoming.map(d => ({...d, id:d.id || uid()}));
-  const ok = await saveDecks();
-  $("#bkStatus").textContent = ok ? "Decks replaced." : "Replaced, but the save failed — storage may be full.";
-  incoming = null;
+
+/* ============================================================
+   MATCHES + CHALLENGES
+   ============================================================ */
+async function loadMatches(){
+  try{ const d = await api("/api/matches?username=" + encodeURIComponent(currentUser)); renderMatches(d.matches); }
+  catch(e){ /* offline: leave whatever was already shown */ }
+}
+function relTime(iso){
+  const s = (Date.now() - new Date(iso+"Z").getTime()) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s/60) + "m ago";
+  if (s < 86400) return Math.floor(s/3600) + "h ago";
+  return Math.floor(s/86400) + "d ago";
+}
+function renderMatches(matches){
+  const el = $("#matchList");
+  if (!matches.length){ el.innerHTML = `<p class="hint">No matches yet — challenge someone below.</p>`; return; }
+  el.innerHTML = matches.map(m => `
+    <div class="matchrow">
+      <div style="flex:1;">
+        <div class="who">${esc(m.opponent || "waiting for opponent")}</div>
+        <div class="when">${relTime(m.updated_at)}</div>
+      </div>
+      <button class="btn gold sm" data-rejoin="${m.id}">Rejoin</button>
+    </div>`).join("");
+  el.onclick = e => { const b = e.target.closest("button[data-rejoin]"); if (b) rejoinMatch(b.dataset.rejoin); };
+}
+function rejoinMatch(matchId){ currentMatch = matchId; G = null; opp = null; goTable(); }
+
+$("#menuChallenge").onclick = () => { switchTab("tabName"); open("#challengeModal"); };
+$("#menuCode").onclick = () => { switchTab("tabCode"); open("#challengeModal"); };
+function switchTab(id){
+  $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === id));
+  $$(".tabpane").forEach(p => p.classList.toggle("on", p.id === id));
+}
+$("#chTabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (b) switchTab(b.dataset.tab); });
+
+$("#chSend").onclick = async () => {
+  const to = $("#chName").value.trim();
+  if (!to){ $("#chNameStatus").textContent = "Enter their username."; return; }
+  $("#chSend").disabled = true; $("#chNameStatus").textContent = "Sending…";
+  try{
+    const r = await api("/api/challenge", {method:"POST", body: JSON.stringify({from:currentUser, to})});
+    $("#chNameStatus").textContent = `Challenge sent. If ${to} doesn't get a notification, tell them the code: ${r.code}`;
+    pollChallenge(r.code);
+  }catch(e){ $("#chNameStatus").textContent = e.data && e.data.error ? e.data.error : "Couldn't send that challenge."; }
+  $("#chSend").disabled = false;
 };
+$("#chGetCode").onclick = async () => {
+  $("#chCodeStatus").textContent = "Opening…";
+  try{
+    const r = await api("/api/challenge", {method:"POST", body: JSON.stringify({from:currentUser})});
+    $("#codeBox").style.display = ""; $("#codeBig").textContent = r.code;
+    $("#chCodeStatus").textContent = "Waiting for your buddy to join. Good for 24 hours.";
+    try{ await navigator.clipboard.writeText(r.code); $("#chCodeStatus").textContent += " Copied to your clipboard."; }catch(e){}
+    pollChallenge(r.code);
+  }catch(e){ $("#chCodeStatus").textContent = "Couldn't open a table right now."; }
+};
+$("#codeCopy").onclick = async () => { try{ await navigator.clipboard.writeText($("#codeBig").textContent); toast("Copied."); }catch(e){} };
+$("#chJoin").onclick = async () => {
+  const code = $("#chJoinCode").value.trim().toUpperCase();
+  if (!code){ $("#chCodeStatus").textContent = "Enter a code."; return; }
+  $("#chJoin").disabled = true; $("#chCodeStatus").textContent = "Joining…";
+  try{
+    const r = await api(`/api/challenge/${code}/accept`, {method:"POST", body: JSON.stringify({username:currentUser})});
+    close("#challengeModal"); rejoinMatch(r.matchId); loadMatches();
+  }catch(e){ $("#chCodeStatus").textContent = e.data && e.data.error ? e.data.error : "Couldn't join that table."; }
+  $("#chJoin").disabled = false;
+};
+let challengePoll = null;
+function pollChallenge(code){
+  clearInterval(challengePoll);
+  challengePoll = setInterval(async () => {
+    try{
+      const r = await api("/api/challenge/" + code);
+      if (r.challenge.status === "accepted"){
+        clearInterval(challengePoll); close("#challengeModal");
+        rejoinMatch(r.challenge.match_id); loadMatches();
+      } else if (r.challenge.status === "expired" || r.challenge.status === "declined"){
+        clearInterval(challengePoll);
+        toast(r.challenge.status === "declined" ? "They declined." : "That challenge expired.");
+      }
+    }catch(e){}
+  }, 4000);
+}
 
 /* ============================================================
    GAME STATE
@@ -680,7 +901,6 @@ $("#bkReplace").onclick = async () => {
 const mkCard = c => ({id:uid(), oid:c.oid, name:c.name, img:c.img, back:c.back, type:c.type,
   x:50, y:50, tapped:false, ctr:0, faceDown:false, flipped:false});
 function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
-
 function newGameState(deck, life){
   const lib = [], cmd = [];
   deck.main.forEach(e => { for (let i=0;i<e.qty;i++) lib.push(mkCard(deck.cards[e.name])); });
@@ -695,7 +915,7 @@ function newGameState(deck, life){
 function startGame(deck, life){
   G = newGameState(deck, life);
   $("#gmLife").value = G.life;
-  renderAll(); push();
+  renderAll(); pushState();
   toast(`${deck.name} — ${FORMATS[deck.format].label}. Opening hand of 7.`);
 }
 
@@ -703,7 +923,6 @@ function startGame(deck, life){
    RENDER
    ============================================================ */
 function renderAll(){ if(!G) return; renderField(); renderHand(); renderZones(); renderLife(); renderOpp(); }
-
 function mkCardEl(c){
   const el = document.createElement("div");
   el.className = "card"; el.dataset.id = c.id;
@@ -722,7 +941,6 @@ function paint(el, c){
   ctr.style.display = c.ctr ? "flex" : "none";
   ctr.textContent = c.ctr > 0 ? "+"+c.ctr : c.ctr;
 }
-/* keyed update: reuse card elements so images never re-flash */
 function syncField(host, cards, place, decorate){
   const keep = new Set(cards.map(c => c.id));
   [...host.querySelectorAll(".card")].forEach(el => { if (!keep.has(el.dataset.id)) el.remove(); });
@@ -733,14 +951,11 @@ function syncField(host, cards, place, decorate){
   });
 }
 function renderField(){
-  syncField($("#myField"), G.field,
-    (el,c) => { el.style.left = c.x+"%"; el.style.top = c.y+"%"; },
-    (el,c) => attachDrag(el,c));
+  syncField($("#myField"), G.field, (el,c) => { el.style.left = c.x+"%"; el.style.top = c.y+"%"; }, (el,c) => attachDrag(el,c));
 }
 function renderHand(){
   const h = $("#hand");
   syncField(h, G.hand, () => {}, (el,c) => { el.onclick = () => openCardMenu(c,"hand",el); });
-  // keep DOM order matching hand order
   G.hand.forEach(c => h.appendChild(h.querySelector(`.card[data-id="${c.id}"]`)));
 }
 function renderZones(){
@@ -749,8 +964,7 @@ function renderZones(){
   $("#exN").textContent = G.exile.length;
   $("#cmdN").textContent = G.command.length;
   $("#zCmd").style.display = (G.format === "commander" || G.command.length) ? "" : "none";
-  const top = G.grave[G.grave.length-1];
-  const art = $("#gyArt");
+  const top = G.grave[G.grave.length-1], art = $("#gyArt");
   if (top){ art.src = top.img; art.style.display = "block"; } else { art.removeAttribute("src"); art.style.display = "none"; }
 }
 function renderLife(){
@@ -760,9 +974,9 @@ function renderLife(){
 }
 function renderOpp(){
   const f = $("#oppField");
-  if (!opp){ $("#oppBar").innerHTML = `<span class="pill">no one seated</span>`;
+  if (!opp){ $("#oppBar").innerHTML = `<span class="pill">${currentMatch ? "waiting for a move" : "practice — no opponent"}</span>`;
     [...f.querySelectorAll(".card")].forEach(el => el.remove()); return; }
-  $("#oppName").textContent = opp.name || "opponent";
+  $("#oppName").textContent = opp.name || oppName || "opponent";
   $("#oppLifeN").textContent = opp.life;
   $("#oppLifeN").classList.toggle("hurt", opp.life <= 5);
   $("#oppBar").innerHTML =
@@ -802,15 +1016,14 @@ function attachDrag(el, c){
     c.x = clamp(ox + dx/bw*100, -2, 96);
     c.y = clamp(oy + dy/bh*100, -2, 92);
     el.style.left = c.x+"%"; el.style.top = c.y+"%";
-    push();
+    pushState();
   });
   const finish = () => { clearTimeout(timer);
     if (sx !== undefined && !moved){ c.tapped = !c.tapped; paint(el,c); }
-    sx = undefined; dragging = false; el.classList.remove("drag"); push(); };
+    sx = undefined; dragging = false; el.classList.remove("drag"); pushState(); };
   el.addEventListener("pointerup", finish);
   el.addEventListener("pointercancel", finish);
 }
-
 function openCardMenu(c, from, el){
   const m = $("#cardMenu");
   const act = (l,wide) => `<button data-a="${l}"${wide?' class="wide"':""}>${l}</button>`;
@@ -825,32 +1038,26 @@ function openCardMenu(c, from, el){
   const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
   m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
   m.style.top  = clamp(r.top - mh - 6, 6, innerHeight - mh - 6) + "px";
-  m.onclick = e => { const b = e.target.closest("button"); if (!b) return;
-    doAction(b.dataset.a, c, from); closeCardMenu(); };
+  m.onclick = e => { const b = e.target.closest("button"); if (!b) return; doAction(b.dataset.a, c, from); closeCardMenu(); };
 }
 const closeCardMenu = () => $("#cardMenu").classList.remove("on");
 document.addEventListener("pointerdown", e => {
   if (!e.target.closest("#cardMenu") && !e.target.closest(".card")) closeCardMenu();
 }, true);
-
 function moveOut(c, from){
   const arr = from === "hand" ? G.hand : from === "command" ? G.command : G.field;
   const i = arr.indexOf(c); if (i >= 0) arr.splice(i,1);
 }
 const reset = c => { c.tapped=false; c.ctr=0; c.faceDown=false; c.flipped=false; };
-
 function doAction(a, c, from){
   switch(a){
     case "Play":             moveOut(c,from); Object.assign(c,{x:44,y:58,tapped:false,faceDown:false}); G.field.push(c); break;
     case "Play face down":   moveOut(c,from); Object.assign(c,{x:44,y:58,faceDown:true}); G.field.push(c); break;
     case "Play tapped":      moveOut(c,from); Object.assign(c,{x:44,y:58,tapped:true}); G.field.push(c); break;
-    case "Reveal":           send({t:"reveal", card:{id:uid(), name:c.name, img:c.img}}); toast("Revealed to opponent."); return;
-    case "Discard":
-    case "To graveyard":     moveOut(c,from); reset(c); G.grave.push(c); break;
-    case "Exile":
-    case "To exile":         moveOut(c,from); reset(c); G.exile.push(c); break;
-    case "To top of library":
-    case "To library top":   moveOut(c,from); reset(c); G.library.push(c); break;
+    case "Reveal":           toast("Revealed — point it out to your buddy."); return;
+    case "Discard": case "To graveyard": moveOut(c,from); reset(c); G.grave.push(c); break;
+    case "Exile": case "To exile":       moveOut(c,from); reset(c); G.exile.push(c); break;
+    case "To top of library": case "To library top": moveOut(c,from); reset(c); G.library.push(c); break;
     case "To bottom":        moveOut(c,from); reset(c); G.library.unshift(c); break;
     case "To hand":          moveOut(c,from); reset(c); G.hand.push(c); break;
     case "To command zone":  moveOut(c,from); reset(c); G.command.push(c); break;
@@ -860,9 +1067,9 @@ function doAction(a, c, from){
     case "Flip face":        c.flipped = !c.flipped; break;
     case "Turn face down":   c.faceDown = !c.faceDown; break;
     case "Copy":             G.field.push({...c, id:uid(), x:clamp(c.x+9,0,90)}); break;
-    case "Zoom":             showList(c.name, [c], false); return;
+    case "Zoom":              showList(c.name, [c], false); return;
   }
-  renderAll(); push();
+  renderAll(); pushState();
 }
 
 /* ============================================================
@@ -874,21 +1081,19 @@ function draw(n){
     if (!G.library.length){ toast("Library is empty. That's a loss on your next draw."); break; }
     G.hand.push(G.library.pop());
   }
-  renderAll(); push();
+  renderAll(); pushState();
 }
 $("#zLib").onclick = () => G && showList("Library — order is kept, shuffle after", G.library, "library");
 $("#zGy").onclick  = () => G && showList("Graveyard", G.grave, "grave");
 $("#zEx").onclick  = () => G && showList("Exile", G.exile, "exile");
 $("#zCmd").onclick = () => G && showList("Command zone", G.command, "command");
-
 let listCtx = null;
 function showList(title, cards, zone){
   listCtx = zone ? {zone, cards} : null;
   $("#listTitle").textContent = title + (cards.length > 1 ? ` · ${cards.length}` : "");
   $("#listShuffle").style.display = (zone === "library") ? "" : "none";
   const g = $("#listGrid");
-  g.innerHTML = cards.map((c,i) =>
-    `<div class="card" data-i="${i}"><img src="${c.img}" alt="${esc(c.name)}"></div>`).join("");
+  g.innerHTML = cards.map((c,i) => `<div class="card" data-i="${i}"><img src="${c.img}" alt="${esc(c.name)}"></div>`).join("");
   g.onclick = e => {
     const el = e.target.closest(".card"); if (!el || !listCtx) return;
     const c = listCtx.cards[+el.dataset.i];
@@ -901,15 +1106,14 @@ function showList(title, cards, zone){
       arr.splice(arr.indexOf(c),1); reset(c); G.hand.push(c);
       if (listCtx.zone === "library") toast("Pulled to hand. Shuffle when you're done.");
     }
-    close("#listModal"); renderAll(); push();
+    close("#listModal"); renderAll(); pushState();
   };
   open("#listModal");
 }
-$("#listShuffle").onclick = () => { shuffle(G.library); close("#listModal"); toast("Library shuffled."); push(); };
-
+$("#listShuffle").onclick = () => { shuffle(G.library); close("#listModal"); toast("Library shuffled."); pushState(); };
 $("#myLife").addEventListener("click", e => {
   const b = e.target.closest("button[data-d]"); if (!b || !G) return;
-  G.life += +b.dataset.d; renderLife(); push();
+  G.life += +b.dataset.d; renderLife(); pushState();
 });
 
 /* ============================================================
@@ -935,105 +1139,117 @@ $("#gmMull").onclick = () => {
   if (!G) return; const n = Math.max(0, G.hand.length - 1);
   G.library.push(...G.hand.splice(0)); shuffle(G.library);
   for (let i=0;i<n && G.library.length;i++) G.hand.push(G.library.pop());
-  renderAll(); push(); close("#gameModal"); toast(`Mulligan to ${n}.`);
+  renderAll(); pushState(); close("#gameModal"); toast(`Mulligan to ${n}.`);
 };
-$("#gmShuffle").onclick = () => { if(!G) return; shuffle(G.library); toast("Library shuffled."); push(); close("#gameModal"); };
-$("#gmUntap").onclick = () => { if(!G) return; G.field.forEach(c => c.tapped = false); renderAll(); push(); close("#gameModal"); };
+$("#gmShuffle").onclick = () => { if(!G) return; shuffle(G.library); toast("Library shuffled."); pushState(); close("#gameModal"); };
+$("#gmUntap").onclick = () => { if(!G) return; G.field.forEach(c => c.tapped = false); renderAll(); pushState(); close("#gameModal"); };
 $("#gmToken").onclick = () => {
   const name = prompt("Token or card name — art is pulled from Scryfall","Treasure");
-  close("#gameModal"); if (!name) return;
+  close("#gameModal"); if (!name || !G) return;
   fetch("https://api.scryfall.com/cards/named?fuzzy=" + encodeURIComponent(name))
     .then(r => r.ok ? r.json() : Promise.reject())
-    .then(c => { const card = mkCard(slim(c)); card.x = 40; card.y = 20; G.field.push(card); renderAll(); push(); })
+    .then(c => { const card = mkCard(slim(c)); card.x = 40; card.y = 20; G.field.push(card); renderAll(); pushState(); })
     .catch(() => toast("Couldn't find that card."));
 };
-$("#gmCoin").onclick = () => { const r = Math.random()<.5?"Heads":"Tails";
-  toast("Coin: "+r); send({t:"say", msg:playerName+" flipped "+r}); close("#gameModal"); };
-$("#gmDie").onclick = () => { const r = 1+Math.floor(Math.random()*20);
-  toast("d20: "+r); send({t:"say", msg:playerName+" rolled "+r}); close("#gameModal"); };
-$("#gmDecks").onclick = () => { close("#gameModal"); show("#deckScreen"); };
-$("#toTableBtn").onclick = () => {
-  if (!G && decks.length) startGame(decks[0]);
-  if (!G) return toast("Add a deck first.");
-  goTable();
+$("#gmCoin").onclick = () => { toast("Coin: " + (Math.random()<.5?"Heads":"Tails")); close("#gameModal"); };
+$("#gmDie").onclick = () => { toast("d20: " + (1+Math.floor(Math.random()*20))); close("#gameModal"); };
+$("#gmNudge").onclick = async () => {
+  close("#gameModal");
+  if (!currentMatch) return toast("This is a practice table — no one to nudge.");
+  try{ await postEvent("nudge", {message: `${currentUser}: your move`}); toast("Nudge sent."); }
+  catch(e){ toast("Couldn't send the nudge — check your connection."); }
 };
+$("#gmMenu").onclick = () => { close("#gameModal"); stopSync(); show("#menuScreen"); loadMatches(); };
+
 async function goTable(){
   show("#tableScreen");
+  G = null; opp = null;
+  $("#syncWho").textContent = currentMatch ? "connecting…" : "practice table";
+  setSyncStatus(!!currentMatch, null);
+  renderAll(); renderOpp();
+  if (currentMatch) startSync();
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
   try{ await screen.orientation.lock("landscape"); }catch(e){}
   keepAwake();
 }
 
 /* ============================================================
-   NETWORK — the code only introduces the phones
+   SYNC — the server holds the match; both phones just read and
+   write it. Every action posts a full snapshot of your own
+   private state as one more row in an append-only log, so the
+   server always has your latest board even if the app closes,
+   and rejoining just re-reads it instead of replaying history.
    ============================================================ */
-const PREFIX = "proxytable-v1-";
-const ALPH = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";  // no I L O 0 1
-const mkCode = () => Array.from({length:4}, () => ALPH[Math.floor(Math.random()*ALPH.length)]).join("");
-
-$("#roomBtn").onclick = () => { $("#playerName").value = playerName; open("#connModal"); };
-$("#playerName").oninput = e => { playerName = e.target.value.trim() || "Player";
-  renderLife(); store.set("name", playerName); push(); };
-
-const log = s => $("#connLog").textContent = s;
-function setRoom(code, state, live){
-  $("#roomCode").textContent = code || "————";
-  $("#roomState").textContent = state;
-  $("#roomState").classList.toggle("live", !!live);
+function setSyncStatus(ok, name){
+  $("#syncWho").textContent = name || (currentMatch ? "match" : "practice table");
+  const s = $("#syncState");
+  if (!currentMatch){ s.textContent = "not synced"; s.className = "s"; return; }
+  s.textContent = ok ? "synced" : "offline — retrying";
+  s.className = "s " + (ok ? "live" : "bad");
 }
-let hostTries = 0;
-$("#hostBtn").onclick = () => {
-  cleanupPeer(); myCode = mkCode(); log("Opening the table…");
-  peer = new Peer(PREFIX + myCode, {debug:0});
-  peer.on("open", () => { hostTries = 0; setRoom(myCode, "waiting for a buddy");
-    log(`Table is open. Give him the code ${myCode}.`); });
-  peer.on("connection", c => { conn = c; wireConn(); });
-  peer.on("error", e => {
-    if (String(e).includes("taken") && hostTries++ < 5){ log("Code in use — trying another."); $("#hostBtn").click(); }
-    else log("Connection problem (" + e.type + "). Check the network and try again.");
-  });
-};
-$("#joinBtn").onclick = () => {
-  const code = $("#joinCode").value.trim().toUpperCase();
-  if (code.length !== 4) return log("A table code is 4 characters.");
-  cleanupPeer(); myCode = code; log("Knocking…");
-  peer = new Peer({debug:0});
-  peer.on("open", () => { conn = peer.connect(PREFIX + code, {reliable:true}); wireConn();
-    setTimeout(() => { if (conn && !conn.open) log("No answer. Have him tap Get a code again — codes expire when the app closes."); }, 6000); });
-  peer.on("error", e => log("Couldn't reach that table (" + e.type + "). Check the code."));
-};
-function wireConn(){
-  conn.on("open", () => { setRoom(myCode, "connected", true);
-    log("Seated. Linked directly to the other phone."); close("#connModal"); toast("Connected."); push(); });
-  conn.on("data", onData);
-  conn.on("close", () => { setRoom(myCode, "disconnected"); opp = null; renderOpp(); toast("Buddy dropped."); });
-  conn.on("error", () => setRoom(myCode, "link error"));
+function startSync(){ stopSync(); pollState(); syncTimer = setInterval(pollState, 3000); }
+function stopSync(){ clearInterval(syncTimer); syncTimer = null; }
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentMatch && $("#tableScreen").classList.contains("on")) pollState();
+});
+async function pollState(){
+  if (!currentMatch) return;
+  try{
+    const d = await api(`/api/match/${currentMatch}/state?username=${encodeURIComponent(currentUser)}`);
+    if (!G && d.mine) G = d.mine;
+    oppName = d.opponentName;
+    if (d.opponent) opp = d.opponent;
+    renderAll();
+    setSyncStatus(true, oppName);
+  }catch(e){ setSyncStatus(false, oppName); }
 }
-function cleanupPeer(){ try{ conn && conn.close(); peer && peer.destroy(); }catch(e){} conn = null; peer = null; }
-
-function send(o){ if (conn && conn.open) try{ conn.send(o); }catch(e){} }
-let lastPush = 0, pushTimer = null;
-function push(){
-  if (!G || !conn || !conn.open) return;
-  const wait = 80 - (Date.now() - lastPush);
-  if (wait <= 0){ lastPush = Date.now(); send({t:"state", s:snapshot()}); }
-  else if (!pushTimer) pushTimer = setTimeout(() => { pushTimer = null; push(); }, wait);
+async function postEvent(type, payload){
+  return api(`/api/match/${currentMatch}/events`, { method:"POST", body: JSON.stringify({username:currentUser, type, payload}) });
 }
-function snapshot(){
-  const pub = c => ({id:c.id, name:c.faceDown?"":c.name, img:c.faceDown?"":c.img, back:c.back,
-    x:c.x, y:c.y, tapped:c.tapped, ctr:c.ctr, faceDown:c.faceDown, flipped:c.flipped});
-  return {name:playerName, deckName:G.deckName, life:G.life,
-    hand:G.hand.length, library:G.library.length, command:G.command.length,
-    field:G.field.map(pub), grave:G.grave.map(pub), exile:G.exile.map(pub)};
+function fullState(){
+  return {deckId:G.deckId, deckName:G.deckName, format:G.format, life:G.life,
+    library:G.library, hand:G.hand, field:G.field, grave:G.grave, exile:G.exile, command:G.command};
 }
-function onData(d){
-  if (d.t === "state"){ opp = d.s; renderOpp(); }
-  if (d.t === "say"){ toast(d.msg, 3000); }
-  if (d.t === "reveal"){ showList("Opponent reveals", [d.card], false); }
+function pushState(){
+  if (!G || !currentMatch) return;
+  statePushWanted = true;
+  if (statePushTimer) return;
+  statePushTimer = setTimeout(async () => {
+    statePushTimer = null;
+    if (!statePushWanted) return;
+    statePushWanted = false;
+    try{ await postEvent("state", fullState()); setSyncStatus(true, oppName); }
+    catch(e){ setSyncStatus(false, oppName); }
+  }, 700);
 }
 
 /* ============================================================
-   ANDROID PLUMBING
+   PUSH NOTIFICATIONS
+   ============================================================ */
+$("#menuNotif").onclick = enableNotifications;
+async function enableNotifications(){
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)){
+    toast("This browser doesn't support push here — the code fallback always works."); return;
+  }
+  try{
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted"){ toast("Notifications weren't allowed — you can still use codes."); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const {key} = await api("/api/push/vapid-key");
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    await api("/api/push/subscribe", {method:"POST", body: JSON.stringify({username:currentUser, subscription:sub})});
+    toast("Notifications on. You'll be pinged for challenges and nudges.");
+  }catch(e){ toast("Couldn't turn on notifications — the code fallback still works."); }
+}
+function urlBase64ToUint8Array(base64String){
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,"+").replace(/_/g,"/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+/* ============================================================
+   PLUMBING
    ============================================================ */
 const show = sel => { $$(".screen").forEach(s => s.classList.remove("on")); $(sel).classList.add("on"); };
 const open = sel => $(sel).classList.add("on");
@@ -1046,29 +1262,21 @@ function toast(msg, ms=2400){
   const t = $("#toast"); t.textContent = msg; t.classList.add("on");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), ms);
 }
-
-/* screen stays on while a game is up */
 let wake = null;
-async function keepAwake(){
-  try{ if (!wake || wake.released) wake = await navigator.wakeLock.request("screen"); }catch(e){}
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && $("#tableScreen").classList.contains("on")) keepAwake();
-});
+async function keepAwake(){ try{ if (!wake || wake.released) wake = await navigator.wakeLock.request("screen"); }catch(e){} }
 
-/* back button closes what's open instead of dumping you out */
 history.replaceState({pt:0}, "");
 history.pushState({pt:1}, "");
 addEventListener("popstate", () => {
   const m = $$(".modal.on").pop();
   if (m) m.classList.remove("on");
   else if ($("#cardMenu").classList.contains("on")) closeCardMenu();
-  else if ($("#tableScreen").classList.contains("on")) show("#deckScreen");
+  else if ($("#tableScreen").classList.contains("on")){ stopSync(); show("#menuScreen"); loadMatches(); }
+  else if ($("#deckScreen").classList.contains("on")) show("#menuScreen");
   else { history.back(); return; }
   history.pushState({pt:1}, "");
 });
 
-/* on-screen keyboard: fit the sheet to whatever space is left */
 const vv = window.visualViewport;
 const typing = () => !!document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
 function fitViewport(){
@@ -1086,9 +1294,8 @@ document.addEventListener("focusin", e => {
 });
 document.addEventListener("focusout", () => setTimeout(fitViewport, 220));
 
-/* size cards so a full board fits in landscape */
 function sizeCards(){
-  if (typing()) return;   // the keyboard shrinking the page isn't a smaller table
+  if (typing()) return;
   const cardH = clamp(Math.floor((innerHeight - 56) * 0.235), 62, 112);
   document.documentElement.style.setProperty("--card-h", cardH + "px");
   document.documentElement.style.setProperty("--card-w", Math.round(cardH/1.395) + "px");
@@ -1101,10 +1308,14 @@ if ("serviceWorker" in navigator)
 
 (async function init(){
   sizeCards(); fitViewport();
-  playerName = (await store.get("name")) || "Player";
-  await loadDecks();
-  renderLife(); renderOpp();
-  setRoom("", "tap to open a table");
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+
+  const params = new URLSearchParams(location.search);
+  const stored = getStoredUser();
+  if (stored) await enterAsUser(stored);
+  else show("#loginScreen");
+
+  if (currentUser && params.get("match")) rejoinMatch(params.get("match"));
 })();
 </script>
 </body>
