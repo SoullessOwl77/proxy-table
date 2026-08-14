@@ -1889,16 +1889,16 @@ $("#gmSwap").onclick = () => { close("#gameModal"); swapSeats(); };
    is the button you'll actually press.
    ============================================================ */
 const TOUR = [
-  {sel:"#zLib", t:"Your library", d:"Your deck, and the number is what's left. Tap it for draw options — draw one or several, mill, search, shuffle, or reveal the top card."},
-  {sel:"#zDraw", t:"Draw a card", d:"Start of your turn: tap Draw. There's no rules engine here, so nothing draws for you — you and your opponent agree on what happens."},
+  {sel:"#zLib", t:"Your library", d:"Your deck, and the number of cards left. Tap it for draw options — draw one or several, mill, search, shuffle, or reveal the top card."},
+  {sel:"#zDraw", t:"Draw a card", d:"Start of your turn: tap Draw. There's no rules engine here, so nothing draws for you."},
   {sel:"#hand", t:"Your hand", d:"Drag a card in any direction to pick it up, then drop it on the field to play it, or on a zone tile to send it there. Tap a card instead to get its full menu."},
-  {sel:"#handRail", t:"Scrolling the hand", d:"Cards claim every drag direction, so this rail scrolls the strip when your hand gets wide. It dims when everything already fits."},
-  {sel:"#myField", t:"Your battlefield", d:"Drag cards to arrange them. Tap once to tap and untap, twice to zoom, hold for the full menu — counters, copies, face down, flip. Spread two fingers to zoom the board itself."},
+  {sel:"#handRail", t:"Scrolling the hand", d:"When your hand size exceeds the visual range, a scroll bar will appear here. It dims again when everything fits again."},
+  {sel:"#myField", t:"Your battlefield", d:"Drag cards to arrange them. Tap once to tap and untap, twice to zoom, hold for the full menu. For examples counters, copies, face down, flip. Spread two fingers or pinch to zoom the board itself."},
   {sel:"#myLife", t:"Life and turn", d:"Your life total and which turn you're on. The brass outline shows whose turn it is."},
-  {sel:"#callGrid", t:"Talking across the table", d:"In response holds everything until your opponent presses OK on their screen — it won't disappear on its own. Trigger, Attacking and Hold on reach them the same way, but don't require a response before you move forward."},
-  {sel:"#untapBtn", t:"Untap", d:"Untaps everything you control. Start of turn, before you draw."},
-  {sel:"#endTurnBtn", t:"End turn", d:"Passes to the other player and bumps their turn count. In Practice Mode, it swaps you to the other seat automatically. +Turn is for cards that hand you an extra turn."},
-  {sel:"#menuBtn", t:"Table menu", d:"Mulligans, shuffling, tokens, dice, a second seat to play against yourself, and the way back out. That's everything — go play."}
+  {sel:"#callGrid", t:"Talking across the table", d:"In response holds everything until your opponent presses OK on their screen. It won't disappear on its own. Trigger, Attacking and Hold on reach them the same way, but don't require a response before you move forward."},
+  {sel:"#untapBtn", t:"Untap", d:"Untaps everything you control. Used at the start of your turn, before you draw."},
+  {sel:"#endTurnBtn", t:"End turn", d:"Passes to the other player and bumps their turn count. In Practice Mode, it swaps you to the other seat automatically. +Turn is for cards that grant you an extra turn."},
+  {sel:"#menuBtn", t:"Table menu", d:"Mulligans, shuffling, tokens, dice, a second seat to play against yourself in Practice Mode, and the way back out. That's everything, go play!"}
 ];
 let tourAt = -1;
 function tourShow(i){
