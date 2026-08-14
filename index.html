@@ -697,7 +697,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2";
+const BUILD = "v2.0.2";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -734,6 +734,8 @@ const fmt = f => FORMATS[f] || FORMATS.freeform;
 let decks = [], G = null, G2 = null, opp = null, twoSided = false;
 let currentUser = null, currentMatch = null, oppName = null, playerName = "Player";
 let syncTimer = null, statePushTimer = null, statePushWanted = false;
+/* one deal-in prompt per table entry, not one every 3s poll */
+let dealPrompted = false;
 
 /* ============================================================
    ACCOUNTS — no password; typing a name is the whole sign-in
@@ -1191,16 +1193,34 @@ function oppView(g){
   if (!g) return null;
   return {name: g.deckName || "other seat", deckName: g.deckName, life: g.life,
     turn: g.turn || 1, active: g.active !== false,
-    hand: g.hand.length, library: g.library.length, command: g.command.length,
+    hand: g.hand.length, library: g.library.length, command: g.command,
     field: g.field, grave: g.grave, exile: g.exile,
     /* without this, a target declared from one seat vanishes the moment
        you swap to the other */
     pending: g.pending || [],
     topCard: (g.topRevealed && g.library.length) ? g.library[g.library.length-1] : null};
 }
+/* A seat with no board is a real state, not a broken one: you've joined a
+   match but haven't dealt in yet. Bailing out of the renderer here left the
+   whole table frozen on its static HTML — life stuck at 20, buttons dead,
+   no way to tell that nothing had loaded. Draw the empty seat instead. */
+function renderEmptySeat(){
+  [...$("#myFieldInner").querySelectorAll(".card")].forEach(el => el.remove());
+  [...$("#hand").querySelectorAll(".card")].forEach(el => el.remove());
+  updateHandRail();
+  $("#libN").textContent = "0"; $("#gyN").textContent = "0";
+  $("#exN").textContent = "0";  $("#cmdN").textContent = "0";
+  ["#gyArt","#cmdArt","#libArt"].forEach(s => { $(s).removeAttribute("src"); $(s).style.display = "none"; });
+  $("#zLib").classList.remove("revealed");
+  $("#zCmd").style.display = "none";
+}
 function renderAll(){
-  if(!G) return;
   if (twoSided) opp = oppView(G2);
+  if (!G){
+    renderEmptySeat(); renderLife(); renderOpp(); renderTargetBar();
+    if (!currentMatch) setSyncStatus(false, null);
+    return;
+  }
   renderField(); renderHand(); renderZones(); renderLife(); renderOpp();
   renderTargetBar();
   if (!currentMatch) setSyncStatus(false, null);
@@ -1426,10 +1446,15 @@ function renderOppZones(o){
        <div class="lbl"><div class="c mono">${count}</div><div class="z">${label}</div></div>
      </div>`;
   const gyTop = o.grave && o.grave.length ? o.grave[o.grave.length-1] : null;
+  /* older builds sent the command zone as a bare count — tolerate both so a
+     phone that hasn't reloaded yet still renders instead of throwing */
+  const cmd = Array.isArray(o.command) ? o.command : [];
+  const cmdN = Array.isArray(o.command) ? o.command.length : (o.command || 0);
+  const cmdTop = cmd.find(c => c.img) || null;
   let html = tile("lib", o.library, "Deck", o.topCard ? o.topCard.img : null)
            + tile("", o.grave.length, "Grave", gyTop ? gyTop.img : null)
            + tile("", o.exile.length, "Exile", null);
-  if (o.command) html += tile("", o.command, "Cmd", null);
+  if (cmdN) html += tile("", cmdN, "Cmd", cmdTop ? cmdTop.img : null);
   const z = $("#oppZones");
   z.innerHTML = html;
   z.onclick = e => {
@@ -1437,7 +1462,8 @@ function renderOppZones(o){
     const which = t.dataset.z;
     if (which === "grave") showList("Their graveyard", o.grave, twoSided ? "oppgrave" : null);
     else if (which === "exile") showList("Their exile", o.exile, twoSided ? "oppexile" : null);
-    else if (which === "cmd" && twoSided && G2) showList("Their command zone", G2.command, "oppcommand");
+    /* face up means readable from either seat, networked or not */
+    else if (which === "cmd") showList("Their command zone", cmd, twoSided ? "oppcommand" : null);
     else if (which === "deck") toast(`${o.library} cards left in their deck.`);
   };
 }
@@ -1522,8 +1548,8 @@ function renderZones(){
   $("#zLib").classList.toggle("revealed", !!G.topRevealed);
 }
 function renderLife(){
-  $("#myLifeN").textContent = G ? G.life : 20;
-  $("#myTurnN").textContent = "Turn " + ((G && G.turn) || 1);
+  $("#myLifeN").textContent = G ? G.life : "—";
+  $("#myTurnN").textContent = G ? "Turn " + (G.turn || 1) : "no deck";
   $("#oppTurnN").textContent = opp ? "Turn " + (opp.turn || 1) : "";
   /* who holds priority is tracked explicitly — turn counts alone can't say,
      since each seat only ever counts its own turns */
@@ -1545,6 +1571,10 @@ function renderOpp(){
     $("#oppHandStrip").innerHTML = `<span class="n">${currentMatch ? "waiting for a move" : "no second seat"}</span>`;
     $("#oppZones").innerHTML = "";
     $("#oppName").textContent = currentMatch ? (oppName || "opponent") : "practice";
+    /* the static 20 in the markup reads as a real life total — it isn't one
+       until they've actually dealt in */
+    $("#oppLifeN").textContent = "—";
+    $("#oppLifeN").classList.remove("hurt");
     return;
   }
   $("#oppName").textContent = opp.name || oppName || "opponent";
@@ -1834,15 +1864,18 @@ $("#menuBtn").onclick = () => {
     `<option value="${i}"${G2 && d.id===G2.deckId?" selected":""}>${esc(d.name)}</option>`).join("");
   $("#soloBlock").style.display = currentMatch ? "none" : "";
   $("#gmNudge").style.display = currentMatch ? "" : "none";
-  const d = G && decks.find(x => x.id === G.deckId);
-  $("#gmLegal").textContent = d ? (checkLegal(d).join("  ·  ") || "Deck is legal for its format.") : "";
+  syncGmLife();
   open("#gameModal");
 };
-$("#gmDeck").onchange = () => {
-  const d = decks[+$("#gmDeck").value]; if (!d) return;
-  $("#gmLife").value = fmt(d.format).life;
-  $("#gmLegal").textContent = checkLegal(d).join("  ·  ") || "Deck is legal for its format.";
-};
+/* The starting-life box only ever followed the dropdown's change event, so a
+   deck that was already selected when the menu opened left the box on its
+   markup default of 20 — which is how a Commander game started at 20. */
+function syncGmLife(){
+  const d = decks[+$("#gmDeck").value];
+  $("#gmLife").value = d ? fmt(d.format).life : 20;
+  $("#gmLegal").textContent = d ? (checkLegal(d).join("  ·  ") || "Deck is legal for its format.") : "";
+}
+$("#gmDeck").onchange = syncGmLife;
 $("#gmNew").onclick = () => {
   const d = decks[+$("#gmDeck").value]; if (!d) return toast("Add a deck first.");
   startGame(d, +$("#gmLife").value || fmt(d.format).life); close("#gameModal");
@@ -2078,7 +2111,7 @@ function setSyncStatus(ok, name){
 }
 function startSync(){
   stopSync();
-  eventsPrimed = false; lastSeq = 0;
+  eventsPrimed = false; lastSeq = 0; dealPrompted = false;
   primeEvents().then(() => pollEvents());
   pollState();
   syncTimer = setInterval(() => { pollState(); pollEvents(); }, 3000);
@@ -2099,6 +2132,14 @@ async function pollState(){
     if (d.opponent) opp = d.opponent;
     renderAll();
     setSyncStatus(true, oppName);
+    /* Joining a brand-new match means the server has no board for this seat —
+       nothing to restore, and nothing works until a deck is dealt. Say so once
+       and open the menu, rather than leaving an inert table. */
+    if (!G && !dealPrompted){
+      dealPrompted = true;
+      toast("You're in. Pick your deck and tap New game to deal in.", 6000);
+      if ($("#tableScreen").classList.contains("on")) $("#menuBtn").onclick();
+    }
   }catch(e){ setSyncStatus(false, oppName); }
 }
 async function postEvent(type, payload){
