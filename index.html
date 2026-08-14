@@ -259,9 +259,9 @@ body.targeting .card,body.targeting .life{cursor:crosshair;}
 body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.96;}
 
 /* card being dragged out of hand */
-.ghost{position:fixed;z-index:70;pointer-events:none;border-radius:5px;overflow:hidden;
+.dragghost{position:fixed;z-index:70;pointer-events:none;border-radius:5px;overflow:hidden;
   box-shadow:0 12px 26px #000c;opacity:.92;transform:translate(-50%,-50%) scale(1.06);}
-.ghost img{width:100%;height:100%;object-fit:cover;display:block;}
+.dragghost img{width:100%;height:100%;object-fit:cover;display:block;}
 .dropzone{outline:2px dashed var(--brass);outline-offset:-6px;}
 .zone.dropzone,#hand.dropzone{outline-offset:-2px;background-color:#c39a4e22;}
 
@@ -602,7 +602,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v4.4";
+const BUILD = "v4.5";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1165,7 +1165,7 @@ function attachHandDrag(el, c){
         el.setPointerCapture(e.pointerId);
         closeCardMenu();
         ghost = document.createElement("div");
-        ghost.className = "ghost";
+        ghost.className = "dragghost";
         ghost.style.width = el.offsetWidth + "px";
         ghost.style.height = el.offsetHeight + "px";
         ghost.innerHTML = `<img src="${c.faceDown ? "" : c.img}" alt="">`;
