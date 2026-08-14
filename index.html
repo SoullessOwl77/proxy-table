@@ -244,6 +244,45 @@ label:first-child{margin-top:0;}
 
 .fieldinner{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform;}
 
+/* Guided tour: a hole punched over one real control at a time, with a caption
+   next to it. The hole is a huge box-shadow spread rather than a mask, so it
+   works without a second stacking layer. */
+.tourhole{position:fixed;border-radius:9px;border:2px solid var(--brass);
+  box-shadow:0 0 0 9999px #000d;pointer-events:none;z-index:95;
+  transition:top .18s,left .18s,width .18s,height .18s;}
+.tourbox{position:fixed;z-index:96;width:264px;max-width:88vw;background:var(--felt-2);
+  border:1px solid var(--brass-dim);border-radius:10px;padding:11px 13px;
+  box-shadow:0 10px 30px #000c;}
+.tourbox h3{font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0 0 4px;}
+.tourbox p{margin:0;font-size:12px;line-height:1.45;color:var(--parchment);}
+.tourbox .nav{display:flex;align-items:center;gap:7px;margin-top:10px;}
+.tourbox .step{font-size:10.5px;color:var(--parchment-dim);letter-spacing:.1em;flex:1;}
+body.tour .callgrid,body.tour .actgrid{pointer-events:none;}
+
+/* Table talk: the four things you constantly need to say out loud across a
+   real table. Same 120px column as the life panel and the action grid, sat in
+   the bottom-right corner of your own field. */
+.callgrid{position:absolute;right:10px;bottom:4px;width:var(--ctrl-w);z-index:6;
+  display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:22px;gap:3px;}
+.callgrid .abtn{background:#0b1211dd;}
+.callgrid .abtn.urgent{border-color:var(--blood);color:var(--blood);}
+.callgrid .abtn.urgent:active{background:var(--blood);color:var(--parchment);}
+
+/* An interrupt has to survive being missed, so it sits there until it's
+   acknowledged rather than fading like a toast. */
+.callbanner{position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:78;
+  display:none;flex-direction:column;gap:5px;align-items:center;max-width:94vw;}
+.callbanner.on{display:flex;}
+.callrow{display:flex;align-items:center;gap:9px;background:#2a1512f2;
+  border:1px solid var(--blood);border-radius:20px;padding:6px 6px 6px 13px;
+  font-size:12px;white-space:nowrap;max-width:94vw;box-shadow:0 6px 18px #000a;}
+.callrow.calm{background:#12201ef2;border-color:var(--brass-dim);}
+.callrow .who{color:var(--parchment-dim);}
+.callrow b{font-weight:700;}
+.callrow button{background:var(--brass);color:#191207;font-weight:700;font-size:11px;
+  border-radius:14px;padding:4px 11px;}
+body.hascall .targetbar{top:52px;}
+
 /* opponent's hand, shown as backs so you can see how many they're holding */
 .oppstrip{position:absolute;left:6px;top:4px;display:flex;align-items:center;gap:2px;z-index:6;
   height:calc(var(--card-h) * .42);}
@@ -369,6 +408,8 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
           <span class="d">Play a deck alone — draw, shuffle, test lines. Nothing is synced.</span></button>
         <button class="bigbtn" id="menuDecks"><span class="t">Deck manager</span>
           <span class="d">Add, edit, and check decks.</span></button>
+        <button class="bigbtn" id="menuHowto"><span class="t">How to play</span>
+          <span class="d">A two-minute walk through one turn, pointing at the real controls.</span></button>
       </div>
     </div>
   </div>
@@ -431,6 +472,25 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
 
   <div class="field mine" id="myField" data-tag="you">
     <div class="fieldinner" id="myFieldInner"></div>
+    <div class="callgrid" id="callGrid">
+      <button class="abtn urgent" data-call="In response">In response</button>
+      <button class="abtn" data-call="Trigger">Trigger</button>
+      <button class="abtn" data-call="Attacking">Attacking</button>
+      <button class="abtn" data-call="Hold on">Hold on</button>
+    </div>
+  </div>
+
+  <div class="callbanner" id="callBanner"></div>
+  <div class="tourhole" id="tourHole" style="display:none;"></div>
+  <div class="tourbox" id="tourBox" style="display:none;">
+    <h3 id="tourTitle"></h3>
+    <p id="tourText"></p>
+    <div class="nav">
+      <span class="step" id="tourStep"></span>
+      <button class="btn sm" id="tourBack">Back</button>
+      <button class="btn gold sm" id="tourNext">Next</button>
+      <button class="btn sm" id="tourQuit">Skip</button>
+    </div>
   </div>
 
   <svg class="arrows" id="arrows" aria-hidden="true">
@@ -637,7 +697,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v4.8";
+const BUILD = "v4.9";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1823,6 +1883,107 @@ $("#gmOppDeal").onclick = () => {
 };
 $("#gmSwap").onclick = () => { close("#gameModal"); swapSeats(); };
 
+/* ============================================================
+   HOW TO PLAY — walks one turn, highlighting the real controls.
+   It runs on a live practice table so every button it points at
+   is the button you'll actually press.
+   ============================================================ */
+const TOUR = [
+  {sel:"#zLib", t:"Your library", d:"Your deck. Tap it for draws, milling, searching, or revealing the top card. The number is what's left."},
+  {sel:"#zDraw", t:"Draw a card", d:"Start of your turn: tap Draw. There's no rules engine here, so nothing draws for you — you and your opponent agree on what happens."},
+  {sel:"#hand", t:"Your hand", d:"Drag a card in any direction to pick it up, then drop it on the field to play it, or on a zone tile to send it there. Tap a card instead to get its full menu."},
+  {sel:"#handRail", t:"Scrolling the hand", d:"Cards claim every drag direction, so this rail scrolls the strip when your hand gets wide. It dims when everything already fits."},
+  {sel:"#myField", t:"Your battlefield", d:"Drag cards to arrange them. Tap once to tap and untap, twice to zoom, hold for the full menu — counters, copies, face down, flip. Spread two fingers to zoom the board itself."},
+  {sel:"#myLife", t:"Life and turn", d:"Your life total and which turn you're on. The brass outline shows whose turn it is."},
+  {sel:"#callGrid", t:"Talking across the table", d:"In response holds everything until they press OK on their screen — it won't disappear on its own. Trigger, Attacking and Hold on work the same way, just quieter."},
+  {sel:"#untapBtn", t:"Untap", d:"Untaps everything you control and nothing they control. Start of turn, before you draw."},
+  {sel:"#endTurnBtn", t:"End turn", d:"Passes to the other player and bumps their turn count. In practice it swaps you to the other seat automatically. +Turn is for cards that hand you an extra turn."},
+  {sel:"#menuBtn", t:"Table menu", d:"Mulligans, shuffling, tokens, dice, a second seat to play against yourself, and the way back out. That's everything — go play."}
+];
+let tourAt = -1;
+function tourShow(i){
+  if (i < 0 || i >= TOUR.length) return tourEnd();
+  tourAt = i;
+  const step = TOUR[i], el = $(step.sel);
+  if (!el) return tourShow(i + 1);
+  const r = el.getBoundingClientRect();
+  const pad = 5;
+  const hole = $("#tourHole"), box = $("#tourBox");
+  hole.style.display = box.style.display = "";
+  hole.style.left = (r.left - pad) + "px"; hole.style.top = (r.top - pad) + "px";
+  hole.style.width = (r.width + pad*2) + "px"; hole.style.height = (r.height + pad*2) + "px";
+  $("#tourTitle").textContent = step.t;
+  $("#tourText").textContent = step.d;
+  $("#tourStep").textContent = `${i+1} / ${TOUR.length}`;
+  $("#tourBack").style.visibility = i ? "" : "hidden";
+  $("#tourNext").textContent = (i === TOUR.length - 1) ? "Done" : "Next";
+  /* put the caption on whichever side of the highlight has room */
+  const bw = box.offsetWidth, bh = box.offsetHeight;
+  let top = r.bottom + 10;
+  if (top + bh > innerHeight - 6) top = r.top - bh - 10;
+  box.style.top = clamp(top, 6, Math.max(6, innerHeight - bh - 6)) + "px";
+  box.style.left = clamp(r.left + r.width/2 - bw/2, 6, Math.max(6, innerWidth - bw - 6)) + "px";
+}
+function tourEnd(){
+  tourAt = -1;
+  $("#tourHole").style.display = "none";
+  $("#tourBox").style.display = "none";
+  document.body.classList.remove("tour");
+}
+$("#tourNext").onclick = () => tourShow(tourAt + 1);
+$("#tourBack").onclick = () => tourShow(tourAt - 1);
+$("#tourQuit").onclick = tourEnd;
+addEventListener("resize", () => { if (tourAt >= 0) tourShow(tourAt); });
+$("#menuHowto").onclick = async () => {
+  if (!decks.length) return toast("Add a deck first — the walkthrough runs on a real table.", 4000);
+  currentMatch = null; G2 = null; twoSided = false; opp = null;
+  startGame(decks[0]);
+  await goTable();
+  document.body.classList.add("tour");
+  setTimeout(() => tourShow(0), 250);
+};
+
+/* ---- table talk ----
+   Each call is one line on the other player's screen that will not go away
+   until they press OK, and pressing OK sends the acknowledgement back. In a
+   practice game there's nobody to send to, so it shows on your own screen —
+   which is also how you see what your opponent will see. */
+const CALL_TEXT = {
+  "In response":"is responding — hold the stack.",
+  "Trigger":"has a trigger to put on the stack.",
+  "Attacking":"is declaring attackers.",
+  "Hold on":"needs a moment before you continue."
+};
+let callSeq = 0;
+function pushCall(kind, who, urgent){
+  const b = $("#callBanner");
+  const id = "call" + (++callSeq);
+  const row = document.createElement("div");
+  row.className = "callrow" + (urgent ? "" : " calm");
+  row.dataset.id = id;
+  row.innerHTML = `<span><b>${esc(who)}</b> <span class="who">${esc(CALL_TEXT[kind] || kind)}</span></span>`;
+  const ok = document.createElement("button");
+  ok.textContent = "OK";
+  ok.onclick = () => {
+    row.remove();
+    if (!b.children.length){ b.classList.remove("on"); document.body.classList.remove("hascall"); }
+    if (currentMatch) postEvent("callack", {kind}).catch(()=>{});
+  };
+  row.appendChild(ok);
+  b.appendChild(row);
+  b.classList.add("on"); document.body.classList.add("hascall");
+}
+$("#callGrid").onclick = e => {
+  const btn = e.target.closest("button[data-call]"); if (!btn) return;
+  const kind = btn.dataset.call, urgent = btn.classList.contains("urgent");
+  if (currentMatch){
+    postEvent("call", {kind}).then(() => toast(`Sent: ${kind}. It stays on their screen until they acknowledge.`, 3200))
+      .catch(() => toast("Couldn't send that — check your connection."));
+    return;
+  }
+  pushCall(kind, twoSided ? (G && G.deckName) || "this seat" : "you", urgent);
+};
+
 /* ---- turns ---- */
 function untapMine(){
   if (!G) return;
@@ -1969,6 +2130,12 @@ async function pollEvents(){
       lastSeq = Math.max(lastSeq, ev.seq);
       if (ev.username === currentUser) continue;      // my own events echo back
       if (ev.type === "nudge") toast((ev.payload && ev.payload.message) || "Your move.", 4000);
+      if (ev.type === "call" && ev.payload){
+        pushCall(ev.payload.kind, ev.username, ev.payload.kind === "In response");
+      }
+      if (ev.type === "callack" && ev.payload){
+        toast(`${ev.username} acknowledged: ${ev.payload.kind}.`, 3000);
+      }
       if (ev.type === "control" && G && ev.payload){
         const i = G.field.findIndex(x => x.id === ev.payload.cardId);
         if (i >= 0){
