@@ -53,7 +53,6 @@ input,textarea{-webkit-user-select:text;user-select:text;}
 .panel h1{font-family:Fraunces,serif;font-size:26px;margin:0 0 3px;font-weight:900;}
 .panel .tag{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--parchment-dim);margin-bottom:18px;}
 .err{color:var(--blood);font-size:12px;margin-top:7px;min-height:15px;}
-.ok{color:var(--good);}
 
 #menuScreen .body{flex:1;overflow-y:auto;padding:14px;
   padding-left:calc(14px + var(--edge-l));padding-right:calc(14px + var(--edge-r));}
@@ -264,10 +263,6 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
 .dropzone{outline:2px dashed var(--brass);outline-offset:-6px;}
 .zone.dropzone,#hand.dropzone{outline-offset:-2px;background-color:#c39a4e22;}
 
-.oppbar{position:absolute;left:0;top:0;display:flex;gap:5px;padding:4px 6px;z-index:5;}
-.pill{background:#0009;border:1px solid #ffffff18;border-radius:20px;padding:2px 8px;font-size:10px;
-  letter-spacing:.06em;color:var(--parchment-dim);}
-.pill b{color:var(--parchment);font-weight:700;}
 
 .cardmenu{position:fixed;background:var(--felt-3);border:1px solid var(--brass-dim);border-radius:9px;
   padding:5px;display:none;z-index:60;box-shadow:0 8px 24px #000c;width:214px;}
@@ -609,7 +604,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v4.2";
+const BUILD = "v4.3";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -638,6 +633,10 @@ const FORMATS = {
   pauper:{life:20,size:60,max:4,label:"Pauper"},
   freeform:{life:20,size:0,max:99,label:"Freeform"}
 };
+
+/* A deck restored from a hand-edited backup could carry a format we don't
+   know; fall back rather than throwing on every render. */
+const fmt = f => FORMATS[f] || FORMATS.freeform;
 
 let decks = [], G = null, G2 = null, opp = null, twoSided = false;
 let currentUser = null, currentMatch = null, oppName = null, playerName = "Player";
@@ -790,7 +789,7 @@ const slim = c => ({oid:c.id, name:c.name, img:faceImage(c), back:backImage(c),
   type:c.type_line||"", cmc:c.cmc||0, rarity:c.rarity||"", legal:c.legalities||{}});
 
 function checkLegal(deck){
-  const f = FORMATS[deck.format];
+  const f = fmt(deck.format);
   if (!f || deck.format === "freeform") return [];
   const notes = [];
   const total = deck.main.reduce((a,c)=>a+c.qty,0) + deck.commander.reduce((a,c)=>a+c.qty,0);
@@ -824,7 +823,7 @@ function renderDecks(){
     const n = d.main.reduce((a,c)=>a+c.qty,0) + d.commander.reduce((a,c)=>a+c.qty,0);
     const issues = checkLegal(d);
     return `<div class="deckcard"><h3>${esc(d.name)}</h3>
-      <div class="meta">${FORMATS[d.format].label} · ${n} cards ·
+      <div class="meta">${fmt(d.format).label} · ${n} cards ·
         ${issues.length ? `<span style="color:var(--blood)">${issues.length} note${issues.length>1?"s":""}</span>`
                         : `<span style="color:var(--good)">legal</span>`}</div>
       <div class="row">
@@ -938,7 +937,7 @@ $("#bkExport").onclick = () => {
 $("#bkExportTxt").onclick = () => {
   if (!decks.length) return $("#bkStatus").textContent = "No decks to export yet.";
   saveFile(`proxytable-decklists-${stamp()}.txt`,
-    decks.map(d => `=== ${d.name} (${FORMATS[d.format].label}) ===\n${d.raw||""}`).join("\n\n"), "text/plain");
+    decks.map(d => `=== ${d.name} (${fmt(d.format).label}) ===\n${d.raw||""}`).join("\n\n"), "text/plain");
   $("#bkStatus").textContent = "Decklists exported as plain text.";
 };
 let incoming = null;
@@ -1074,7 +1073,7 @@ function newGameState(deck, life){
   deck.commander.forEach(e => { for (let i=0;i<e.qty;i++) cmd.push(mkCard(deck.cards[e.name])); });
   shuffle(lib);
   const g = {deckId:deck.id, deckName:deck.name, format:deck.format,
-    life: life ?? FORMATS[deck.format].life,
+    life: life ?? fmt(deck.format).life,
     library:lib, hand:[], field:[], grave:[], exile:[], command:cmd};
   for (let i=0;i<7 && g.library.length;i++) g.hand.push(g.library.pop());
   return g;
@@ -1086,7 +1085,7 @@ function startGame(deck, life){
   if (oppZoom) oppZoom.reset();
   document.documentElement.style.setProperty("--hand-zoom", "1");
   renderAll(); pushState();
-  toast(`${deck.name} — ${FORMATS[deck.format].label}. Opening hand of 7.`);
+  toast(`${deck.name} — ${fmt(deck.format).label}. Opening hand of 7.`);
 }
 
 /* ============================================================
@@ -1099,7 +1098,11 @@ function oppView(g){
   if (!g) return null;
   return {name: g.deckName || "other seat", deckName: g.deckName, life: g.life,
     hand: g.hand.length, library: g.library.length, command: g.command.length,
-    field: g.field, grave: g.grave, exile: g.exile};
+    field: g.field, grave: g.grave, exile: g.exile,
+    /* without this, a target declared from one seat vanishes the moment
+       you swap to the other */
+    pending: g.pending || [],
+    topCard: (g.topRevealed && g.library.length) ? g.library[g.library.length-1] : null};
 }
 function renderAll(){
   if(!G) return;
@@ -1583,12 +1586,12 @@ $("#menuBtn").onclick = () => {
 };
 $("#gmDeck").onchange = () => {
   const d = decks[+$("#gmDeck").value]; if (!d) return;
-  $("#gmLife").value = FORMATS[d.format].life;
+  $("#gmLife").value = fmt(d.format).life;
   $("#gmLegal").textContent = checkLegal(d).join("  ·  ") || "Deck is legal for its format.";
 };
 $("#gmNew").onclick = () => {
   const d = decks[+$("#gmDeck").value]; if (!d) return toast("Add a deck first.");
-  startGame(d, +$("#gmLife").value || FORMATS[d.format].life); close("#gameModal");
+  startGame(d, +$("#gmLife").value || fmt(d.format).life); close("#gameModal");
 };
 $("#gmMull").onclick = () => {
   if (!G) return; const n = Math.max(0, G.hand.length - 1);
@@ -1619,7 +1622,7 @@ $("#gmNudge").onclick = async () => {
 $("#gmOppDeal").onclick = () => {
   const d = decks[+$("#gmOppDeck").value];
   if (!d) return toast("Add a deck first.");
-  G2 = newGameState(d, FORMATS[d.format].life);
+  G2 = newGameState(d, fmt(d.format).life);
   twoSided = true;
   close("#gameModal"); renderAll();
   toast(`${d.name} dealt to the other seat. Swap seats to play it.`);
@@ -1689,7 +1692,10 @@ function startSync(){
   pollState();
   syncTimer = setInterval(() => { pollState(); pollEvents(); }, 3000);
 }
-function stopSync(){ clearInterval(syncTimer); syncTimer = null; }
+function stopSync(){
+  clearInterval(syncTimer); syncTimer = null;
+  cancelAnimationFrame(arrowRAF);
+}
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && currentMatch && $("#tableScreen").classList.contains("on")) pollState();
 });
@@ -1883,6 +1889,13 @@ $("#targetBar").addEventListener("click", async e => {
   if (b.dataset.resolve){ clearPending(b.dataset.resolve); toast("Resolved."); return; }
   if (b.dataset.allow){
     const id = b.dataset.allow;
+    /* solo play: both boards are ours, so just clear it locally —
+       there is no match to post an event to */
+    if (!currentMatch){
+      if (G2 && G2.pending) G2.pending = G2.pending.filter(p => p.id !== id);
+      renderAll(); toast("Resolved.");
+      return;
+    }
     b.disabled = true;
     try{ await postEvent("resolve", {actionId:id}); toast("Allowed — waiting for their side to clear it."); }
     catch(err){ b.disabled = false; toast("Couldn't send that — check your connection."); }
