@@ -1,7 +1,7 @@
 /* Proxy Table service worker — app shell + card art caching, plus
    push notifications for challenges and nudges. */
 
-const SHELL = "pt-shell-v3";
+const SHELL = "pt-shell-v4";
 const ART = "pt-art-v1";
 const ART_LIMIT = 900;
 
@@ -44,7 +44,7 @@ self.addEventListener("fetch", e => {
 
   if (url.origin === location.origin){
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, {cache:"no-store"}).then(res => {
         if (res.ok){
           const copy = res.clone();
           caches.open(SHELL).then(c => c.put(req, copy));

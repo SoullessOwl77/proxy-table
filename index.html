@@ -17,7 +17,7 @@
   --felt:#141d1b; --felt-2:#1b2825; --felt-3:#233330; --ink:#0a0f0e;
   --brass:#c39a4e; --brass-dim:#7d6433;
   --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
-  --card-w:64px; --card-h:89px; --seam:56px;
+  --card-w:64px; --card-h:89px; --seam:52px;
   --edge-l:env(safe-area-inset-left,0px);
   --edge-r:env(safe-area-inset-right,0px);
 }
@@ -123,7 +123,9 @@ label:first-child{margin-top:0;}
 .field.mine{box-shadow:inset 0 -14px 22px -18px #000;}
 .field::after{content:attr(data-tag);position:absolute;right:6px;font-size:9px;letter-spacing:.22em;
   text-transform:uppercase;color:#ffffff14;pointer-events:none;}
-.field.opp::after{top:5px;} .field.mine::after{bottom:5px;}
+/* tags sit against the seam: the top-right of the opponent field belongs to
+   their zone tiles, and the bottom of your field belongs to the tray */
+.field.opp::after{bottom:3px;} .field.mine::after{top:3px;}
 
 /* Three columns: a life box at each end, status text in the middle.
    The Menu and Seat controls live in the tray with the other tiles —
@@ -153,13 +155,17 @@ label:first-child{margin-top:0;}
   font-variant-numeric:tabular-nums;}
 .lifebtns button:active{background:var(--brass);color:#191207;}
 #oppLife.nolife .lifebtns{display:none;}
-.life .who{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--parchment-dim);
+.life .who{font-size:8.5px;line-height:1;letter-spacing:.16em;text-transform:uppercase;color:var(--parchment-dim);
   max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.life .n{font-family:Fraunces,serif;font-weight:900;font-size:24px;line-height:1;}
+.life .n{font-family:Fraunces,serif;font-weight:900;font-size:19px;line-height:1;margin-top:1px;}
 .life .n.hurt{color:var(--blood);}
+.life .tn{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--brass);
+  line-height:1;margin-top:2px;white-space:nowrap;}
+.lifemid{gap:0;}
+.life.active{border-color:var(--brass);box-shadow:0 0 0 1px #c39a4e55;}
 @media (max-width:900px){
-  .lifebtns button{width:21px;height:16px;font-size:9px;}
-  .life .n{font-size:20px;}
+  .lifebtns button{width:21px;height:15px;font-size:9px;}
+  .life .n{font-size:18px;}
   .lifemid{min-width:30px;}
 }
 @media (max-width:720px){
@@ -186,6 +192,8 @@ label:first-child{margin-top:0;}
 .card .ctr{position:absolute;left:2px;bottom:2px;min-width:17px;height:17px;border-radius:9px;
   background:var(--brass);color:#191207;font-size:11px;font-weight:700;display:flex;
   align-items:center;justify-content:center;padding:0 3px;font-variant-numeric:tabular-nums;}
+/* a card you've taken control of — it still belongs to them */
+.card.borrowed{box-shadow:0 0 0 2px var(--blood),0 3px 7px #000a;}
 .card.back{background:repeating-linear-gradient(135deg,#1d2a27 0 6px,#182320 6px 12px);
   border:1px solid #c39a4e40;display:flex;align-items:center;justify-content:center;}
 .card.back::after{content:"";width:22px;height:22px;border:1px solid #c39a4e77;transform:rotate(45deg);}
@@ -193,12 +201,21 @@ label:first-child{margin-top:0;}
 .tray{flex:0 0 auto;display:flex;align-items:flex-end;gap:6px;
   padding:4px 6px 5px;background:linear-gradient(180deg,#0000,#000000aa);
   padding-left:calc(6px + var(--edge-l));padding-right:calc(6px + var(--edge-r));}
-/* pan-x: the browser keeps horizontal scrolling of the strip, and hands us
-   every vertical gesture — which is exactly the lift-to-play motion */
-.hand{flex:1;display:flex;gap:4px;overflow-x:auto;overflow-y:hidden;padding:2px 0 3px;
+/* Cards take every drag direction now, so scrolling the strip moved to an
+   explicit rail below it — mobile Chrome's own scrollbar is an overlay you
+   can't grab with a finger. touch-action:none on the cards; the strip keeps
+   pan-x so flicking the gaps between cards still works. */
+.handwrap{flex:1;min-width:0;display:flex;flex-direction:column;}
+.hand{flex:0 0 auto;display:flex;gap:4px;overflow-x:auto;overflow-y:hidden;padding:2px 0 3px;
   scrollbar-width:none;height:calc(var(--card-h) * var(--hand-zoom,1) + 6px);touch-action:pan-x;}
 .hand::-webkit-scrollbar{display:none;}
-.hand .card{position:relative;flex:0 0 auto;touch-action:pan-x;
+.handrail{height:11px;margin-top:1px;border-radius:6px;background:#00000066;
+  border:1px solid #c39a4e26;position:relative;touch-action:none;flex:0 0 auto;}
+.handrail.off{visibility:hidden;}
+.handrail .thumb{position:absolute;top:1px;bottom:1px;min-width:26px;border-radius:5px;
+  background:var(--brass-dim);}
+.handrail.grabbed .thumb{background:var(--brass);}
+.hand .card{position:relative;flex:0 0 auto;touch-action:none;
   width:calc(var(--card-w) * var(--hand-zoom,1));
   height:calc(var(--card-h) * var(--hand-zoom,1));}
 .zones{display:flex;gap:5px;}
@@ -210,7 +227,7 @@ label:first-child{margin-top:0;}
 .zone.lib.revealed{border-color:var(--brass);}
 /* action tiles: same proven tile layout as the card zones, brass so they
    read as controls rather than places cards live */
-.zone.act{border-style:solid;border-color:var(--brass-dim);background:var(--felt-3);}
+.zone.act{border-style:solid;border-color:var(--brass-dim);background:var(--felt-3);width:40px;}
 .zone.act .c{color:var(--brass);font-family:Archivo,sans-serif;font-weight:700;letter-spacing:.02em;}
 .zone.act:active{background:var(--brass);}
 .zone.act:active .c,.zone.act:active .z{color:#191207;}
@@ -376,6 +393,7 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
       <div class="lifemid">
         <span class="who" id="oppName">practice</span>
         <span class="n mono" id="oppLifeN">20</span>
+        <span class="tn mono" id="oppTurnN">T1</span>
       </div>
       <div class="lifebtns">
         <button data-od="-1">−1</button>
@@ -394,6 +412,7 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
       <div class="lifemid">
         <span class="who" id="myName">you</span>
         <span class="n mono" id="myLifeN">20</span>
+        <span class="tn mono" id="myTurnN">T1</span>
       </div>
       <div class="lifebtns">
         <button data-d="-1">−1</button>
@@ -425,11 +444,17 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
       <button class="zone lib" id="zLib"><img id="libArt" alt=""><div class="lbl"><div class="c mono" id="libN">0</div><div class="z">Library</div></div></button>
       <button class="zone" id="zCmd" style="display:none;border-color:var(--brass);"><img id="cmdArt" alt=""><div class="lbl"><div class="c mono" id="cmdN">0</div><div class="z">Command</div></div></button>
     </div>
-    <div class="hand" id="hand"></div>
+    <div class="handwrap">
+      <div class="hand" id="hand"></div>
+      <div class="handrail off" id="handRail"><div class="thumb" id="handThumb"></div></div>
+    </div>
     <div class="zones">
       <button class="zone" id="zGy"><img id="gyArt" alt=""><div class="lbl"><div class="c mono" id="gyN">0</div><div class="z">Grave</div></div></button>
       <button class="zone" id="zEx"><div class="lbl"><div class="c mono" id="exN">0</div><div class="z">Exile</div></div></button>
       <button class="zone" id="zDraw" style="border-color:var(--brass);"><div class="lbl"><div class="c" style="font-size:15px;">Draw</div><div class="z">+1</div></div></button>
+      <button class="zone act" id="untapBtn"><div class="lbl"><div class="c" style="font-size:13px;">Untap</div><div class="z">mine</div></div></button>
+      <button class="zone act" id="endTurnBtn" style="border-color:var(--brass);"><div class="lbl"><div class="c" style="font-size:13px;">End</div><div class="z">turn</div></div></button>
+      <button class="zone act" id="extraTurnBtn"><div class="lbl"><div class="c" style="font-size:13px;">+Turn</div><div class="z">extra</div></div></button>
       <button class="zone act" id="swapBtn"><div class="lbl"><div class="c" id="swapLabel" style="font-size:13px;">2nd</div><div class="z">Seat</div></div></button>
       <button class="zone act" id="menuBtn"><div class="lbl"><div class="c" style="font-size:15px;">Menu</div><div class="z">table</div></div></button>
     </div>
@@ -602,7 +627,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v4.5";
+const BUILD = "v4.6";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -797,7 +822,7 @@ function checkLegal(deck){
     const card = deck.cards[c.name]; if (!card) continue;
     if (/Basic/.test(card.type)) continue;
     if (c.qty > f.max) notes.push(`${c.qty}× ${c.name} — limit is ${f.max}.`);
-    const st = card.legal[deck.format];
+    const st = (card.legal || {})[deck.format];
     if (st === "banned") notes.push(`${c.name} is banned.`);
     if (st === "restricted") notes.push(`${c.name} is restricted to 1.`);
     if (st === "not_legal") notes.push(`${c.name} isn't in the ${f.label} card pool.`);
@@ -1072,7 +1097,7 @@ function newGameState(deck, life){
   shuffle(lib);
   const g = {deckId:deck.id, deckName:deck.name, format:deck.format,
     life: life ?? fmt(deck.format).life,
-    library:lib, hand:[], field:[], grave:[], exile:[], command:cmd};
+    library:lib, hand:[], field:[], grave:[], exile:[], command:cmd, turn:1, active:true};
   for (let i=0;i<7 && g.library.length;i++) g.hand.push(g.library.pop());
   return g;
 }
@@ -1095,6 +1120,7 @@ function startGame(deck, life){
 function oppView(g){
   if (!g) return null;
   return {name: g.deckName || "other seat", deckName: g.deckName, life: g.life,
+    turn: g.turn || 1, active: g.active !== false,
     hand: g.hand.length, library: g.library.length, command: g.command.length,
     field: g.field, grave: g.grave, exile: g.exile,
     /* without this, a target declared from one seat vanishes the moment
@@ -1123,6 +1149,7 @@ function paint(el, c){
   el.classList.toggle("back", !!c.faceDown);
   img.style.display = c.faceDown ? "none" : "block";
   el.classList.toggle("tapped", !!c.tapped);
+  el.classList.toggle("borrowed", !!c.own);
   const ctr = el.querySelector(".ctr");
   ctr.style.display = c.ctr ? "flex" : "none";
   ctr.textContent = c.ctr > 0 ? "+"+c.ctr : c.ctr;
@@ -1136,14 +1163,72 @@ function syncField(host, cards, place, decorate){
     paint(el, c); place(el, c);
   });
 }
+/* A card is a big fraction of a phone-sized battlefield, so positions are
+   stored as the top-left corner and every place/clamp has to account for the
+   card's own width and height — otherwise the mirrored copy on the other side
+   of the table hangs off the edge. Measured on the un-transformed host, not
+   the pinch-scaled inner layer. */
+function cardPct(hostSel){
+  const r = $(hostSel).getBoundingClientRect();
+  const cs = getComputedStyle(document.documentElement);
+  const w = parseFloat(cs.getPropertyValue("--card-w")) || 64;
+  const h = parseFloat(cs.getPropertyValue("--card-h")) || 89;
+  return {w: r.width ? w / r.width * 100 : 12, h: r.height ? h / r.height * 100 : 40};
+}
+/* keep a card fully inside its own half of the table */
+function clampPos(c){
+  const p = cardPct("#myField");
+  c.x = clamp(c.x, 0, Math.max(0, 100 - p.w));
+  c.y = clamp(c.y, 0, Math.max(0, 100 - p.h));
+  return c;
+}
 function renderField(){
-  syncField($("#myFieldInner"), G.field, (el,c) => { el.style.left = c.x+"%"; el.style.top = c.y+"%"; }, (el,c) => attachDrag(el,c));
+  const p = cardPct("#myField");
+  syncField($("#myFieldInner"), G.field, (el,c) => {
+    el.style.left = clamp(c.x, 0, Math.max(0, 100 - p.w)) + "%";
+    el.style.top  = clamp(c.y, 0, Math.max(0, 100 - p.h)) + "%";
+  }, (el,c) => attachDrag(el,c));
 }
 function renderHand(){
   const h = $("#hand");
   syncField(h, G.hand, () => {}, (el,c) => attachHandDrag(el, c));
   G.hand.forEach(c => h.appendChild(h.querySelector(`.card[data-id="${c.id}"]`)));
+  updateHandRail();
 }
+/* The rail is the only way to scroll the hand now that cards claim every
+   drag direction, so it has to be a real element — not a native scrollbar. */
+function updateHandRail(){
+  const h = $("#hand"), rail = $("#handRail"), thumb = $("#handThumb");
+  const over = h.scrollWidth - h.clientWidth;
+  rail.classList.toggle("off", over <= 1);
+  if (over <= 1) return;
+  const w = Math.max(26, rail.clientWidth * (h.clientWidth / h.scrollWidth));
+  thumb.style.width = w + "px";
+  thumb.style.left = (h.scrollLeft / over) * (rail.clientWidth - w) + "px";
+}
+(function wireHandRail(){
+  const h = $("#hand"), rail = $("#handRail"), thumb = $("#handThumb");
+  let grab = null;
+  const posTo = clientX => {
+    const rr = rail.getBoundingClientRect();
+    const w = thumb.offsetWidth;
+    const left = clamp(clientX - rr.left - w/2, 0, rr.width - w);
+    const over = h.scrollWidth - h.clientWidth;
+    h.scrollLeft = (rr.width - w) ? left / (rr.width - w) * over : 0;
+    updateHandRail();
+  };
+  rail.addEventListener("pointerdown", e => {
+    if (rail.classList.contains("off")) return;
+    grab = e.pointerId; rail.setPointerCapture(e.pointerId);
+    rail.classList.add("grabbed"); posTo(e.clientX);
+  });
+  rail.addEventListener("pointermove", e => { if (grab === e.pointerId) posTo(e.clientX); });
+  const drop = e => { if (grab === e.pointerId){ grab = null; rail.classList.remove("grabbed"); } };
+  rail.addEventListener("pointerup", drop);
+  rail.addEventListener("pointercancel", drop);
+  h.addEventListener("scroll", updateHandRail);
+  addEventListener("resize", updateHandRail);
+})();
 
 /* Drag a card up out of the hand and drop it where you want it. A horizontal
    drag still scrolls the hand, and a plain tap still opens the card menu. */
@@ -1158,10 +1243,10 @@ function attachHandDrag(el, c){
     const dx = e.clientX - sx, dy = e.clientY - sy;
     if (!decided){
       if (Math.hypot(dx,dy) < 9) return;
-      /* upward and more vertical than horizontal means "play this",
-         anything else is the hand scrolling sideways */
-      decided = (dy < 0 && Math.abs(dy) > Math.abs(dx)) ? "lift" : "scroll";
-      if (decided === "lift"){
+      /* any direction picks the card up — the strip has a scrollbar now, so
+         a sideways drag no longer has to be reserved for scrolling */
+      decided = "lift";
+      {
         el.setPointerCapture(e.pointerId);
         closeCardMenu();
         ghost = document.createElement("div");
@@ -1190,8 +1275,9 @@ function attachHandDrag(el, c){
         const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-w")) || 64;
         const ch = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-h")) || 89;
         G.hand.splice(G.hand.indexOf(c), 1);
-        c.x = clamp((e.clientX - box.left - cw/2) / box.width * 100, -2, 96);
-        c.y = clamp((e.clientY - box.top - ch/2) / box.height * 100, -2, 92);
+        c.x = (e.clientX - box.left - cw/2) / box.width * 100;
+        c.y = (e.clientY - box.top - ch/2) / box.height * 100;
+        clampPos(c);
         c.tapped = false; c.faceDown = false;
         G.field.push(c);
         renderAll(); pushState();
@@ -1239,6 +1325,8 @@ function highlightDrop(target){
 function dropInto(c, from, target){
   const src = from === "hand" ? G.hand : G.field;
   const i = src.indexOf(c); if (i >= 0) src.splice(i, 1);
+  if (c.own && target !== "hand" && toOwnerZone(c, target === "grave" ? "grave" : target))
+    return "their " + (target === "grave" ? "graveyard" : target);
   switch(target){
     case "grave":   reset(c); G.grave.push(c);   return "graveyard";
     case "exile":   reset(c); G.exile.push(c);   return "exile";
@@ -1280,6 +1368,71 @@ function renderOppZones(o){
     else if (which === "deck") toast(`${o.library} cards left in their deck.`);
   };
 }
+/* Opponent's permanents: a tap opens the small menu, a hold zooms. Only two
+   things you can do to their card, so the menu stays tiny. */
+function attachOppCard(el, c){
+  if (el.dataset.wired) return;
+  el.dataset.wired = "1";
+  let sx, sy, moved = false, timer = null;
+  el.addEventListener("pointerdown", e => {
+    sx = e.clientX; sy = e.clientY; moved = false;
+    timer = setTimeout(() => { timer = null; if (!moved && !pinching && !c.faceDown) preview(c); }, 430);
+  });
+  el.addEventListener("pointermove", e => {
+    if (sx === undefined) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 7){ moved = true; clearTimeout(timer); timer = null; }
+  });
+  const done = () => {
+    if (timer){ clearTimeout(timer); if (!moved && !pinching) openOppMenu(c, el); }
+    timer = null; sx = undefined;
+  };
+  el.addEventListener("pointerup", done);
+  el.addEventListener("pointercancel", () => { clearTimeout(timer); timer = null; sx = undefined; });
+}
+function openOppMenu(c, el){
+  const m = $("#cardMenu");
+  m.innerHTML = `<button data-o="Zoom">Zoom</button><button data-o="Take control">Take control</button>`;
+  m.classList.add("on");
+  const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
+  m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
+  m.style.top  = clamp(r.bottom + 6, 6, innerHeight - mh - 6) + "px";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    if (b.dataset.o === "Zoom"){ if (!c.faceDown) preview(c); return; }
+    takeControl(c);
+  };
+}
+/* Each seat only ever writes its own state, so taking a card means: I add it
+   to my board tagged with whose it is, and they remove it when they hear
+   about it. State-based moves later route back to their owner's zone. */
+function takeControl(c){
+  if (!G) return;
+  if (twoSided && G2){
+    const i = G2.field.findIndex(x => x.id === c.id);
+    if (i < 0) return toast("That card already moved.");
+    const card = G2.field.splice(i,1)[0];
+    card.own = "opp"; card.y = 6; clampPos(card);
+    G.field.push(card);
+    renderAll(); pushState();
+    toast(`You control ${card.name}. It returns to their zones when it leaves the field.`, 3800);
+    return;
+  }
+  if (!currentMatch) return toast("Nothing to take — this seat is playing alone.");
+  const card = {...c, own:"opp", y:6};
+  clampPos(card);
+  G.field.push(card);
+  renderAll(); pushState();
+  postEvent("control", {cardId: c.id}).catch(() => toast("Couldn't tell them — they may still show the card."));
+  toast(`You control ${card.name}.`, 3500);
+}
+/* Sending a borrowed card to a zone: it goes to its owner's zone, not yours. */
+function toOwnerZone(c, zone){
+  const card = {...c}; delete card.own; reset(card);
+  if (twoSided && G2){ (G2[zone] || G2.grave).push(card); return true; }
+  if (currentMatch){ postEvent("return", {zone, card}).catch(()=>{}); return true; }
+  return false;
+}
 function renderZones(){
   $("#libN").textContent = G.library.length;
   $("#gyN").textContent = G.grave.length;
@@ -1297,6 +1450,12 @@ function renderZones(){
 }
 function renderLife(){
   $("#myLifeN").textContent = G ? G.life : 20;
+  $("#myTurnN").textContent = "Turn " + ((G && G.turn) || 1);
+  $("#oppTurnN").textContent = opp ? "Turn " + (opp.turn || 1) : "";
+  /* who holds priority is tracked explicitly — turn counts alone can't say,
+     since each seat only ever counts its own turns */
+  $("#myLife").classList.toggle("active", !!opp && !!G && G.active !== false);
+  $("#oppLife").classList.toggle("active", !!opp && opp.active === true);
   $("#myLifeN").classList.toggle("hurt", !!G && G.life <= 5);
   $("#myName").textContent = twoSided && G ? (G.deckName || "this seat") : playerName;
   /* you only get to move the other seat's life when you're playing both sides */
@@ -1320,9 +1479,15 @@ function renderOpp(){
   $("#oppLifeN").classList.toggle("hurt", opp.life <= 5);
   renderOppHand(opp.hand);
   renderOppZones(opp);
+  const p = cardPct("#oppField");
   syncField(f, opp.field,
-    (el,c) => { el.style.left = (100-c.x)+"%"; el.style.top = (100-c.y)+"%"; },
-    (el,c) => { el.onclick = () => { if (!c.faceDown) preview(c); }; });
+    /* rotate 180° about the table centre: mirror the far corner, not the
+       near one, or every card lands one card-width and one card-height off */
+    (el,c) => {
+      el.style.left = clamp(100 - c.x - p.w, 0, Math.max(0, 100 - p.w)) + "%";
+      el.style.top  = clamp(100 - c.y - p.h, 0, Math.max(0, 100 - p.h)) + "%";
+    },
+    (el,c) => attachOppCard(el, c));
 }
 
 /* ============================================================
@@ -1372,8 +1537,9 @@ function attachDrag(el, c){
     }
     if (!dragging) return;
     lastX = e.clientX; lastY = e.clientY;
-    c.x = clamp(ox + dx/bw*100, -2, 96);
-    c.y = clamp(oy + dy/bh*100, -2, 92);
+    c.x = ox + dx/bw*100;
+    c.y = oy + dy/bh*100;
+    clampPos(c);
     el.style.left = c.x+"%"; el.style.top = c.y+"%";
     const t = dropTargetAt(lastX, lastY);
     highlightDrop(t === "field" ? null : t);
@@ -1413,7 +1579,7 @@ function openCardMenu(c, from, el){
     : act("Target…")+act("Zoom")+
       act("Tap / untap")+act("Add counter")+act("Remove counter")+act("Flip face")+
       act("Turn face down")+act("Copy")+act("To hand")+act("To graveyard")+
-      act("To exile")+act("To library top")+cmdZone;
+      act("To exile")+act("To library top")+cmdZone+(c.own ? act("Give back", true) : "");
   m.classList.add("on");
   const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
   m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
@@ -1429,11 +1595,29 @@ function moveOut(c, from){
   const i = arr.indexOf(c); if (i >= 0) arr.splice(i,1);
 }
 const reset = c => { c.tapped=false; c.ctr=0; c.faceDown=false; c.flipped=false; };
+const OWNER_ZONE = {"Discard":"grave","To graveyard":"grave","Exile":"exile","To exile":"exile",
+  "To top of library":"library","To library top":"library","To bottom":"library",
+  "To hand":"hand","To command zone":"command"};
 function doAction(a, c, from){
+  if (c.own && OWNER_ZONE[a]){
+    moveOut(c, from);
+    toOwnerZone(c, OWNER_ZONE[a]);
+    renderAll(); pushState();
+    toast(`${c.name} went back to its owner's ${OWNER_ZONE[a]}.`);
+    return;
+  }
+  if (a === "Give back"){
+    moveOut(c, from);
+    const card = {...c}; delete card.own;
+    if (twoSided && G2) G2.field.push(card);
+    else if (currentMatch) postEvent("return", {zone:"field", card}).catch(()=>{});
+    renderAll(); pushState(); toast(`${c.name} returned to its owner.`);
+    return;
+  }
   switch(a){
-    case "Play":             moveOut(c,from); Object.assign(c,{x:44,y:58,tapped:false,faceDown:false}); G.field.push(c); break;
-    case "Play face down":   moveOut(c,from); Object.assign(c,{x:44,y:58,faceDown:true}); G.field.push(c); break;
-    case "Play tapped":      moveOut(c,from); Object.assign(c,{x:44,y:58,tapped:true}); G.field.push(c); break;
+    case "Play":             moveOut(c,from); Object.assign(c,{x:44,y:30,tapped:false,faceDown:false}); clampPos(c); G.field.push(c); break;
+    case "Play face down":   moveOut(c,from); Object.assign(c,{x:44,y:30,faceDown:true}); clampPos(c); G.field.push(c); break;
+    case "Play tapped":      moveOut(c,from); Object.assign(c,{x:44,y:30,tapped:true}); clampPos(c); G.field.push(c); break;
     case "Discard": case "To graveyard": moveOut(c,from); reset(c); G.grave.push(c); break;
     case "Exile": case "To exile":       moveOut(c,from); reset(c); G.exile.push(c); break;
     case "To top of library": case "To library top": moveOut(c,from); reset(c); G.library.push(c); break;
@@ -1445,7 +1629,7 @@ function doAction(a, c, from){
     case "Remove counter":   c.ctr--; break;
     case "Flip face":        c.flipped = !c.flipped; break;
     case "Turn face down":   c.faceDown = !c.faceDown; break;
-    case "Copy":             G.field.push({...c, id:uid(), x:clamp(c.x+9,0,90)}); break;
+    case "Copy":             G.field.push(clampPos({...c, id:uid(), x:c.x+9})); break;
     case "Zoom":             preview(c); return;
     case "Target…":          startTargeting(c); return;
   }
@@ -1625,6 +1809,42 @@ $("#gmOppDeal").onclick = () => {
   toast(`${d.name} dealt to the other seat. Swap seats to play it.`);
 };
 $("#gmSwap").onclick = () => { close("#gameModal"); swapSeats(); };
+
+/* ---- turns ---- */
+function untapMine(){
+  if (!G) return;
+  const n = G.field.filter(c => c.tapped).length;
+  G.field.forEach(c => c.tapped = false);
+  renderAll(); pushState();
+  toast(n ? `Untapped ${n}.` : "Nothing was tapped.");
+}
+$("#untapBtn").onclick = untapMine;
+$("#extraTurnBtn").onclick = () => {
+  if (!G) return;
+  G.turn = (G.turn || 1) + 1; G.active = true;
+  renderAll(); pushState();
+  toast(`Extra turn — your turn ${G.turn}.`);
+};
+$("#endTurnBtn").onclick = async () => {
+  if (!G) return;
+  if (currentMatch){
+    G.active = false; renderAll(); pushState();
+    try{ await postEvent("endturn", {}); toast("Turn passed."); }
+    catch(e){ toast("Couldn't reach the server — they may not see the pass."); }
+    return;
+  }
+  if (twoSided && G2){
+    G.active = false;
+    G2.turn = (G2.turn || 1) + 1; G2.active = true;
+    swapSeats();
+    toast(`${G.deckName || "Other seat"} — turn ${G.turn}.`);
+    return;
+  }
+  /* single practice seat: nobody to pass to, so just advance your own count */
+  G.turn = (G.turn || 1) + 1;
+  renderAll(); pushState();
+  toast(`Turn ${G.turn}.`);
+};
 $("#swapBtn").onclick = () => {
   if (twoSided && G2) return swapSeats();
   /* no second seat yet — open the menu with the deck picker ready */
@@ -1673,7 +1893,7 @@ function setSyncStatus(ok, name){
   if (!currentMatch){
     $("#syncWho").textContent = twoSided ? "both seats" : "practice table";
     const s = $("#syncState");
-    s.textContent = twoSided ? "tap Menu to swap" : "not synced";
+    s.textContent = twoSided ? "tap Swap Seat to change sides" : "not synced";
     s.className = "s";
     return;
   }
@@ -1712,6 +1932,7 @@ async function postEvent(type, payload){
 }
 function fullState(){
   return {deckId:G.deckId, deckName:G.deckName, format:G.format, life:G.life,
+    turn:G.turn || 1, active:G.active !== false,
     library:G.library, hand:G.hand, field:G.field, grave:G.grave, exile:G.exile, command:G.command,
     pending:G.pending || [], topRevealed: !!G.topRevealed};
 }
@@ -1735,6 +1956,26 @@ async function pollEvents(){
       lastSeq = Math.max(lastSeq, ev.seq);
       if (ev.username === currentUser) continue;      // my own events echo back
       if (ev.type === "nudge") toast((ev.payload && ev.payload.message) || "Your move.", 4000);
+      if (ev.type === "control" && G && ev.payload){
+        const i = G.field.findIndex(x => x.id === ev.payload.cardId);
+        if (i >= 0){
+          const gone = G.field.splice(i,1)[0];
+          renderAll(); pushState();
+          toast(`${ev.username} took control of ${gone.name}.`, 4000);
+        }
+      }
+      if (ev.type === "return" && G && ev.payload && ev.payload.card){
+        const card = ev.payload.card, z = ev.payload.zone;
+        if (z === "field"){ card.y = 6; clampPos(card); G.field.push(card); }
+        else (G[z] || G.grave).push(card);
+        renderAll(); pushState();
+        toast(`${card.name} came back to your ${z}.`, 3500);
+      }
+      if (ev.type === "endturn" && G){
+        G.turn = (G.turn || 1) + 1; G.active = true;
+        renderAll(); pushState();
+        toast(`${ev.username} passed the turn — your turn ${G.turn}.`, 4000);
+      }
       if (ev.type === "resolve" && G && G.pending){
         const hit = G.pending.find(p => p.id === (ev.payload && ev.payload.actionId));
         if (hit){
@@ -1963,15 +2204,35 @@ function attachFieldPinch(hostSel, innerSel){
   const host = $(hostSel), inner = $(innerSel);
   const pts = new Map();
   const st = {s:1, x:0, y:0};
-  let start = null;
+  let start = null, lastM = null;
   const apply = () => { inner.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`; };
   const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+  /* Zoom around the point the gesture is over, not the middle of the table.
+     transform-origin is the centre of the layer, so the offset that keeps the
+     content point under the finger has to be solved for explicitly. Scale
+     bottoms out at 1, and at 1 the pan resets — zooming all the way out always
+     lands you back on the whole field, centred. */
+  function zoomTo(fx, fy, want){
+    const r = host.getBoundingClientRect();
+    const cx = r.width/2, cy = r.height/2;
+    const qx = cx + (fx - cx - st.x) / st.s;
+    const qy = cy + (fy - cy - st.y) / st.s;
+    st.s = clamp(want, 1, 3);
+    st.x = fx - cx - (qx - cx) * st.s;
+    st.y = fy - cy - (qy - cy) * st.s;
+    if (st.s <= 1.002){ st.s = 1; st.x = 0; st.y = 0; }
+    apply();
+  }
+
   host.addEventListener("pointerdown", e => {
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if (pts.size === 2){
       pinching = true; closeCardMenu();
       const [a,b] = [...pts.values()];
-      start = {d: dist(a,b) || 1, mx:(a.x+b.x)/2, my:(a.y+b.y)/2, s:st.s, x:st.x, y:st.y};
+      const r = host.getBoundingClientRect();
+      lastM = {x:(a.x+b.x)/2 - r.left, y:(a.y+b.y)/2 - r.top};
+      start = {d: dist(a,b) || 1, s: st.s};
     }
   }, true);
   host.addEventListener("pointermove", e => {
@@ -1979,24 +2240,30 @@ function attachFieldPinch(hostSel, innerSel){
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if (pts.size !== 2 || !start) return;
     const [a,b] = [...pts.values()];
-    st.s = clamp(start.s * (dist(a,b) / start.d), 0.5, 3);
-    st.x = start.x + ((a.x+b.x)/2 - start.mx);
-    st.y = start.y + ((a.y+b.y)/2 - start.my);
-    apply();
+    const r = host.getBoundingClientRect();
+    const m = {x:(a.x+b.x)/2 - r.left, y:(a.y+b.y)/2 - r.top};
+    /* two-finger drag pans, the spread scales — both anchored on the fingers */
+    if (lastM && st.s > 1){ st.x += m.x - lastM.x; st.y += m.y - lastM.y; }
+    lastM = m;
+    zoomTo(m.x, m.y, start.s * (dist(a,b) / start.d));
   }, true);
   const end = e => {
     pts.delete(e.pointerId);
     if (pts.size < 2){
-      start = null;
-      /* snap back to neutral if they pinched most of the way home */
-      if (Math.abs(st.s - 1) < 0.12 && Math.abs(st.x) < 24 && Math.abs(st.y) < 24){
-        st.s = 1; st.x = 0; st.y = 0; apply();
-      }
+      start = null; lastM = null;
       setTimeout(() => { pinching = false; }, 60);
     }
   };
   host.addEventListener("pointerup", end, true);
   host.addEventListener("pointercancel", end, true);
+
+  /* mouse wheel zooms at the cursor — same anchoring path as the fingers */
+  host.addEventListener("wheel", e => {
+    e.preventDefault();
+    const r = host.getBoundingClientRect();
+    zoomTo(e.clientX - r.left, e.clientY - r.top, st.s * Math.exp(-e.deltaY * 0.0018));
+  }, {passive:false});
+
   return {reset(){ st.s = 1; st.x = 0; st.y = 0; apply(); }};
 }
 function attachHandPinch(){
@@ -2077,7 +2344,9 @@ document.addEventListener("focusout", () => setTimeout(fitViewport, 220));
 
 function sizeCards(){
   if (typing()) return;
-  const cardH = clamp(Math.floor((innerHeight - 56) * 0.235), 62, 112);
+  /* cards were 64% of the height of a half-table on a 400px-tall phone, which
+     is why the board read as cluttered — this keeps them near half */
+  const cardH = clamp(Math.floor((innerHeight - 50) * 0.20), 58, 112);
   document.documentElement.style.setProperty("--card-h", cardH + "px");
   document.documentElement.style.setProperty("--card-w", Math.round(cardH/1.395) + "px");
 }
