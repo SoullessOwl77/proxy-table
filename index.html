@@ -125,9 +125,9 @@ label:first-child{margin-top:0;}
   text-transform:uppercase;color:#ffffff14;pointer-events:none;}
 .field.opp::after{top:5px;} .field.mine::after{bottom:5px;}
 
-/* Three columns: a life box at each end and everything else in the middle,
-   where there are hundreds of spare pixels. The buttons live inside the
-   centre column rather than competing for the crowded right edge. */
+/* Three columns: a life box at each end, status text in the middle.
+   The Menu and Seat controls live in the tray with the other tiles —
+   that layout has never given trouble, this one repeatedly has. */
 .seamrow{flex:0 0 var(--seam);display:grid;
   grid-template-columns:auto minmax(0,1fr) auto;
   align-items:center;gap:10px;position:relative;
@@ -138,11 +138,7 @@ label:first-child{margin-top:0;}
 .seamrow > .sync{grid-column:2;grid-row:1;}
 #myLife{grid-column:3;grid-row:1;justify-self:end;}
 .seamrow > *{min-width:0;}
-.sync{display:flex;align-items:center;justify-content:center;gap:14px;
-  position:relative;z-index:2;overflow:hidden;}
-.synctext{text-align:center;min-width:0;overflow:hidden;}
-.seamactions{display:flex;align-items:center;gap:7px;flex:0 0 auto;}
-.seamactions .btn{padding:7px 13px;font-size:11.5px;white-space:nowrap;}
+.sync{text-align:center;position:relative;z-index:2;overflow:hidden;}
 .seamrow::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;
   background:linear-gradient(90deg,#0000,var(--brass-dim) 18%,var(--brass) 50%,var(--brass-dim) 82%,#0000);
   opacity:.5;pointer-events:none;}
@@ -212,6 +208,12 @@ label:first-child{margin-top:0;}
 .zone .c{font-family:Fraunces,serif;font-size:19px;font-weight:600;line-height:1;}
 .zone.lib{border-style:solid;background:repeating-linear-gradient(135deg,#1d2a27 0 6px,#182320 6px 12px);}
 .zone.lib.revealed{border-color:var(--brass);}
+/* action tiles: same proven tile layout as the card zones, brass so they
+   read as controls rather than places cards live */
+.zone.act{border-style:solid;border-color:var(--brass-dim);background:var(--felt-3);}
+.zone.act .c{color:var(--brass);font-family:Archivo,sans-serif;font-weight:700;letter-spacing:.02em;}
+.zone.act:active{background:var(--brass);}
+.zone.act:active .c,.zone.act:active .z{color:#191207;}
 .zone img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42;}
 .zone .lbl{position:relative;z-index:1;text-align:center;}
 
@@ -381,14 +383,8 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
       </div>
     </div>
     <div class="sync">
-      <div class="synctext">
-        <div class="k" id="syncWho">solo table</div>
-        <div class="s" id="syncState">not synced</div>
-      </div>
-      <div class="seamactions">
-        <button class="btn sm ghost" id="menuBtn">Menu</button>
-        <button class="btn sm gold" id="swapBtn">2nd seat</button>
-      </div>
+      <div class="k" id="syncWho">solo table</div>
+      <div class="s" id="syncState">not synced</div>
     </div>
     <div class="life" id="myLife">
       <div class="lifebtns">
@@ -434,6 +430,8 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
       <button class="zone" id="zGy"><img id="gyArt" alt=""><div class="lbl"><div class="c mono" id="gyN">0</div><div class="z">Grave</div></div></button>
       <button class="zone" id="zEx"><div class="lbl"><div class="c mono" id="exN">0</div><div class="z">Exile</div></div></button>
       <button class="zone" id="zDraw" style="border-color:var(--brass);"><div class="lbl"><div class="c" style="font-size:15px;">Draw</div><div class="z">+1</div></div></button>
+      <button class="zone act" id="swapBtn"><div class="lbl"><div class="c" id="swapLabel" style="font-size:13px;">2nd</div><div class="z">Seat</div></div></button>
+      <button class="zone act" id="menuBtn"><div class="lbl"><div class="c" style="font-size:15px;">Menu</div><div class="z">table</div></div></button>
     </div>
   </div>
 </div>
@@ -604,7 +602,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v4.3";
+const BUILD = "v4.4";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1303,11 +1301,10 @@ function renderLife(){
   $("#myName").textContent = twoSided && G ? (G.deckName || "this seat") : playerName;
   /* you only get to move the other seat's life when you're playing both sides */
   $("#oppLife").classList.toggle("nolife", !twoSided);
-  /* the same button deals the second seat and then swaps between seats,
-     so solo two-handed play isn't hidden inside the table menu */
+  /* the seat tile deals a second board, then swaps between the two */
   const solo = !currentMatch;
   $("#swapBtn").style.display = solo ? "" : "none";
-  $("#swapBtn").textContent = twoSided ? "Swap" : "2nd seat";
+  $("#swapLabel").textContent = twoSided ? "Swap" : "2nd";
 }
 function renderOpp(){
   const f = $("#oppFieldInner");
