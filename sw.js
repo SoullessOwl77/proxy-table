@@ -72,7 +72,11 @@ self.addEventListener("notificationclick", e => {
   e.notification.close();
   const d = e.notification.data || {};
   let url = "./index.html";
-  if (d.type === "match" && d.matchId) url = `./index.html?match=${encodeURIComponent(d.matchId)}`;
+  if (d.type === "match" && d.matchId) {
+    url = `./index.html?match=${encodeURIComponent(d.matchId)}`;
+  } else if (d.type === "challenge" && d.code) {
+    url = `./index.html?code=${encodeURIComponent(d.code)}`;
+  }
   e.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({type:"window", includeUncontrolled:true});
     for (const c of clientsList){
@@ -81,3 +85,4 @@ self.addEventListener("notificationclick", e => {
     return self.clients.openWindow(url);
   })());
 });
+

@@ -697,7 +697,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.1.2-do";
+const BUILD = "v2.1.3-do";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1111,7 +1111,8 @@ async function abandonMatch(matchId){
       body: JSON.stringify({ username: currentUser })
     });
   } catch (e) {
-    // still clear local state even if the server call fails
+    toast("Couldn't abandon — " + ((e && e.message) || "server error. Did you redeploy the worker?"));
+    return;
   }
   if (currentMatch === matchId) {
     stopSync();
@@ -2780,8 +2781,21 @@ if ("serviceWorker" in navigator)
   if (stored) await enterAsUser(stored);
   else show("#loginScreen");
 
-  if (currentUser && params.get("match")) rejoinMatch(params.get("match"));
+  if (currentUser && params.get("match")) {
+    rejoinMatch(params.get("match"));
+  } else if (currentUser && params.get("code")) {
+    // Came from a challenge notification — open the join flow with the code filled in
+    switchTab("tabCode");
+    open("#challengeModal");
+    const codeInput = $("#chJoinCode");
+    if (codeInput) {
+      codeInput.value = params.get("code");
+      setTimeout(() => { if ($("#chJoin")) $("#chJoin").click(); }, 300);
+    }
+  }
 })();
+
+
 </script>
 </body>
 </html>
