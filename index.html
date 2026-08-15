@@ -540,8 +540,8 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
     <label>Format</label>
     <select id="dFormat">
       <option value="commander">Commander — 100 singleton, 40 life</option>
-      <option value="standard">Standard — 60 min, 4-of, 20 life</option>
       <option value="modern">Modern — 60 min, 4-of, 20 life</option>
+      <option value="standard">Standard — 60 min, 4-of, 20 life</option>
       <option value="pioneer">Pioneer — 60 min, 4-of, 20 life</option>
       <option value="legacy">Legacy — 60 min, 4-of, 20 life</option>
       <option value="vintage">Vintage — 60 min, restricted list, 20 life</option>
@@ -635,6 +635,23 @@ SIDEBOARD
   </div>
 </div></div>
 
+<div class="modal" id="newGameModal"><div class="sheet">
+  <header><h2>New game</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <label>Format</label>
+    <select id="ngFormat"></select>
+    <label>Deck</label>
+    <select id="ngDeck"></select>
+    <label>Starting life</label>
+    <input id="ngLife" type="number" value="20" style="max-width:120px;">
+    <div class="hint" id="ngLegal"></div>
+  </div>
+  <footer>
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn gold" id="ngStart">Start</button>
+  </footer>
+</div></div>
+
 <div class="modal" id="gameModal"><div class="sheet">
   <header><h2>Table menu</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
   <div class="content">
@@ -710,7 +727,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.1.6-do";
+const BUILD = "v2.1.7-do";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -731,14 +748,16 @@ async function api(path, opts){
 
 const FORMATS = {
   commander:{life:40,size:100,max:1,label:"Commander"},
-  standard:{life:20,size:60,max:4,label:"Standard"},
   modern:{life:20,size:60,max:4,label:"Modern"},
+  standard:{life:20,size:60,max:4,label:"Standard"},
   pioneer:{life:20,size:60,max:4,label:"Pioneer"},
   legacy:{life:20,size:60,max:4,label:"Legacy"},
   vintage:{life:20,size:60,max:4,label:"Vintage"},
   pauper:{life:20,size:60,max:4,label:"Pauper"},
   freeform:{life:20,size:0,max:99,label:"Freeform"}
 };
+/* Display order — most common / legality-checked first */
+const FORMAT_ORDER = ["commander","modern","standard","pioneer","legacy","vintage","pauper","freeform"];
 
 /* A deck restored from a hand-edited backup could carry a format we don't
    know; fall back rather than throwing on every render. */
@@ -951,7 +970,7 @@ $("#deckList").onclick = async e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.play !== undefined){
     currentMatch = null; G2 = null; twoSided = false; opp = null;
-    startGame(decks[+b.dataset.play]); goTable();
+    openNewGameModal(+b.dataset.play);
   }
   if (b.dataset.del !== undefined){
     const d = decks[+b.dataset.del];
@@ -1200,10 +1219,86 @@ function pollChallenge(code){
 }
 
 /* ============================================================
+   NEW GAME MODAL — format first, then filtered decks
+   ============================================================ */
+function openNewGameModal(preselectIdx){
+  const fmtSel = $("#ngFormat");
+  fmtSel.innerHTML = FORMAT_ORDER.map(k =>
+    `<option value="${k}">${FORMATS[k].label}</option>`).join("");
+
+  // Prefer the preselected deck's format, else commander, else first owned format
+  let startFmt = "commander";
+  if (preselectIdx !== undefined && decks[preselectIdx]) {
+    startFmt = decks[preselectIdx].format || "commander";
+  } else if (G && G.format) {
+    startFmt = G.format;
+  } else {
+    const owned = FORMAT_ORDER.find(k => decks.some(d => d.format === k));
+    if (owned) startFmt = owned;
+  }
+  fmtSel.value = startFmt;
+
+  function fillDecks(){
+    const f = fmtSel.value;
+    const matched = decks
+      .map((d,i) => ({d,i}))
+      .filter(x => (x.d.format || "freeform") === f);
+    const sel = $("#ngDeck");
+    if (!matched.length){
+      sel.innerHTML = `<option value="">No ${fmt(f).label} decks yet</option>`;
+      sel.disabled = true;
+      $("#ngStart").disabled = true;
+      $("#ngLegal").textContent = "Add a deck in this format first.";
+      $("#ngLife").value = fmt(f).life;
+      return;
+    }
+    sel.disabled = false;
+    $("#ngStart").disabled = false;
+    sel.innerHTML = matched.map(({d,i}) =>
+      `<option value="${i}">${esc(d.name)}</option>`).join("");
+    if (preselectIdx !== undefined && matched.some(x => x.i === preselectIdx)) {
+      sel.value = String(preselectIdx);
+    }
+    syncNgFromDeck();
+  }
+  function syncNgFromDeck(){
+    const d = decks[+$("#ngDeck").value];
+    const f = fmtSel.value;
+    $("#ngLife").value = d ? fmt(d.format).life : fmt(f).life;
+    $("#ngLegal").textContent = d
+      ? (checkLegal(d).join("  ·  ") || "Deck is legal for its format.")
+      : "";
+  }
+  fmtSel.onchange = fillDecks;
+  $("#ngDeck").onchange = syncNgFromDeck;
+  fillDecks();
+  open("#newGameModal");
+}
+$("#ngStart").onclick = () => {
+  const d = decks[+$("#ngDeck").value];
+  if (!d) return toast("Pick a deck.");
+  const life = +$("#ngLife").value || fmt(d.format).life;
+  close("#newGameModal");
+  if (currentMatch && G) {
+    // Already mid-match — optional result, then mutual reset
+    requestNewGame(d, life);
+  } else {
+    // Practice, or first deal-in to a live match
+    startGame(d, life);
+    if ($("#tableScreen").classList.contains("on")) {
+      renderAll(); pushState();
+    } else {
+      goTable();
+    }
+  }
+};
+
+/* ============================================================
    GAME STATE
    ============================================================ */
 const mkCard = c => ({id:uid(), oid:c.oid, name:c.name, img:c.img, back:c.back, type:c.type,
   x:50, y:50, tapped:false, ctr:0, faceDown:false, flipped:false});
+
 function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
 function newGameState(deck, life){
   const lib = [], cmd = [];
@@ -2038,15 +2133,8 @@ function syncGmLife(){
 }
 $("#gmDeck").onchange = syncGmLife;
 $("#gmNew").onclick = () => {
-  const d = decks[+$("#gmDeck").value]; if (!d) return toast("Add a deck first.");
-  const life = +$("#gmLife").value || fmt(d.format).life;
   close("#gameModal");
-  if (!currentMatch) {
-    startGame(d, life);
-    return;
-  }
-  // In a live match: optionally declare a winner, then request a mutual reset
-  requestNewGame(d, life);
+  openNewGameModal();
 };
 function requestNewGame(d, life){
   const m = $("#cardMenu");
@@ -2399,8 +2487,8 @@ function startSync() {
       setSyncStatus(true, oppName);
       if (!G && !dealPrompted) {
         dealPrompted = true;
-        toast("You're in. Pick your deck and tap New game to deal in.", 6000);
-        if ($("#tableScreen").classList.contains("on")) $("#menuBtn").onclick();
+        toast("You're in — pick a format and deck to deal in.", 5000);
+        if ($("#tableScreen").classList.contains("on")) openNewGameModal();
       }
     }
 
