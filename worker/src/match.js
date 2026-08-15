@@ -3,6 +3,8 @@
    On confirmed end it writes a lightweight result row and deletes
    the heavy match data from D1. */
 
+import { sendPush } from "./webpush.js";
+
 export class Match {
   constructor(state, env) {
     this.state = state;
@@ -12,6 +14,39 @@ export class Match {
     this.players = [];         // [username0, username1]
     this.matchId = null;
     this.ended = false;
+    this.activity = [];        // recent human-readable lines for catch-up
+  }
+
+  async pushTo(username, payload) {
+    try {
+      const { results } = await this.env.DB.prepare(
+        "SELECT * FROM push_subs WHERE username = ?"
+      ).bind(username).all();
+      if (!results || !results.length) return;
+      const vapid = {
+        publicKey: this.env.VAPID_PUBLIC_KEY,
+        d: this.env.VAPID_PRIVATE_D,
+        x: this.env.VAPID_PUBLIC_X,
+        y: this.env.VAPID_PUBLIC_Y,
+        subject: this.env.VAPID_SUBJECT
+      };
+      for (const s of results) {
+        const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
+        try {
+          const res = await sendPush(subscription, payload, vapid);
+          if (res.status === 404 || res.status === 410) {
+            await this.env.DB.prepare(
+              "DELETE FROM push_subs WHERE username=? AND endpoint=?"
+            ).bind(s.username, s.endpoint).run();
+          }
+        } catch (_) {}
+      }
+    } catch (e) { console.error("pushTo", e); }
+  }
+
+  note(line) {
+    this.activity.push({ t: Date.now(), line });
+    if (this.activity.length > 30) this.activity = this.activity.slice(-30);
   }
 
   async ensureLoaded(matchId) {
@@ -76,12 +111,13 @@ export class Match {
         if (this.sessions.get(username) === server) this.sessions.delete(username);
       });
 
-      // Send current snapshot to the newly connected client
+      // Send current snapshot + recent activity for catch-up
       this.sendTo(username, {
         type: "snapshot",
         you: this.boards[username] || null,
         opponent: this.publicView(this.other(username)),
-        opponentName: this.other(username)
+        opponentName: this.other(username),
+        activity: this.activity.slice(-15)
       });
 
       return new Response(null, { status: 101, webSocket: client });
@@ -148,9 +184,22 @@ export class Match {
 
     switch (msg.type) {
       case "state": {
-        // Full private board from this seat
-        this.boards[username] = msg.payload || {};
-        // Tell the other player the new public view
+        const prev = this.boards[username];
+        const next = msg.payload || {};
+        this.boards[username] = next;
+        // Log meaningful public changes for catch-up
+        if (prev) {
+          if (typeof next.life === "number" && next.life !== prev.life) {
+            this.note(`${username} life ${prev.life} → ${next.life}`);
+          }
+          const prevField = (prev.field || []).length;
+          const nextField = (next.field || []).length;
+          if (nextField !== prevField) {
+            this.note(`${username} board ${prevField} → ${nextField} permanents`);
+          }
+        } else if (next.deckName) {
+          this.note(`${username} dealt in with ${next.deckName}`);
+        }
         this.broadcast(username, {
           type: "opponent",
           opponent: this.publicView(username)
@@ -159,12 +208,31 @@ export class Match {
       }
 
       case "event": {
-        // Discrete cross-table action (nudge, control, return, endturn, resolve, call…)
+        const et = msg.eventType;
+        const p = msg.payload || {};
+        if (et === "nudge") {
+          this.note(`${username} nudged`);
+          const other = this.other(username);
+          if (other) {
+            // Fire-and-forget push so it still arrives if their app is backgrounded
+            this.pushTo(other, {
+              title: username,
+              body: (p && p.message) || "Your move.",
+              tag: "nudge-" + (this.matchId || ""),
+              data: { type: "match", matchId: this.matchId }
+            });
+          }
+        }
+        else if (et === "endturn") this.note(`${username} passed the turn`);
+        else if (et === "control") this.note(`${username} took control of a card`);
+        else if (et === "return") this.note(`${username} returned a card (${p.zone || "zone"})`);
+        else if (et === "call") this.note(`${username}: ${p.kind || "call"}`);
+        else if (et === "newgame") this.note(`${username} requested a new game`);
         this.broadcast(username, {
           type: "event",
           from: username,
-          eventType: msg.eventType,
-          payload: msg.payload || {}
+          eventType: et,
+          payload: p
         });
         break;
       }

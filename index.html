@@ -644,6 +644,10 @@ SIDEBOARD
     <select id="ngDeck"></select>
     <label>Starting life</label>
     <input id="ngLife" type="number" value="20" style="max-width:120px;">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="ngFirst" checked style="width:18px;height:18px;accent-color:var(--brass);">
+      I go first
+    </label>
     <div class="hint" id="ngLegal"></div>
   </div>
   <footer>
@@ -727,7 +731,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.1.7-do";
+const BUILD = "v2.2.2-do";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1114,15 +1118,21 @@ function relTime(iso){
 function renderMatches(matches){
   const el = $("#matchList");
   if (!matches.length){ el.innerHTML = `<p class="hint">No matches yet — challenge someone below.</p>`; return; }
-  el.innerHTML = matches.map(m => `
+  el.innerHTML = matches.map(m => {
+    const myDeck = m.my_deck || "no deck yet";
+    const opp = m.opponent || "waiting";
+    const oppDeck = m.opponent_deck || "no deck yet";
+    const label = `${esc(myDeck)} vs ${esc(opp)}: ${esc(oppDeck)}`;
+    return `
     <div class="matchrow">
-      <div style="flex:1;">
-        <div class="who">${esc(m.opponent || "waiting for opponent")}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="who" style="font-size:14px;line-height:1.25;word-break:break-word;">${label}</div>
         <div class="when">${relTime(m.updated_at)}</div>
       </div>
       <button class="btn gold sm" data-rejoin="${m.id}">Rejoin</button>
       <button class="btn sm" data-abandon="${m.id}">Abandon</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   el.onclick = e => {
     const re = e.target.closest("button[data-rejoin]");
     if (re) return rejoinMatch(re.dataset.rejoin);
@@ -1155,6 +1165,9 @@ function leaveMatchLocal(msg){
   stopSync();
   currentMatch = null;
   G = null; G2 = null; opp = null; twoSided = false;
+  localPendingDeal = null;
+  remoteDeal = null;
+  pendingNewGame = null;
   if (msg) toast(msg, 4000);
   show("#menuScreen");
   loadMatches();
@@ -1274,24 +1287,84 @@ function openNewGameModal(preselectIdx){
   fillDecks();
   open("#newGameModal");
 }
+/* First deal-in coordination: neither board goes live until both have
+   picked a deck and agreed on who goes first. */
+let localPendingDeal = null; // {d, life, iGoFirst}
+let remoteDeal = null;       // {from, iGoFirst, deckName, ...}
+
 $("#ngStart").onclick = () => {
   const d = decks[+$("#ngDeck").value];
   if (!d) return toast("Pick a deck.");
   const life = +$("#ngLife").value || fmt(d.format).life;
+  const iGoFirst = $("#ngFirst").checked;
   close("#newGameModal");
   if (currentMatch && G) {
-    // Already mid-match — optional result, then mutual reset
-    requestNewGame(d, life);
+    requestNewGame(d, life, iGoFirst);
+  } else if (currentMatch) {
+    beginDealIn(d, life, iGoFirst);
   } else {
-    // Practice, or first deal-in to a live match
-    startGame(d, life);
-    if ($("#tableScreen").classList.contains("on")) {
-      renderAll(); pushState();
-    } else {
-      goTable();
-    }
+    startGame(d, life, iGoFirst);
+    goTable();
   }
 };
+
+function beginDealIn(d, life, iGoFirst){
+  localPendingDeal = { d, life, iGoFirst };
+  postEvent("deal_in", {
+    iGoFirst, deckName: d.name, deckId: d.id, life, format: d.format
+  }).catch(()=>{});
+  if (remoteDeal) {
+    // Opponent already proposed — settle first player now
+    settleFirstPlayer(remoteDeal);
+  } else {
+    toast("Waiting for opponent to pick a deck and agree on who goes first…", 5000);
+  }
+}
+
+function settleFirstPlayer(remote){
+  if (!localPendingDeal) return;
+  const m = $("#cardMenu");
+  const theyWantFirst = !!remote.iGoFirst;
+  const iWantFirst = !!localPendingDeal.iGoFirst;
+  let body;
+  if (theyWantFirst && iWantFirst) {
+    body = `${esc(remote.from || "Opponent")} also wants to go first. Who starts?`;
+  } else if (!theyWantFirst && !iWantFirst) {
+    body = `Neither of you claimed first. Who starts?`;
+  } else if (theyWantFirst) {
+    body = `${esc(remote.from || "Opponent")} wants to go first. Accept?`;
+  } else {
+    body = `${esc(remote.from || "Opponent")} wants you to go first. Accept?`;
+  }
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">${body}</div>
+    <button data-f="me" class="wide">I go first</button>
+    <button data-f="them" class="wide">${esc(remote.from || "Opponent")} goes first</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    const iGoFirst = b.dataset.f === "me";
+    const pending = localPendingDeal;
+    localPendingDeal = null;
+    remoteDeal = null;
+    postEvent("deal_ack", { iGoFirst, by: currentUser }).catch(()=>{});
+    finishDealIn(pending.d, pending.life, iGoFirst);
+  };
+}
+
+function finishDealIn(d, life, iGoFirst){
+  startGame(d, life, iGoFirst);
+  if ($("#tableScreen").classList.contains("on")) {
+    renderAll(); pushState();
+  } else {
+    goTable();
+  }
+}
 
 /* ============================================================
    GAME STATE
@@ -1311,14 +1384,23 @@ function newGameState(deck, life){
   for (let i=0;i<7 && g.library.length;i++) g.hand.push(g.library.pop());
   return g;
 }
-function startGame(deck, life){
+function startGame(deck, life, iGoFirst){
   G = newGameState(deck, life);
+  G.active = iGoFirst !== false;
+  G.turn = 1;
   $("#gmLife").value = G.life;
   if (myZoom) myZoom.reset();
   if (oppZoom) oppZoom.reset();
   document.documentElement.style.setProperty("--hand-zoom", "1");
   renderAll(); pushState();
-  toast(`${deck.name} — ${fmt(deck.format).label}. Opening hand of 7.`);
+  const firstNote = G.active ? "You go first." : "Opponent goes first.";
+  toast(`${deck.name} — ${fmt(deck.format).label}. ${firstNote}`);
+  if (currentMatch) {
+    api(`/api/match/${currentMatch}/deck`, {
+      method: "POST",
+      body: JSON.stringify({ username: currentUser, deckId: deck.id, deckName: deck.name })
+    }).catch(()=>{});
+  }
 }
 
 /* ============================================================
@@ -2136,7 +2218,7 @@ $("#gmNew").onclick = () => {
   close("#gameModal");
   openNewGameModal();
 };
-function requestNewGame(d, life){
+function requestNewGame(d, life, iGoFirst){
   const m = $("#cardMenu");
   m.innerHTML = `
     <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
@@ -2155,13 +2237,13 @@ function requestNewGame(d, life){
     m.style.transform = "";
     if (b.dataset.r === "cancel") return;
     if (b.dataset.r === "yes") {
-      pickWinnerThenNewGame(d, life);
+      pickWinnerThenNewGame(d, life, iGoFirst);
     } else {
-      sendNewGameRequest(d, life);
+      sendNewGameRequest(d, life, iGoFirst);
     }
   };
 }
-function pickWinnerThenNewGame(d, life){
+function pickWinnerThenNewGame(d, life, iGoFirst){
   const m = $("#cardMenu");
   const myDeck = (G && G.deckName) || d.name || "Unknown";
   const theirDeck = (opp && opp.deckName) || "Unknown";
@@ -2181,7 +2263,7 @@ function pickWinnerThenNewGame(d, life){
     closeCardMenu();
     m.style.transform = "";
     if (b.dataset.w === "skip") {
-      sendNewGameRequest(d, life);
+      sendNewGameRequest(d, life, iGoFirst);
       return;
     }
     const iWin = b.dataset.w === "me";
@@ -2196,13 +2278,18 @@ function pickWinnerThenNewGame(d, life){
         winner, loser, winnerDeck, loserDeck, format
       }));
     }
-    sendNewGameRequest(d, life);
+    sendNewGameRequest(d, life, iGoFirst);
   };
 }
-function sendNewGameRequest(d, life){
-  postEvent("newgame", { deckId: d.id, deckName: d.name, life, format: d.format })
+let pendingNewGame = null; // {d, life, iGoFirst} while waiting on accept
+function sendNewGameRequest(d, life, iGoFirst){
+  pendingNewGame = { d, life, iGoFirst: !!iGoFirst };
+  postEvent("newgame", {
+    deckId: d.id, deckName: d.name, life, format: d.format,
+    requesterFirst: !!iGoFirst
+  })
     .then(() => toast("New game requested — waiting for them to accept."))
-    .catch(() => toast("Couldn't send the request."));
+    .catch(() => { pendingNewGame = null; toast("Couldn't send the request."); });
 }
 $("#gmMull").onclick = () => {
   if (!G) return; const n = Math.max(0, G.hand.length - 1);
@@ -2490,6 +2577,16 @@ function startSync() {
         toast("You're in — pick a format and deck to deal in.", 5000);
         if ($("#tableScreen").classList.contains("on")) openNewGameModal();
       }
+      // Catch-up: what happened while you were away
+      if (msg.activity && msg.activity.length) {
+        const lines = msg.activity.map(a => a.line).filter(Boolean);
+        if (lines.length) {
+          const recent = lines.slice(-6);
+          toast("While away: " + recent.join(" · "), Math.min(8000, 2500 + recent.length * 800));
+        }
+      } else if (msg.opponent) {
+        toast(`${msg.opponentName || "Opponent"}: ${msg.opponent.life} life, ${msg.opponent.hand} in hand, ${msg.opponent.field.length} on board.`, 4500);
+      }
     }
 
     if (msg.type === "opponent") {
@@ -2574,6 +2671,24 @@ function postEvent(eventType, payload) {
 }
 
 function handleRemoteEvent(from, type, payload) {
+  if (type === "deal_in") {
+    remoteDeal = { from, iGoFirst: !!(payload && payload.iGoFirst), deckName: payload && payload.deckName };
+    if (localPendingDeal) {
+      settleFirstPlayer(remoteDeal);
+    } else {
+      toast(`${from} is ready${payload && payload.deckName ? " with " + payload.deckName : ""}. Pick your deck to agree on who goes first.`, 5000);
+    }
+  }
+  if (type === "deal_ack") {
+    if (!localPendingDeal) return;
+    const pending = localPendingDeal;
+    localPendingDeal = null;
+    remoteDeal = null;
+    // Their choice of who goes first: payload.iGoFirst means THEY go first
+    const theyGoFirst = !!(payload && payload.iGoFirst);
+    const iGoFirst = !theyGoFirst;
+    finishDealIn(pending.d, pending.life, iGoFirst);
+  }
   if (type === "nudge") toast((payload && payload.message) || "Your move.", 4000);
   if (type === "call" && payload) {
     pushCall(payload.kind, from, payload.kind === "In response");
@@ -2611,9 +2726,13 @@ function handleRemoteEvent(from, type, payload) {
   }
   if (type === "newgame") {
     const m = $("#cardMenu");
+    const whoFirst = payload && payload.requesterFirst
+      ? `${esc(from)} goes first`
+      : "You go first";
     m.innerHTML = `
       <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
-        ${esc(from)} requests a new game${payload && payload.deckName ? ` with <strong>${esc(payload.deckName)}</strong>` : ""}.
+        ${esc(from)} requests a new game${payload && payload.deckName ? ` (<strong>${esc(payload.deckName)}</strong>)` : ""}.
+        ${whoFirst}.
       </div>
       <button data-ng="yes" class="wide">Accept — reset both boards</button>
       <button data-ng="no" class="wide">Decline</button>`;
@@ -2626,9 +2745,10 @@ function handleRemoteEvent(from, type, payload) {
       closeCardMenu();
       m.style.transform = "";
       if (b.dataset.ng === "yes") {
-        // Reset our side with our current deck (or first deck)
         const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
-        if (d) startGame(d, (payload && payload.life) || fmt(d.format).life);
+        // If they chose to go first, we go second
+        const iGoFirst = !(payload && payload.requesterFirst);
+        if (d) startGame(d, (payload && payload.life) || fmt(d.format).life, iGoFirst);
         postEvent("newgame_ack", {}).catch(()=>{});
         toast("New game started.");
       } else {
@@ -2639,13 +2759,17 @@ function handleRemoteEvent(from, type, payload) {
   }
   if (type === "newgame_ack") {
     if (payload && payload.declined) {
+      pendingNewGame = null;
       toast(`${from} declined the new game.`);
     } else {
-      // They accepted — reset our side too if we still have a deck selected
-      const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
-      if (d) {
-        startGame(d, fmt(d.format).life);
+      const pending = pendingNewGame;
+      pendingNewGame = null;
+      if (pending && pending.d) {
+        startGame(pending.d, pending.life, pending.iGoFirst);
         toast("New game started.");
+      } else {
+        const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
+        if (d) startGame(d, fmt(d.format).life, true);
       }
     }
   }
@@ -3122,8 +3246,25 @@ function sizeCards(){
 addEventListener("resize", sizeCards);
 addEventListener("orientationchange", () => setTimeout(() => { sizeCards(); fitViewport(); }, 250));
 
-if ("serviceWorker" in navigator)
-  addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").then(reg => {
+      // Look for a new SW periodically and when the tab becomes visible
+      const check = () => reg.update().catch(()=>{});
+      setInterval(check, 60 * 1000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") check();
+      });
+      // When a new SW takes control, reload so everyone gets the new build
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
+    }).catch(()=>{});
+  });
+}
 
 (async function init(){
   $("#loginTag").textContent = "Sign in · " + BUILD;
