@@ -194,6 +194,7 @@ label:first-child{margin-top:0;}
   align-items:center;justify-content:center;padding:0 3px;font-variant-numeric:tabular-nums;}
 /* a card you've taken control of — it still belongs to them */
 .card.borrowed{box-shadow:0 0 0 2px var(--blood),0 3px 7px #000a;}
+.card.pending{opacity:.45;filter:grayscale(.3);}
 .card.back{background:repeating-linear-gradient(135deg,#1d2a27 0 6px,#182320 6px 12px);
   border:1px solid #c39a4e40;display:flex;align-items:center;justify-content:center;}
 .card.back::after{content:"";width:22px;height:22px;border:1px solid #c39a4e77;transform:rotate(45deg);}
@@ -670,7 +671,11 @@ SIDEBOARD
   <header><h2 id="listTitle">Library</h2><span class="spacer"></span>
     <button class="btn sm" id="listShuffle">Shuffle</button>
     <button class="btn sm" data-close>Close</button></header>
-  <div class="content"><div class="grid" id="listGrid"></div></div>
+  <div class="content">
+    <input id="listSearch" placeholder="Filter by name…" autocomplete="off"
+      style="width:100%;margin-bottom:10px;display:none;">
+    <div class="grid" id="listGrid"></div>
+  </div>
 </div></div>
 
 <div class="preview" id="preview">
@@ -680,6 +685,14 @@ SIDEBOARD
     <button class="btn sm" id="previewFlip" style="display:none;">Other face</button>
   </div>
 </div>
+
+<div class="modal" id="endModal"><div class="sheet" style="max-width:340px;text-align:center;">
+  <header><h2 id="endTitle">Match over</h2></header>
+  <div class="content">
+    <div id="endBody" style="font-size:15px;line-height:1.45;margin:8px 0 18px;"></div>
+    <button class="btn gold" id="endMenuBtn" style="width:100%;padding:12px;">Main menu</button>
+  </div>
+</div></div>
 
 <div class="cardmenu" id="cardMenu"></div>
 <div class="toast" id="toast"></div>
@@ -697,7 +710,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.1.3-do";
+const BUILD = "v2.1.6-do";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1105,25 +1118,28 @@ function rejoinMatch(matchId){
 async function abandonMatch(matchId){
   if (!matchId) return;
   if (!confirm("Abandon this match? No win/loss will be recorded.")) return;
+  // Tell the other player via the live socket first
+  if (currentMatch === matchId && matchWs && matchWs.readyState === 1) {
+    try { matchWs.send(JSON.stringify({ type: "abandon" })); } catch (_) {}
+  }
   try {
     await api(`/api/match/${matchId}/abandon`, {
       method: "POST",
       body: JSON.stringify({ username: currentUser })
     });
   } catch (e) {
-    toast("Couldn't abandon — " + ((e && e.message) || "server error. Did you redeploy the worker?"));
-    return;
+    // still leave locally even if HTTP fails
   }
-  if (currentMatch === matchId) {
-    stopSync();
-    currentMatch = null;
-    G = null; G2 = null; opp = null; twoSided = false;
-  }
-  toast("Match abandoned.");
-  if ($("#tableScreen").classList.contains("on")) {
-    show("#menuScreen");
-  }
+  leaveMatchLocal("Match abandoned.");
+}
+function leaveMatchLocal(msg){
+  stopSync();
+  currentMatch = null;
+  G = null; G2 = null; opp = null; twoSided = false;
+  if (msg) toast(msg, 4000);
+  show("#menuScreen");
   loadMatches();
+  closeEndScreen();
 }
 
 $("#menuChallenge").onclick = () => { switchTab("tabName"); open("#challengeModal"); };
@@ -1267,6 +1283,7 @@ function paint(el, c){
   img.style.display = c.faceDown ? "none" : "block";
   el.classList.toggle("tapped", !!c.tapped);
   el.classList.toggle("borrowed", !!c.own);
+  el.classList.toggle("pending", !!c.pendingControl);
   const ctr = el.querySelector(".ctr");
   ctr.style.display = c.ctr ? "flex" : "none";
   ctr.textContent = c.ctr > 0 ? "+"+c.ctr : c.ctr;
@@ -1491,7 +1508,10 @@ function renderOppZones(o){
     else if (which === "exile") showList("Their exile", o.exile, twoSided ? "oppexile" : null);
     /* face up means readable from either seat, networked or not */
     else if (which === "cmd") showList("Their command zone", cmd, twoSided ? "oppcommand" : null);
-    else if (which === "deck") toast(`${o.library} cards left in their deck.`);
+    else if (which === "deck") {
+      if (o.topCard && o.topCard.img) preview(o.topCard);
+      else toast(`${o.library} cards left in their deck.`);
+    }
   };
 }
 /* Opponent's permanents: a tap opens the small menu, a hold zooms. Only two
@@ -1545,11 +1565,22 @@ function takeControl(c){
     return;
   }
   if (!currentMatch) return toast("Nothing to take — this seat is playing alone.");
-  const card = {...c, own:"opp", y:6};
+  const card = {...c, own:"opp", y:6, pendingControl:true};
   clampPos(card);
   G.field.push(card);
   renderAll(); pushState();
-  postEvent("control", {cardId: c.id}).catch(() => toast("Couldn't tell them — they may still show the card."));
+  postEvent("control", {cardId: c.id})
+    .then(() => {
+      card.pendingControl = false;
+      renderAll();
+    })
+    .catch(() => {
+      // roll back the optimistic take
+      const i = G.field.indexOf(card);
+      if (i >= 0) G.field.splice(i, 1);
+      renderAll(); pushState();
+      toast("Couldn't take control — connection failed.");
+    });
   toast(`You control ${card.name}.`, 3500);
 }
 /* Sending a borrowed card to a zone: it goes to its owner's zone, not yours. */
@@ -1786,6 +1817,13 @@ function draw(n){
   renderAll(); pushState();
 }
 $("#zLib").onclick = () => { if (G) openZoneMenu($("#zLib")); };
+$("#zLib").addEventListener("pointerdown", e => {
+  if (!G || !G.topRevealed || !G.library.length) return;
+  const t = setTimeout(() => preview(G.library[G.library.length - 1]), 400);
+  const clear = () => clearTimeout(t);
+  $("#zLib").addEventListener("pointerup", clear, {once:true});
+  $("#zLib").addEventListener("pointercancel", clear, {once:true});
+});
 $("#zGy").onclick  = () => G && showList("Graveyard", G.grave, "grave");
 $("#zEx").onclick  = () => G && showList("Exile", G.exile, "exile");
 $("#zCmd").onclick = () => G && showList("Command zone", G.command, "command");
@@ -1795,9 +1833,10 @@ function openZoneMenu(anchor){
   const m = $("#cardMenu");
   const act = (l, wide) => `<button data-z="${l}"${wide?' class="wide"':""}>${l}</button>`;
   m.innerHTML =
-    act("Draw 1") + act("Draw 2") +
-    act("Look at top 3") + act("Look at top 5") +
-    act(G.topRevealed ? "Hide top card" : "Reveal top card") + act("Mill 1") +
+    act("Draw X") +
+    act(G.topRevealed ? "Hide top card" : "Play with top revealed") +
+    act("Look at top card") + act("Look at top X") +
+    act("Mill 1") +
     act("Search library", true) + act("Shuffle", true);
   m.classList.add("on");
   const r = anchor.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
@@ -1808,39 +1847,80 @@ function openZoneMenu(anchor){
     doLibrary(b.dataset.z); closeCardMenu();
   };
 }
+function promptNumber(label, def){
+  const raw = prompt(label, String(def || 1));
+  if (raw === null) return null;
+  const n = parseInt(raw, 10);
+  if (!n || n < 1) { toast("Enter a number of 1 or more."); return null; }
+  return n;
+}
 function doLibrary(a){
   if (!G) return;
   switch(a){
-    case "Draw 1": draw(1); return;
-    case "Draw 2": draw(2); return;
-    case "Look at top 3":
-    case "Look at top 5": {
-      const n = a.endsWith("5") ? 5 : 3;
-      const top = G.library.slice(-n).reverse();
-      if (!top.length){ toast("Library is empty."); return; }
-      showList(`Top ${top.length} — tap to take, long-press to read`, top, "library");
+    case "Draw X": {
+      const n = promptNumber("Draw how many?", 1);
+      if (n) draw(n);
       return;
     }
-    case "Reveal top card": G.topRevealed = true; toast("Top card is face up for both of you."); break;
-    case "Hide top card":   G.topRevealed = false; break;
+    case "Play with top revealed":
+      G.topRevealed = true;
+      toast("Top card is face up for both of you. Tap it to zoom.");
+      break;
+    case "Hide top card":
+      G.topRevealed = false;
+      break;
+    case "Look at top card": {
+      if (!G.library.length){ toast("Library is empty."); return; }
+      const top = [G.library[G.library.length - 1]];
+      showList("Top card", top, "library-look");
+      return;
+    }
+    case "Look at top X": {
+      const n = promptNumber("Look at how many from the top?", 3);
+      if (!n) return;
+      const top = G.library.slice(-n).reverse();
+      if (!top.length){ toast("Library is empty."); return; }
+      showList(`Top ${top.length}`, top, "library-look");
+      return;
+    }
     case "Mill 1": {
       if (!G.library.length){ toast("Library is empty."); return; }
       const c = G.library.pop(); reset(c); G.grave.push(c);
       toast(`Milled ${c.name}.`); break;
     }
-    case "Search library": showList("Library — order is kept, shuffle after", G.library, "library"); return;
-    case "Shuffle": shuffle(G.library); toast("Library shuffled."); break;
+    case "Search library":
+      showList("Library — order is kept, shuffle after", G.library, "library-look");
+      return;
+    case "Shuffle":
+      shuffle(G.library);
+      toast("Library shuffled.");
+      break;
   }
   renderAll(); pushState();
 }
 let listCtx = null;
 function showList(title, cards, zone){
-  listCtx = zone ? {zone, cards} : null;
+  listCtx = zone ? {zone, cards: cards.slice()} : null;
   $("#listTitle").textContent = title + (cards.length > 1 ? ` · ${cards.length}` : "");
-  $("#listShuffle").style.display = (zone === "library") ? "" : "none";
+  const isLib = zone === "library" || zone === "library-look";
+  $("#listShuffle").style.display = isLib ? "" : "none";
+  const search = $("#listSearch");
+  search.style.display = isLib ? "" : "none";
+  search.value = "";
   const g = $("#listGrid");
-  g.innerHTML = cards.map((c,i) => `<div class="card" data-i="${i}"><img src="${c.img}" alt="${esc(c.name)}"></div>`).join("");
-  /* long-press previews, tap moves — so you can read a card before committing */
+
+  function renderGrid(filter){
+    const q = (filter || "").trim().toLowerCase();
+    const shown = q ? cards.filter(c => (c.name || "").toLowerCase().includes(q)) : cards;
+    g.innerHTML = shown.map((c) => {
+      const i = cards.indexOf(c);
+      return `<div class="card" data-i="${i}"><img src="${c.img}" alt="${esc(c.name)}"></div>`;
+    }).join("");
+  }
+  renderGrid("");
+  search.oninput = () => renderGrid(search.value);
+
+  /* long-press previews; tap opens move menu for library-look / library */
   let lpTimer = null, lpFired = false;
   g.onpointerdown = e => {
     const el = e.target.closest(".card"); if (!el) return;
@@ -1852,8 +1932,8 @@ function showList(title, cards, zone){
     const el = e.target.closest(".card"); if (!el) return;
     if (lpFired){ lpFired = false; return; }
     if (!listCtx){ preview(cards[+el.dataset.i]); return; }
-    const c = listCtx.cards[+el.dataset.i];
-    /* zones belonging to the second seat in solo play */
+    const c = cards[+el.dataset.i];
+
     if (listCtx.zone === "opphand"){
       G2.hand.splice(G2.hand.indexOf(c),1);
       Object.assign(c,{x:44,y:58,tapped:false,faceDown:false}); G2.field.push(c);
@@ -1873,14 +1953,58 @@ function showList(title, cards, zone){
       G.command.splice(G.command.indexOf(c),1); reset(c);
       Object.assign(c,{x:44,y:58}); G.field.push(c);
       toast("Commander on the battlefield. Track the tax yourselves.");
-    } else {
-      const arr = listCtx.zone === "library" ? G.library : listCtx.zone === "grave" ? G.grave : G.exile;
-      arr.splice(arr.indexOf(c),1); reset(c); G.hand.push(c);
-      if (listCtx.zone === "library") toast("Pulled to hand. Shuffle when you're done.");
+      close("#listModal"); renderAll(); pushState();
+      return;
     }
+    if (listCtx.zone === "library-look" || listCtx.zone === "library"){
+      openListMoveMenu(c, el);
+      return;
+    }
+    // grave / exile default: to hand
+    const arr = listCtx.zone === "grave" ? G.grave : G.exile;
+    arr.splice(arr.indexOf(c),1); reset(c); G.hand.push(c);
     close("#listModal"); renderAll(); pushState();
   };
   open("#listModal");
+}
+function openListMoveMenu(c, el){
+  const m = $("#cardMenu");
+  m.innerHTML =
+    `<button data-m="hand">Send to Hand</button>` +
+    `<button data-m="field">Send to Battlefield</button>` +
+    `<button data-m="grave">Send to Graveyard</button>` +
+    `<button data-m="exile">Send to Exile</button>` +
+    `<button data-m="zoom">Zoom</button>`;
+  m.classList.add("on");
+  const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
+  m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
+  m.style.top  = clamp(r.bottom + 6, 6, innerHeight - mh - 6) + "px";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    const act = b.dataset.m;
+    if (act === "zoom"){ preview(c); return; }
+    // remove from library (or wherever it currently sits)
+    const idx = G.library.indexOf(c);
+    if (idx >= 0) G.library.splice(idx, 1);
+    else {
+      for (const z of ["grave","exile","hand","command"]) {
+        const i = (G[z] || []).indexOf(c);
+        if (i >= 0){ G[z].splice(i,1); break; }
+      }
+    }
+    reset(c);
+    if (act === "hand") G.hand.push(c);
+    else if (act === "grave") G.grave.push(c);
+    else if (act === "exile") G.exile.push(c);
+    else if (act === "field") {
+      Object.assign(c, {x:44, y:30, tapped:false, faceDown:false});
+      clampPos(c); G.field.push(c);
+    }
+    close("#listModal");
+    renderAll(); pushState();
+    toast(`${c.name} → ${act === "field" ? "battlefield" : act}.`);
+  };
 }
 $("#listShuffle").onclick = () => { shuffle(G.library); close("#listModal"); toast("Library shuffled."); pushState(); };
 $("#myLife").addEventListener("click", e => {
@@ -1915,8 +2039,83 @@ function syncGmLife(){
 $("#gmDeck").onchange = syncGmLife;
 $("#gmNew").onclick = () => {
   const d = decks[+$("#gmDeck").value]; if (!d) return toast("Add a deck first.");
-  startGame(d, +$("#gmLife").value || fmt(d.format).life); close("#gameModal");
+  const life = +$("#gmLife").value || fmt(d.format).life;
+  close("#gameModal");
+  if (!currentMatch) {
+    startGame(d, life);
+    return;
+  }
+  // In a live match: optionally declare a winner, then request a mutual reset
+  requestNewGame(d, life);
 };
+function requestNewGame(d, life){
+  const m = $("#cardMenu");
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      New game — record a result first?
+    </div>
+    <button data-r="yes" class="wide">Yes — declare a winner</button>
+    <button data-r="no" class="wide">No — just reset</button>
+    <button data-r="cancel" class="wide">Cancel</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.r === "cancel") return;
+    if (b.dataset.r === "yes") {
+      pickWinnerThenNewGame(d, life);
+    } else {
+      sendNewGameRequest(d, life);
+    }
+  };
+}
+function pickWinnerThenNewGame(d, life){
+  const m = $("#cardMenu");
+  const myDeck = (G && G.deckName) || d.name || "Unknown";
+  const theirDeck = (opp && opp.deckName) || "Unknown";
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      Who won this game?
+    </div>
+    <button data-w="me" class="wide">I win (${esc(myDeck)})</button>
+    <button data-w="them" class="wide">${esc(oppName || "Opponent")} wins (${esc(theirDeck)})</button>
+    <button data-w="skip" class="wide">Skip — no result</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.w === "skip") {
+      sendNewGameRequest(d, life);
+      return;
+    }
+    const iWin = b.dataset.w === "me";
+    const winner = iWin ? currentUser : (oppName || "Opponent");
+    const loser = iWin ? (oppName || "Opponent") : currentUser;
+    const winnerDeck = iWin ? myDeck : theirDeck;
+    const loserDeck = iWin ? theirDeck : myDeck;
+    const format = (G && G.format) || d.format || "freeform";
+    if (matchWs && matchWs.readyState === 1) {
+      matchWs.send(JSON.stringify({
+        type: "result",
+        winner, loser, winnerDeck, loserDeck, format
+      }));
+    }
+    sendNewGameRequest(d, life);
+  };
+}
+function sendNewGameRequest(d, life){
+  postEvent("newgame", { deckId: d.id, deckName: d.name, life, format: d.format })
+    .then(() => toast("New game requested — waiting for them to accept."))
+    .catch(() => toast("Couldn't send the request."));
+}
 $("#gmMull").onclick = () => {
   if (!G) return; const n = Math.max(0, G.hand.length - 1);
   G.library.push(...G.hand.splice(0)); shuffle(G.library);
@@ -2216,15 +2415,21 @@ function startSync() {
     }
 
     if (msg.type === "ended") {
-      toast(`Match over — ${msg.winner} wins with ${msg.winnerDeck}.`, 6000);
+      showEndScreen(msg.winner, msg.winnerDeck, msg.loser, msg.loserDeck);
       stopSync();
       currentMatch = null;
       setSyncStatus(false, null);
-      // Optional: bounce back to the lobby after a moment
-      setTimeout(() => {
-        if (!$("#tableScreen").classList.contains("on")) return;
-        // stay on table for now; user can leave manually
-      }, 1000);
+    }
+
+    if (msg.type === "abandoned") {
+      leaveMatchLocal(`${msg.by || "Opponent"} abandoned the match.`);
+    }
+
+    if (msg.type === "result_recorded") {
+      const iWon = msg.winner === currentUser;
+      toast(iWon
+        ? `Result recorded — you win with ${msg.winnerDeck}.`
+        : `Result recorded — ${msg.winner} wins with ${msg.winnerDeck}.`, 4500);
     }
   };
 
@@ -2316,6 +2521,46 @@ function handleRemoteEvent(from, type, payload) {
       renderAll(); pushState();
     }
   }
+  if (type === "newgame") {
+    const m = $("#cardMenu");
+    m.innerHTML = `
+      <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+        ${esc(from)} requests a new game${payload && payload.deckName ? ` with <strong>${esc(payload.deckName)}</strong>` : ""}.
+      </div>
+      <button data-ng="yes" class="wide">Accept — reset both boards</button>
+      <button data-ng="no" class="wide">Decline</button>`;
+    m.classList.add("on");
+    m.style.left = "50%";
+    m.style.top = "40%";
+    m.style.transform = "translate(-50%,-50%)";
+    m.onclick = e => {
+      const b = e.target.closest("button"); if (!b) return;
+      closeCardMenu();
+      m.style.transform = "";
+      if (b.dataset.ng === "yes") {
+        // Reset our side with our current deck (or first deck)
+        const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
+        if (d) startGame(d, (payload && payload.life) || fmt(d.format).life);
+        postEvent("newgame_ack", {}).catch(()=>{});
+        toast("New game started.");
+      } else {
+        postEvent("newgame_ack", { declined: true }).catch(()=>{});
+        toast("Declined.");
+      }
+    };
+  }
+  if (type === "newgame_ack") {
+    if (payload && payload.declined) {
+      toast(`${from} declined the new game.`);
+    } else {
+      // They accepted — reset our side too if we still have a deck selected
+      const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
+      if (d) {
+        startGame(d, fmt(d.format).life);
+        toast("New game started.");
+      }
+    }
+  }
 }
 
 /* ---------- loss detection + confirmation ---------- */
@@ -2398,6 +2643,23 @@ function showWinnerConfirm() {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && currentMatch && !matchWs) startSync();
 });
+
+function showEndScreen(winner, winnerDeck, loser, loserDeck) {
+  const iWon = winner === currentUser;
+  $("#endTitle").textContent = iWon ? "You win" : "You lose";
+  $("#endBody").innerHTML = iWon
+    ? `<strong>${esc(winnerDeck)}</strong> beat <strong>${esc(loserDeck)}</strong>`
+    : `<strong>${esc(winner)}</strong> wins with <strong>${esc(winnerDeck)}</strong>`;
+  open("#endModal");
+}
+function closeEndScreen() {
+  close("#endModal");
+}
+$("#endMenuBtn").onclick = () => {
+  closeEndScreen();
+  leaveMatchLocal(null);
+};
+
 
 
 /* ============================================================
@@ -2640,12 +2902,15 @@ function attachFieldPinch(hostSel, innerSel){
     pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if (pts.size !== 2 || !start) return;
     const [a,b] = [...pts.values()];
+    const d = dist(a,b);
+    // Ignore tiny distance jitter so a slight finger shift doesn't zoom
+    if (Math.abs(d - start.d) < 8 && st.s === 1) return;
     const r = host.getBoundingClientRect();
     const m = {x:(a.x+b.x)/2 - r.left, y:(a.y+b.y)/2 - r.top};
     /* two-finger drag pans, the spread scales — both anchored on the fingers */
     if (lastM && st.s > 1){ st.x += m.x - lastM.x; st.y += m.y - lastM.y; }
     lastM = m;
-    zoomTo(m.x, m.y, start.s * (dist(a,b) / start.d));
+    zoomTo(m.x, m.y, start.s * (d / start.d));
   }, true);
   const end = e => {
     pts.delete(e.pointerId);
@@ -2657,12 +2922,16 @@ function attachFieldPinch(hostSel, innerSel){
   host.addEventListener("pointerup", end, true);
   host.addEventListener("pointercancel", end, true);
 
-  /* mouse wheel zooms at the cursor — same anchoring path as the fingers */
+  /* Trackpad pinch is reported as wheel + ctrlKey. Regular two-finger
+     scroll is plain wheel and must not zoom — that was causing left/up
+     to zoom in and right/down to zoom out on desktop. */
   host.addEventListener("wheel", e => {
+    if (!e.ctrlKey) return;
     e.preventDefault();
     const r = host.getBoundingClientRect();
     zoomTo(e.clientX - r.left, e.clientY - r.top, st.s * Math.exp(-e.deltaY * 0.0018));
   }, {passive:false});
+
 
   return {reset(){ st.s = 1; st.x = 0; st.y = 0; apply(); }};
 }
