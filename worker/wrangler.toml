@@ -1,0 +1,17 @@
+name = "proxytable-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "proxytable"
+database_id = "86c6c408-a6ae-4619-a9bd-515b367feac3"
+
+[durable_objects]
+bindings = [
+  { name = "MATCH", class_name = "Match" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Match"]

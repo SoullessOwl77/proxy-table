@@ -1,0 +1,3158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Proxy Table</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#141d1b">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cards.scryfall.io" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Archivo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --felt:#141d1b; --felt-2:#1b2825; --felt-3:#233330; --ink:#0a0f0e;
+  --brass:#c39a4e; --brass-dim:#7d6433;
+  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
+  --card-w:64px; --card-h:89px; --seam:52px;
+  --ctrl-w:120px;
+  --edge-l:env(safe-area-inset-left,0px);
+  --edge-r:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ink);color:var(--parchment);
+  font-family:Archivo,system-ui,sans-serif;overscroll-behavior:none;-webkit-user-select:none;user-select:none;}
+body{touch-action:manipulation;}
+button{font-family:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer;}
+input,textarea{-webkit-user-select:text;user-select:text;}
+.mono{font-variant-numeric:tabular-nums;}
+
+.screen{position:fixed;inset:0;display:none;flex-direction:column;}
+.screen.on{display:flex;}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--felt-2);
+  border-bottom:1px solid #000;flex:0 0 auto;
+  padding-left:calc(12px + var(--edge-l));padding-right:calc(12px + var(--edge-r));}
+.bar h1{font-family:Fraunces,serif;font-weight:900;font-size:17px;margin:0;}
+.bar .sub{font-size:11px;color:var(--parchment-dim);letter-spacing:.14em;text-transform:uppercase;}
+.btn{background:var(--felt-3);border:1px solid #0006;border-radius:6px;padding:7px 12px;
+  font-size:12px;font-weight:500;letter-spacing:.03em;}
+.btn:active{background:var(--brass-dim);}
+.btn.gold{background:var(--brass);color:#191207;font-weight:700;}
+.btn.ghost{background:none;border:1px solid var(--brass-dim);color:var(--brass);}
+.btn.sm{padding:5px 9px;font-size:11px;}
+.btn:disabled{opacity:.45;}
+.btn:focus-visible,.zone:focus-visible,.card:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+.spacer{flex:1;}
+
+.center{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;
+  padding-left:calc(20px + var(--edge-l));padding-right:calc(20px + var(--edge-r));}
+.panel{width:100%;max-width:380px;background:var(--felt-2);border:1px solid var(--brass-dim);
+  border-radius:12px;padding:22px;}
+.panel h1{font-family:Fraunces,serif;font-size:26px;margin:0 0 3px;font-weight:900;}
+.panel .tag{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--parchment-dim);margin-bottom:18px;}
+.err{color:var(--blood);font-size:12px;margin-top:7px;min-height:15px;}
+
+#menuScreen .body{flex:1;overflow-y:auto;padding:14px;
+  padding-left:calc(14px + var(--edge-l));padding-right:calc(14px + var(--edge-r));}
+.section{margin-bottom:22px;}
+.section h2{font-family:Fraunces,serif;font-size:14px;font-weight:600;letter-spacing:.04em;
+  color:var(--parchment-dim);text-transform:uppercase;margin:0 0 9px;}
+.matchrow{display:flex;align-items:center;gap:10px;background:var(--felt-2);border:1px solid #000;
+  border-radius:9px;padding:10px 12px;margin-bottom:7px;}
+.matchrow .who{font-family:Fraunces,serif;font-size:16px;font-weight:600;}
+.matchrow .when{font-size:11px;color:var(--parchment-dim);}
+.actionrow{display:flex;gap:9px;flex-wrap:wrap;}
+.bigbtn{flex:1;min-width:150px;background:var(--felt-2);border:1px solid var(--brass-dim);
+  border-radius:10px;padding:16px;text-align:left;}
+.bigbtn .t{font-family:Fraunces,serif;font-size:16px;font-weight:600;display:block;margin-bottom:2px;}
+.bigbtn .d{font-size:11.5px;color:var(--parchment-dim);}
+.bigbtn:active{background:var(--brass-dim);}
+.banner{background:#3a2418;border:1px solid var(--blood);border-radius:8px;padding:9px 12px;
+  font-size:12px;margin-bottom:14px;}
+
+#deckScreen .body{flex:1;overflow-y:auto;padding:14px;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;align-content:start;
+  padding-left:calc(14px + var(--edge-l));padding-right:calc(14px + var(--edge-r));}
+.deckcard{background:var(--felt-2);border:1px solid #000;border-radius:10px;padding:12px 14px;}
+.deckcard h3{font-family:Fraunces,serif;font-size:19px;margin:0 0 2px;font-weight:600;}
+.deckcard .meta{font-size:11px;color:var(--parchment-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;}
+.deckcard .row{display:flex;gap:7px;flex-wrap:wrap;}
+.empty{grid-column:1/-1;text-align:center;padding:50px 20px;color:var(--parchment-dim);}
+.empty h2{font-family:Fraunces,serif;color:var(--parchment);font-weight:400;font-size:22px;}
+
+.modal{position:fixed;left:0;right:0;top:var(--vv-top,0px);height:var(--vvh,100%);
+  background:#000b;display:none;align-items:center;justify-content:center;padding:16px;z-index:50;}
+.modal.on{display:flex;}
+.sheet{background:var(--felt-2);border:1px solid var(--brass-dim);border-radius:12px;width:100%;
+  max-width:560px;max-height:100%;display:flex;flex-direction:column;overflow:hidden;}
+body.kbd .modal{padding:5px;align-items:flex-start;}
+body.kbd .sheet{border-radius:9px;}
+body.kbd .sheet header{padding:6px 11px;}
+body.kbd .sheet header h2{font-size:14px;}
+body.kbd .sheet .content{padding:9px 11px;}
+body.kbd .sheet footer{padding:7px 11px;}
+body.kbd label{margin:8px 0 3px;font-size:10px;}
+body.kbd input,body.kbd select,body.kbd textarea{padding:7px 9px;}
+body.kbd .content .hint{display:none;}
+body.kbd textarea{min-height:108px;}
+.sheet header{padding:12px 14px;border-bottom:1px solid #0007;display:flex;align-items:center;gap:10px;}
+.sheet header h2{font-family:Fraunces,serif;font-size:18px;margin:0;font-weight:600;}
+.sheet .content{padding:14px;overflow-y:auto;}
+.sheet footer{padding:12px 14px;border-top:1px solid #0007;display:flex;gap:8px;justify-content:flex-end;}
+input,textarea,select{width:100%;background:var(--ink);border:1px solid #0007;border-radius:6px;
+  color:var(--parchment);padding:9px 10px;font-family:inherit;font-size:14px;}
+textarea{min-height:150px;resize:vertical;font-size:13px;line-height:1.45;}
+label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--parchment-dim);margin:12px 0 5px;}
+label:first-child{margin-top:0;}
+.hint{font-size:11.5px;color:var(--parchment-dim);line-height:1.5;margin-top:6px;}
+.tabs{display:flex;gap:6px;margin-bottom:12px;}
+.tabs button{flex:1;padding:8px;border-radius:7px;background:var(--felt-3);font-size:12px;font-weight:600;}
+.tabs button.on{background:var(--brass);color:#191207;}
+.tabpane{display:none;}
+.tabpane.on{display:block;}
+.codebig{font-family:Fraunces,serif;font-size:30px;letter-spacing:.3em;text-indent:.3em;
+  color:var(--brass);text-align:center;background:var(--ink);border:1px solid var(--brass-dim);
+  border-radius:8px;padding:14px 0;margin:10px 0;}
+
+#tableScreen{background:radial-gradient(120% 90% at 50% 50%,var(--felt-2) 0%,var(--felt) 62%,var(--ink) 100%);}
+.field{position:relative;flex:1;min-height:0;overflow:hidden;touch-action:none;
+  margin-left:var(--edge-l);margin-right:var(--edge-r);}
+.field.mine{box-shadow:inset 0 -14px 22px -18px #000;}
+.field::after{content:attr(data-tag);position:absolute;right:6px;font-size:9px;letter-spacing:.22em;
+  text-transform:uppercase;color:#ffffff14;pointer-events:none;}
+/* tags sit against the seam: the top-right of the opponent field belongs to
+   their zone tiles, and the bottom of your field belongs to the tray */
+.field.opp::after{bottom:3px;} .field.mine::after{top:3px;}
+
+/* Three columns: a life box at each end, status text in the middle.
+   The Menu and Seat controls live in the tray with the other tiles —
+   that layout has never given trouble, this one repeatedly has. */
+.seamrow{flex:0 0 var(--seam);display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;gap:10px;position:relative;
+  padding-left:calc(10px + var(--edge-l));padding-right:calc(10px + var(--edge-r));
+  background:linear-gradient(180deg,#0000 0%,#00000055 50%,#0000 100%);
+  border-top:1px solid #c39a4e33;border-bottom:1px solid #c39a4e33;}
+#oppLife{grid-column:1;grid-row:1;justify-self:start;}
+.seamrow > .sync{grid-column:2;grid-row:1;}
+#myLife{grid-column:3;grid-row:1;justify-self:end;}
+.seamrow > *{min-width:0;}
+.sync{text-align:center;position:relative;z-index:2;overflow:hidden;}
+.seamrow::before{content:"";position:absolute;left:0;right:0;top:50%;height:1px;
+  background:linear-gradient(90deg,#0000,var(--brass-dim) 18%,var(--brass) 50%,var(--brass-dim) 82%,#0000);
+  opacity:.5;pointer-events:none;}
+.life{position:relative;display:flex;flex-direction:row;align-items:center;gap:2px;
+  height:calc(var(--seam) - 10px);width:var(--ctrl-w);justify-content:space-between;
+  background:var(--felt-3);border:1px solid #c39a4e2e;border-radius:9px;padding:2px 3px;}
+.lifemid{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-width:34px;padding:0 1px;gap:0;}
+.lifebtns{display:flex;flex-direction:column;gap:2px;}
+.lifebtns button{width:23px;height:17px;border-radius:4px;background:#0007;
+  border:1px solid #c39a4e33;font-size:9.5px;font-weight:700;line-height:1;
+  font-variant-numeric:tabular-nums;}
+.lifebtns button:active{background:var(--brass);color:#191207;}
+#oppLife.nolife .lifebtns{display:none;}
+.life .who{font-size:8.5px;line-height:1;letter-spacing:.16em;text-transform:uppercase;color:var(--parchment-dim);
+  max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.life .n{font-family:Fraunces,serif;font-weight:900;font-size:19px;line-height:1;margin-top:1px;}
+.life .n.hurt{color:var(--blood);}
+.life .tn{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--brass);
+  line-height:1;margin-top:2px;white-space:nowrap;}
+.life.active{border-color:var(--brass);box-shadow:0 0 0 1px #c39a4e55;}
+@media (max-width:900px){
+  .lifebtns button{width:21px;height:15px;font-size:9px;}
+  .life .n{font-size:18px;}
+  .lifemid{min-width:30px;}
+}
+@media (max-width:720px){
+  /* drop the ±5 pair before anything starts colliding */
+  .lifebtns button[data-d="5"],.lifebtns button[data-d="-5"],
+  .lifebtns button[data-od="5"],.lifebtns button[data-od="-5"]{display:none;}
+}
+@media (max-width:820px){
+  .seamrow{gap:6px;}
+}
+.sync .k{font-size:11px;letter-spacing:.05em;color:var(--parchment-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sync .s{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--parchment-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sync .s.live{color:var(--good);}
+.sync .s.bad{color:var(--blood);}
+
+.card{position:absolute;width:var(--card-w);height:var(--card-h);border-radius:4px;
+  background:#0b0f0e;box-shadow:0 3px 7px #000a;transition:transform .13s ease,box-shadow .13s;
+  overflow:hidden;will-change:transform;touch-action:none;}
+.card img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;}
+.card.tapped{transform:rotate(90deg);}
+.card.drag{z-index:40;box-shadow:0 10px 20px #000c;transition:none;}
+.card .ctr{position:absolute;left:2px;bottom:2px;min-width:17px;height:17px;border-radius:9px;
+  background:var(--brass);color:#191207;font-size:11px;font-weight:700;display:flex;
+  align-items:center;justify-content:center;padding:0 3px;font-variant-numeric:tabular-nums;}
+/* a card you've taken control of — it still belongs to them */
+.card.borrowed{box-shadow:0 0 0 2px var(--blood),0 3px 7px #000a;}
+.card.pending{opacity:.45;filter:grayscale(.3);}
+.card.back{background:repeating-linear-gradient(135deg,#1d2a27 0 6px,#182320 6px 12px);
+  border:1px solid #c39a4e40;display:flex;align-items:center;justify-content:center;}
+.card.back::after{content:"";width:22px;height:22px;border:1px solid #c39a4e77;transform:rotate(45deg);}
+
+.tray{flex:0 0 auto;display:flex;align-items:flex-end;gap:6px;
+  padding:4px 6px 5px;background:linear-gradient(180deg,#0000,#000000aa);
+  /* right padding matches the seam row's, so the action grid lines up with
+     the life panel directly above it on both edges */
+  padding-left:calc(6px + var(--edge-l));padding-right:calc(10px + var(--edge-r));}
+/* Cards take every drag direction now, so scrolling the strip moved to an
+   explicit rail below it — mobile Chrome's own scrollbar is an overlay you
+   can't grab with a finger. touch-action:none on the cards; the strip keeps
+   pan-x so flicking the gaps between cards still works. */
+.handwrap{flex:1;min-width:0;display:flex;flex-direction:column;}
+.hand{flex:0 0 auto;display:flex;gap:4px;overflow-x:auto;overflow-y:hidden;padding:2px 0 3px;
+  scrollbar-width:none;height:calc(var(--card-h) * var(--hand-zoom,1) + 6px);touch-action:pan-x;}
+.hand::-webkit-scrollbar{display:none;}
+.handrail{height:11px;margin-top:1px;border-radius:6px;background:#00000066;
+  border:1px solid #c39a4e26;position:relative;touch-action:none;flex:0 0 auto;}
+.handrail.full .thumb{background:#c39a4e30;}
+.handrail .thumb{position:absolute;top:1px;bottom:1px;min-width:26px;border-radius:5px;
+  background:var(--brass-dim);}
+.handrail.grabbed .thumb{background:var(--brass);}
+.hand .card{position:relative;flex:0 0 auto;touch-action:none;
+  width:calc(var(--card-w) * var(--hand-zoom,1));
+  height:calc(var(--card-h) * var(--hand-zoom,1));}
+.zones{display:flex;gap:5px;}
+.zone{width:46px;height:calc(var(--card-h) + 4px);border:1px dashed #c39a4e3d;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;background:#0006;position:relative;overflow:hidden;}
+.zone .z{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);}
+.zone .c{font-family:Fraunces,serif;font-size:19px;font-weight:600;line-height:1;}
+.zone.lib{border-style:solid;background:repeating-linear-gradient(135deg,#1d2a27 0 6px,#182320 6px 12px);}
+.zone.lib.revealed{border-color:var(--brass);}
+/* Turn and table controls, stacked two wide at the right of the tray so the
+   hand gets the width back. Same 120px box as the life panel above it. */
+.actgrid{flex:0 0 auto;width:var(--ctrl-w);height:calc(var(--card-h) + 4px);
+  display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:3px;}
+.abtn{border:1px solid var(--brass-dim);background:var(--felt-3);border-radius:5px;
+  color:var(--brass);font-size:10px;font-weight:700;line-height:1.05;letter-spacing:.02em;
+  display:flex;align-items:center;justify-content:center;text-align:center;padding:0 2px;
+  min-width:0;overflow:hidden;}
+.abtn:active{background:var(--brass);color:#191207;}
+.abtn.wide{grid-column:1/-1;}
+.abtn.hot{border-color:var(--brass);color:var(--brass);}
+@media (max-width:760px){ :root{--ctrl-w:104px;} .abtn{font-size:9px;} }
+.zone img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42;}
+.zone .lbl{position:relative;z-index:1;text-align:center;}
+
+.fieldinner{position:absolute;inset:0;transform-origin:50% 50%;will-change:transform;}
+
+/* Guided tour: a hole punched over one real control at a time, with a caption
+   next to it. The hole is a huge box-shadow spread rather than a mask, so it
+   works without a second stacking layer. */
+.tourhole{position:fixed;border-radius:9px;border:2px solid var(--brass);
+  box-shadow:0 0 0 9999px #000d;pointer-events:none;z-index:95;
+  transition:top .18s,left .18s,width .18s,height .18s;}
+.tourbox{position:fixed;z-index:96;width:264px;max-width:88vw;background:var(--felt-2);
+  border:1px solid var(--brass-dim);border-radius:10px;padding:11px 13px;
+  box-shadow:0 10px 30px #000c;}
+.tourbox h3{font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0 0 4px;}
+.tourbox p{margin:0;font-size:12px;line-height:1.45;color:var(--parchment);}
+.tourbox .nav{display:flex;align-items:center;gap:7px;margin-top:10px;}
+.tourbox .step{font-size:10.5px;color:var(--parchment-dim);letter-spacing:.1em;flex:1;}
+body.tour .callgrid,body.tour .actgrid{pointer-events:none;}
+
+/* Table talk: the four things you constantly need to say out loud across a
+   real table. Same 120px column as the life panel and the action grid, sat in
+   the bottom-right corner of your own field. */
+.callgrid{position:absolute;right:10px;bottom:4px;width:var(--ctrl-w);z-index:6;
+  display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:22px;gap:3px;}
+.callgrid .abtn{background:#0b1211dd;}
+.callgrid .abtn.urgent{border-color:var(--blood);color:var(--blood);}
+.callgrid .abtn.urgent:active{background:var(--blood);color:var(--parchment);}
+
+/* An interrupt has to survive being missed, so it sits there until it's
+   acknowledged rather than fading like a toast. */
+.callbanner{position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:78;
+  display:none;flex-direction:column;gap:5px;align-items:center;max-width:94vw;}
+.callbanner.on{display:flex;}
+.callrow{display:flex;align-items:center;gap:9px;background:#2a1512f2;
+  border:1px solid var(--blood);border-radius:20px;padding:6px 6px 6px 13px;
+  font-size:12px;white-space:nowrap;max-width:94vw;box-shadow:0 6px 18px #000a;}
+.callrow.calm{background:#12201ef2;border-color:var(--brass-dim);}
+.callrow .who{color:var(--parchment-dim);}
+.callrow b{font-weight:700;}
+.callrow button{background:var(--brass);color:#191207;font-weight:700;font-size:11px;
+  border-radius:14px;padding:4px 11px;}
+body.hascall .targetbar{top:52px;}
+
+/* opponent's hand, shown as backs so you can see how many they're holding */
+.oppstrip{position:absolute;left:6px;top:4px;display:flex;align-items:center;gap:2px;z-index:6;
+  height:calc(var(--card-h) * .42);}
+.oppstrip .mini{width:calc(var(--card-w) * .42);height:calc(var(--card-h) * .42);border-radius:3px;
+  background:repeating-linear-gradient(135deg,#1d2a27 0 4px,#182320 4px 8px);
+  border:1px solid #c39a4e33;margin-left:calc(var(--card-w) * -.22);flex:0 0 auto;}
+.oppstrip .mini:first-child{margin-left:0;}
+.oppstrip .n{margin-left:7px;font-size:10px;color:var(--parchment-dim);letter-spacing:.08em;
+  background:#0009;border:1px solid #ffffff18;border-radius:20px;padding:2px 8px;white-space:nowrap;}
+.oppstrip .n b{color:var(--parchment);font-weight:700;}
+
+/* opponent's library / graveyard / exile / command, mirroring your own tray */
+.oppzones{position:absolute;right:6px;top:4px;display:flex;gap:4px;z-index:6;}
+.oppzones .ozone{width:36px;height:calc(var(--card-h) * .46);border:1px solid #c39a4e3d;border-radius:4px;
+  background:#0007;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.oppzones .ozone.lib{background:repeating-linear-gradient(135deg,#1d2a27 0 5px,#182320 5px 10px);}
+.oppzones .ozone img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.45;}
+.oppzones .ozone .lbl{position:relative;z-index:1;text-align:center;line-height:1.05;}
+.oppzones .ozone .c{font-family:Fraunces,serif;font-size:13px;font-weight:600;}
+.oppzones .ozone .z{font-size:7px;letter-spacing:.1em;text-transform:uppercase;color:var(--parchment-dim);}
+
+/* targeting: arrows drawn over the whole table, plus the action bar */
+.arrows{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:30;}
+.arrows path{fill:none;stroke-width:2.5;stroke-linecap:round;}
+.arrows path.mine{stroke:var(--brass);}
+.arrows path.theirs{stroke:var(--blood);}
+.targetbar{position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:45;display:none;
+  flex-direction:column;gap:5px;align-items:center;max-width:94vw;}
+.targetbar.on{display:flex;}
+.trow{display:flex;align-items:center;gap:8px;background:#000d;border:1px solid var(--brass-dim);
+  border-radius:20px;padding:5px 8px 5px 12px;font-size:11.5px;white-space:nowrap;
+  max-width:94vw;overflow:hidden;}
+.trow.theirs{border-color:var(--blood);}
+.trow .t{overflow:hidden;text-overflow:ellipsis;}
+.tcard{outline:2px solid var(--brass);outline-offset:1px;}
+.ttarget{outline:2px solid var(--blood);outline-offset:1px;}
+body.targeting .card,body.targeting .life{cursor:crosshair;}
+body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.96;}
+
+/* card being dragged out of hand */
+.dragghost{position:fixed;z-index:70;pointer-events:none;border-radius:5px;overflow:hidden;
+  box-shadow:0 12px 26px #000c;opacity:.92;transform:translate(-50%,-50%) scale(1.06);}
+.dragghost img{width:100%;height:100%;object-fit:cover;display:block;}
+.dropzone{outline:2px dashed var(--brass);outline-offset:-6px;}
+.zone.dropzone,#hand.dropzone{outline-offset:-2px;background-color:#c39a4e22;}
+
+
+.cardmenu{position:fixed;background:var(--felt-3);border:1px solid var(--brass-dim);border-radius:9px;
+  padding:5px;display:none;z-index:60;box-shadow:0 8px 24px #000c;width:214px;}
+.cardmenu.on{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+.cardmenu button{padding:8px 9px;font-size:11.5px;border-radius:5px;background:#0007;text-align:left;}
+.cardmenu button:active{background:var(--brass);color:#191207;}
+.cardmenu .wide{grid-column:1/-1;}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:7px;}
+.grid .card{position:relative;width:100%;height:auto;aspect-ratio:5/7;}
+.missrow{display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:5px;
+  background:#0006;border-left:2px solid var(--blood);margin-bottom:5px;}
+.missrow .mq{color:var(--parchment-dim);font-size:11px;font-variant-numeric:tabular-nums;min-width:24px;}
+.missrow .mn{flex:1;font-size:13px;}
+.missrow .ms{font-size:10px;letter-spacing:.1em;color:var(--parchment-dim);}
+.preview{position:fixed;inset:0;background:#000e;display:none;align-items:center;justify-content:center;
+  z-index:85;flex-direction:column;gap:10px;padding:12px;}
+.preview.on{display:flex;}
+.preview img{max-height:88%;max-width:92%;border-radius:9px;box-shadow:0 14px 40px #000;}
+.preview .pvbar{display:flex;gap:8px;align-items:center;}
+.preview .pvname{font-family:Fraunces,serif;font-size:15px;text-align:center;max-width:80vw;}
+
+.toast{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:#000d;
+  border:1px solid var(--brass-dim);color:var(--parchment);padding:7px 14px;border-radius:20px;
+  font-size:12px;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none;max-width:88vw;text-align:center;}
+.toast.on{opacity:1;}
+.rotate{position:fixed;inset:0;background:var(--ink);display:none;align-items:center;justify-content:center;
+  text-align:center;padding:30px;z-index:90;}
+.rotate h2{font-family:Fraunces,serif;font-weight:400;}
+@media (orientation:portrait) and (max-width:860px){.rotate{display:flex;}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="screen on" id="loginScreen"><div class="center"><div class="panel">
+  <h1>Proxy Table</h1>
+  <div class="tag" id="loginTag">Sign in</div>
+  <label>Your name</label>
+  <input id="loginName" placeholder="Kyle" maxlength="20" autocomplete="off">
+  <div class="hint">No password — the name is the account. Pick one you and your buddy will both recognize. Taken by someone else already? Pick another; there's no way to change it later.</div>
+  <div class="err" id="loginErr"></div>
+  <div class="actionrow" style="margin-top:10px;">
+    <button class="btn gold" id="loginGo" style="flex:1;padding:11px;">Continue</button>
+  </div>
+</div></div></div>
+
+<div class="screen" id="menuScreen">
+  <div class="bar">
+    <h1>Proxy Table</h1><span class="sub" id="menuWho"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="menuNotif">Notifications</button>
+    <button class="btn" id="menuSwitch">Switch account</button>
+  </div>
+  <div class="body">
+    <div class="banner" id="menuBanner" style="display:none;"></div>
+
+    <div class="section">
+      <h2>Your matches</h2>
+      <div id="matchList"><p class="hint">No matches yet — challenge someone below.</p></div>
+    </div>
+
+    <div class="section">
+      <h2>Start a match</h2>
+      <div class="actionrow">
+        <button class="bigbtn" id="menuChallenge"><span class="t">Challenge by name</span>
+          <span class="d">Sends a notification if they've enabled them.</span></button>
+        <button class="bigbtn" id="menuCode"><span class="t">Code</span>
+          <span class="d">Works with no notifications — text the code over yourself.</span></button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Solo</h2>
+      <div class="actionrow">
+        <button class="bigbtn" id="menuPractice"><span class="t">Practice table</span>
+          <span class="d">Play a deck alone — draw, shuffle, test lines. Nothing is synced.</span></button>
+        <button class="bigbtn" id="menuDecks"><span class="t">Deck manager</span>
+          <span class="d">Add, edit, and check decks.</span></button>
+        <button class="bigbtn" id="menuHowto"><span class="t">How to play</span>
+          <span class="d">A two-minute walk through one turn, pointing at the real controls.</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="deckScreen">
+  <div class="bar">
+    <button class="btn" id="deckBack">Menu</button>
+    <h1>Decks</h1>
+    <span class="spacer"></span>
+    <button class="btn" id="backupBtn">Backup</button>
+    <button class="btn gold" id="newDeckBtn">Add deck</button>
+  </div>
+  <div class="body" id="deckList"></div>
+</div>
+
+<div class="screen" id="tableScreen">
+  <div class="field opp" id="oppField" data-tag="opponent">
+    <div class="fieldinner" id="oppFieldInner"></div>
+    <div class="oppstrip" id="oppHandStrip"></div>
+    <div class="oppzones" id="oppZones"></div>
+  </div>
+
+  <div class="seamrow">
+    <div class="life" id="oppLife">
+      <div class="lifebtns">
+        <button data-od="5">+5</button>
+        <button data-od="1">+1</button>
+      </div>
+      <div class="lifemid">
+        <span class="who" id="oppName">practice</span>
+        <span class="n mono" id="oppLifeN">20</span>
+        <span class="tn mono" id="oppTurnN">T1</span>
+      </div>
+      <div class="lifebtns">
+        <button data-od="-1">−1</button>
+        <button data-od="-5">−5</button>
+      </div>
+    </div>
+    <div class="sync">
+      <div class="k" id="syncWho">solo table</div>
+      <div class="s" id="syncState">not synced</div>
+    </div>
+    <div class="life" id="myLife">
+      <div class="lifebtns">
+        <button data-d="5">+5</button>
+        <button data-d="1">+1</button>
+      </div>
+      <div class="lifemid">
+        <span class="who" id="myName">you</span>
+        <span class="n mono" id="myLifeN">20</span>
+        <span class="tn mono" id="myTurnN">T1</span>
+      </div>
+      <div class="lifebtns">
+        <button data-d="-1">−1</button>
+        <button data-d="-5">−5</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="field mine" id="myField" data-tag="you">
+    <div class="fieldinner" id="myFieldInner"></div>
+    <div class="callgrid" id="callGrid">
+      <button class="abtn urgent" data-call="In response">In response</button>
+      <button class="abtn" data-call="Trigger">Trigger</button>
+      <button class="abtn" data-call="Attacking">Attacking</button>
+      <button class="abtn" data-call="Hold on">Hold on</button>
+    </div>
+  </div>
+
+  <div class="callbanner" id="callBanner"></div>
+  <div class="tourhole" id="tourHole" style="display:none;"></div>
+  <div class="tourbox" id="tourBox" style="display:none;">
+    <h3 id="tourTitle"></h3>
+    <p id="tourText"></p>
+    <div class="nav">
+      <span class="step" id="tourStep"></span>
+      <button class="btn sm" id="tourBack">Back</button>
+      <button class="btn gold sm" id="tourNext">Next</button>
+      <button class="btn sm" id="tourQuit">Skip</button>
+    </div>
+  </div>
+
+  <svg class="arrows" id="arrows" aria-hidden="true">
+    <defs>
+      <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polygon points="0 0, 7 3.5, 0 7" fill="#c39a4e"></polygon>
+      </marker>
+      <marker id="arrowheadTheirs" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <polygon points="0 0, 7 3.5, 0 7" fill="#a8443c"></polygon>
+      </marker>
+    </defs>
+    <g id="arrowG"></g>
+  </svg>
+
+  <div class="targetbar" id="targetBar"></div>
+
+  <div class="tray">
+    <div class="zones">
+      <button class="zone lib" id="zLib"><img id="libArt" alt=""><div class="lbl"><div class="c mono" id="libN">0</div><div class="z">Library</div></div></button>
+      <button class="zone" id="zCmd" style="display:none;border-color:var(--brass);"><img id="cmdArt" alt=""><div class="lbl"><div class="c mono" id="cmdN">0</div><div class="z">Command</div></div></button>
+    </div>
+    <div class="handwrap">
+      <div class="hand" id="hand"></div>
+      <div class="handrail" id="handRail"><div class="thumb" id="handThumb"></div></div>
+    </div>
+    <div class="zones">
+      <button class="zone" id="zGy"><img id="gyArt" alt=""><div class="lbl"><div class="c mono" id="gyN">0</div><div class="z">Grave</div></div></button>
+      <button class="zone" id="zEx"><div class="lbl"><div class="c mono" id="exN">0</div><div class="z">Exile</div></div></button>
+      <button class="zone" id="zDraw" style="border-color:var(--brass);"><div class="lbl"><div class="c" style="font-size:15px;">Draw</div><div class="z">+1</div></div></button>
+    </div>
+    <div class="actgrid">
+      <button class="abtn" id="untapBtn">Untap</button>
+      <button class="abtn hot" id="endTurnBtn">End turn</button>
+      <button class="abtn" id="extraTurnBtn">+Turn</button>
+      <button class="abtn" id="swapBtn"><span id="swapLabel">2nd</span> seat</button>
+      <button class="abtn wide" id="menuBtn">Table menu</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="deckModal"><div class="sheet">
+  <header><h2 id="deckModalTitle">Add a deck</h2><span class="spacer"></span>
+    <button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <label>Deck name</label><input id="dName" placeholder="Mono-red burn">
+    <label>Format</label>
+    <select id="dFormat">
+      <option value="commander">Commander — 100 singleton, 40 life</option>
+      <option value="modern">Modern — 60 min, 4-of, 20 life</option>
+      <option value="standard">Standard — 60 min, 4-of, 20 life</option>
+      <option value="pioneer">Pioneer — 60 min, 4-of, 20 life</option>
+      <option value="legacy">Legacy — 60 min, 4-of, 20 life</option>
+      <option value="vintage">Vintage — 60 min, restricted list, 20 life</option>
+      <option value="pauper">Pauper — commons only, 20 life</option>
+      <option value="freeform">Freeform — no checks</option>
+    </select>
+    <label>Decklist</label>
+    <textarea id="dList" placeholder="1 Scarlet Witch, Chaotic Avenger
+
+DECK
+4 Lightning Bolt
+20 Mountain
+
+SIDEBOARD
+2 Smash to Smithereens"></textarea>
+    <div class="hint">One card per line, quantity first. A line reading SIDEBOARD, COMMANDER, or MAYBEBOARD starts that section. Moxfield and Archidekt exports paste straight in.</div>
+  </div>
+  <footer>
+    <span id="importStatus" class="hint" style="margin:0;flex:1;text-align:left;"></span>
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn gold" id="dSave">Fetch cards</button>
+  </footer>
+</div></div>
+
+<div class="modal" id="challengeModal"><div class="sheet">
+  <header><h2>Start a match</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <div class="tabs" id="chTabs">
+      <button class="on" data-tab="tabName">By name</button>
+      <button data-tab="tabCode">By code</button>
+    </div>
+
+    <div class="tabpane on" id="tabName">
+      <label>Their username</label>
+      <input id="chName" placeholder="Alex" autocomplete="off">
+      <button class="btn gold" id="chSend" style="width:100%;margin-top:9px;padding:11px;">Send challenge</button>
+      <div class="hint" id="chNameStatus"></div>
+    </div>
+
+    <div class="tabpane" id="tabCode">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:170px;">
+          <label>Open a table</label>
+          <button class="btn gold" id="chGetCode" style="width:100%;padding:11px;">Get a code</button>
+        </div>
+        <div style="flex:1;min-width:170px;">
+          <label>Have a code</label>
+          <input id="chJoinCode" placeholder="ABC123" maxlength="6" autocomplete="off"
+            style="text-transform:uppercase;letter-spacing:.2em;text-align:center;">
+          <button class="btn" id="chJoin" style="width:100%;margin-top:7px;padding:11px;">Join</button>
+        </div>
+      </div>
+      <div id="codeBox" style="display:none;">
+        <div class="codebig mono" id="codeBig"></div>
+        <button class="btn" id="codeCopy" style="width:100%;">Copy to send as a text</button>
+      </div>
+      <div class="hint" id="chCodeStatus"></div>
+    </div>
+  </div>
+</div></div>
+
+<div class="modal" id="missModal"><div class="sheet">
+  <header><h2>Some cards didn't match</h2></header>
+  <div class="content">
+    <p class="hint" id="missCount" style="margin:0 0 10px;font-size:12.5px;"></p>
+    <div id="missList"></div>
+    <p class="hint">Usual causes: a typo, a name that needs both halves of a double-faced card, or a printing whose set code Scryfall spells differently. Editing the name usually fixes it — the set code is optional and can be deleted.</p>
+  </div>
+  <footer>
+    <button class="btn" id="missAnyway">Import without them</button>
+    <button class="btn gold" id="missBack">Back to the list</button>
+  </footer>
+</div></div>
+
+<div class="modal" id="backupModal"><div class="sheet">
+  <header><h2>Backup</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <p class="hint" style="margin:0 0 12px;">Decks are saved to your account on the server, so they already follow you between devices. This is a plain-file copy on top of that.</p>
+    <label>Save a copy</label>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+      <button class="btn gold" id="bkExport">Export all decks</button>
+      <button class="btn" id="bkExportTxt">Export as decklists</button>
+    </div>
+    <div class="hint">The deck file restores everything including card data. The decklist file is plain text you can paste anywhere or hand to your buddy.</div>
+    <label>Restore from a file</label>
+    <input type="file" id="bkFile" accept=".json,.txt,application/json,text/plain">
+    <div style="display:flex;gap:7px;margin-top:8px;">
+      <button class="btn" id="bkAdd">Add to my decks</button>
+    </div>
+    <div class="hint" id="bkStatus"></div>
+  </div>
+</div></div>
+
+<div class="modal" id="newGameModal"><div class="sheet">
+  <header><h2>New game</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <label>Format</label>
+    <select id="ngFormat"></select>
+    <label>Deck</label>
+    <select id="ngDeck"></select>
+    <label>Starting life</label>
+    <input id="ngLife" type="number" value="20" style="max-width:120px;">
+    <div class="hint" id="ngLegal"></div>
+  </div>
+  <footer>
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn gold" id="ngStart">Start</button>
+  </footer>
+</div></div>
+
+<div class="modal" id="gameModal"><div class="sheet">
+  <header><h2>Table menu</h2><span class="spacer"></span><button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <label>Deck in play</label><select id="gmDeck"></select>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;">
+      <button class="btn" id="gmNew">New game</button>
+      <button class="btn" id="gmMull">Mulligan</button>
+      <button class="btn" id="gmShuffle">Shuffle</button>
+      <button class="btn" id="gmUntap">Untap all</button>
+      <button class="btn" id="gmToken">Add token</button>
+      <button class="btn" id="gmCoin">Flip coin</button>
+      <button class="btn" id="gmDie">Roll d20</button>
+      <button class="btn gold" id="gmNudge">Nudge buddy</button>
+      <button class="btn" id="gmAbandon" style="display:none;">Abandon game</button>
+      <button class="btn" id="gmMenu">Main menu</button>
+    </div>
+    <label>Starting life</label><input id="gmLife" type="number" value="20" style="max-width:120px;">
+    <div class="hint" id="gmLegal"></div>
+
+    <div id="soloBlock">
+      <label>Second seat — play both sides</label>
+      <select id="gmOppDeck"></select>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn gold" id="gmOppDeal">Deal to the other seat</button>
+        <button class="btn" id="gmSwap">Swap seats</button>
+        <button class="btn" id="gmOppHand">See other hand</button>
+      </div>
+      <div class="hint">You control whichever seat is on the bottom. Swap to take the other side's turn — hand, library, and zones all follow the seat you're in.</div>
+    </div>
+  </div>
+</div></div>
+
+<div class="modal" id="listModal"><div class="sheet">
+  <header><h2 id="listTitle">Library</h2><span class="spacer"></span>
+    <button class="btn sm" id="listShuffle">Shuffle</button>
+    <button class="btn sm" data-close>Close</button></header>
+  <div class="content">
+    <input id="listSearch" placeholder="Filter by name…" autocomplete="off"
+      style="width:100%;margin-bottom:10px;display:none;">
+    <div class="grid" id="listGrid"></div>
+  </div>
+</div></div>
+
+<div class="preview" id="preview">
+  <img id="previewImg" alt="">
+  <div class="pvbar">
+    <span class="pvname" id="previewName"></span>
+    <button class="btn sm" id="previewFlip" style="display:none;">Other face</button>
+  </div>
+</div>
+
+<div class="modal" id="endModal"><div class="sheet" style="max-width:340px;text-align:center;">
+  <header><h2 id="endTitle">Match over</h2></header>
+  <div class="content">
+    <div id="endBody" style="font-size:15px;line-height:1.45;margin:8px 0 18px;"></div>
+    <button class="btn gold" id="endMenuBtn" style="width:100%;padding:12px;">Main menu</button>
+  </div>
+</div></div>
+
+<div class="cardmenu" id="cardMenu"></div>
+<div class="toast" id="toast"></div>
+<div class="rotate"><div><h2>Turn the phone sideways</h2>
+  <p class="hint">The table is built for landscape.</p></div></div>
+
+<script>
+/* ============================================================
+   Proxy Table — honor-system MTG playtest tabletop.
+   Accounts/decks/challenges live on a Cloudflare Worker + D1.
+   Live matches run inside a Durable Object over WebSockets so
+   both seats stay in sync with low latency. Rules stay off-app.
+   ============================================================ */
+
+/* Bumped every time I hand you a new index.html. It's shown on the sign-in
+   panel and next to your name in the menu bar, so you can confirm at a glance
+   which build the browser actually loaded. */
+const BUILD = "v2.1.7-do";
+
+/* Deployed Worker API. Override at runtime if needed by setting
+   window.PT_API_BASE before this script runs. */
+const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const uid = () => Math.random().toString(36).slice(2,10);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function api(path, opts){
+  const res = await fetch(API_BASE + path, { headers: {"Content-Type":"application/json"}, ...opts });
+  let data = null;
+  try{ data = await res.json(); }catch(e){}
+  if (!res.ok) throw Object.assign(new Error((data && data.error) || ("request failed: "+res.status)), {status:res.status, data});
+  return data;
+}
+
+const FORMATS = {
+  commander:{life:40,size:100,max:1,label:"Commander"},
+  modern:{life:20,size:60,max:4,label:"Modern"},
+  standard:{life:20,size:60,max:4,label:"Standard"},
+  pioneer:{life:20,size:60,max:4,label:"Pioneer"},
+  legacy:{life:20,size:60,max:4,label:"Legacy"},
+  vintage:{life:20,size:60,max:4,label:"Vintage"},
+  pauper:{life:20,size:60,max:4,label:"Pauper"},
+  freeform:{life:20,size:0,max:99,label:"Freeform"}
+};
+/* Display order — most common / legality-checked first */
+const FORMAT_ORDER = ["commander","modern","standard","pioneer","legacy","vintage","pauper","freeform"];
+
+/* A deck restored from a hand-edited backup could carry a format we don't
+   know; fall back rather than throwing on every render. */
+const fmt = f => FORMATS[f] || FORMATS.freeform;
+
+let decks = [], G = null, G2 = null, opp = null, twoSided = false;
+let currentUser = null, currentMatch = null, oppName = null, playerName = "Player";
+/* matchWs, statePushTimer, dealPrompted, pendingLoss live in the SYNC section */
+
+/* ============================================================
+   ACCOUNTS — no password; typing a name is the whole sign-in
+   ============================================================ */
+function getStoredUser(){ try{ return localStorage.getItem("pt_user") || null; }catch(e){ return null; } }
+function setStoredUser(u){ try{ u ? localStorage.setItem("pt_user", u) : localStorage.removeItem("pt_user"); }catch(e){} }
+
+$("#loginGo").onclick = async () => {
+  const name = $("#loginName").value.trim();
+  $("#loginErr").textContent = "";
+  if (!/^[A-Za-z0-9_ -]{2,20}$/.test(name)){
+    $("#loginErr").textContent = "2-20 characters: letters, numbers, spaces, - or _."; return;
+  }
+  $("#loginGo").disabled = true;
+  try{
+    try{
+      await api("/api/account", {method:"POST", body: JSON.stringify({username:name})});
+    }catch(e){
+      if (e.status !== 409) throw e;
+      // already registered — with no password, typing the name back in IS the sign-in
+    }
+    setStoredUser(name);
+    await enterAsUser(name);
+  }catch(e){
+    if (e.data && e.data.error) $("#loginErr").textContent = e.data.error;
+    else $("#loginErr").textContent = "Couldn't reach the server. Check the connection and try again.";
+  }
+  $("#loginGo").disabled = false;
+};
+$("#loginName").addEventListener("keydown", e => { if (e.key === "Enter") $("#loginGo").click(); });
+
+$("#menuSwitch").onclick = () => {
+  stopSync(); setStoredUser(null); currentUser = null;
+  show("#loginScreen"); $("#loginName").value = ""; $("#loginName").focus();
+};
+
+async function enterAsUser(name){
+  currentUser = name; playerName = name;
+  show("#menuScreen"); $("#menuWho").textContent = name + " · " + BUILD;
+  await Promise.all([loadDecks(), loadMatches()]);
+}
+
+/* ============================================================
+   DECKS (server-backed, cached locally for offline viewing)
+   ============================================================ */
+function cacheKey(){ return "pt_decks_" + currentUser; }
+async function loadDecks(){
+  try{
+    const d = await api("/api/decks?username=" + encodeURIComponent(currentUser));
+    decks = d.decks;
+    try{ localStorage.setItem(cacheKey(), JSON.stringify(decks)); }catch(e){}
+    setBanner(null);
+  }catch(e){
+    try{ decks = JSON.parse(localStorage.getItem(cacheKey()) || "[]"); }catch(e2){ decks = []; }
+    setBanner("Couldn't reach the server — showing the last-known copy of your decks. Changes won't save until you're back online.");
+  }
+  renderDecks();
+}
+function setBanner(msg){ $("#menuBanner").style.display = msg ? "" : "none"; $("#menuBanner").textContent = msg || ""; }
+async function saveDeckToServer(deck){
+  await api("/api/decks/" + deck.id, {
+    method:"PUT",
+    body: JSON.stringify({username:currentUser, name:deck.name, format:deck.format, raw:deck.raw,
+      cards:deck.cards, main:deck.main, side:deck.side, commander:deck.commander})
+  });
+  try{ localStorage.setItem(cacheKey(), JSON.stringify(decks)); }catch(e){}
+}
+
+/* ============================================================
+   DECK IMPORT — parsing and Scryfall lookup
+   ============================================================ */
+function parseLine(line){
+  let s = line.trim();
+  s = s.replace(/\s*\*[A-Za-z]{1,3}\*/g, "");
+  s = s.replace(/\s*\^[^^]*\^/g, "");
+  s = s.replace(/\s*<[^>]*>/g, "");
+  const q = s.match(/^(\d+)\s*[xX]?\s+/);
+  const qty = q ? parseInt(q[1],10) : 1;
+  if (q) s = s.slice(q[0].length);
+  let set = "", cn = "";
+  const sm = s.match(/[([]([A-Za-z0-9]{2,6})[)\]]\s*([A-Za-z0-9\u2605-]+)?/);
+  if (sm){ set = sm[1].toLowerCase(); cn = (sm[2] || "").trim(); s = s.slice(0, sm.index); }
+  s = s.replace(/\s*\[[^\]]*\]\s*$/, "");
+  s = s.replace(/\s*\{[^}]*\}\s*$/, "");
+  return {qty, name:s.trim(), set, cn};
+}
+function parseList(text){
+  const out = {main:[], side:[], commander:[]};
+  let bucket = "main";
+  for (const raw of text.split(/\r?\n/)){
+    const line = raw.trim();
+    if (!line || line.startsWith("//") || line.startsWith("#")) continue;
+    const flag = line.toUpperCase().replace(/[^A-Z]/g,"");
+    if (flag === "SIDEBOARD"){ bucket = "side"; continue; }
+    if (flag === "COMMANDER"){ bucket = "commander"; continue; }
+    if (flag === "DECK" || flag === "MAINBOARD"){ bucket = "main"; continue; }
+    if (flag === "MAYBEBOARD" || flag === "TOKENS"){ bucket = "skip"; continue; }
+    if (bucket === "skip") continue;
+    const e = parseLine(line);
+    if (!e.name) continue;
+    e.raw = line;
+    out[bucket].push(e);
+  }
+  return out;
+}
+async function lookup(entries, onProgress){
+  const byKey = new Map();
+  const keyOf = e => (e.set && e.cn) ? "s:"+e.set+"|"+e.cn.toLowerCase() : "n:"+e.name.toLowerCase();
+  const idOf  = e => (e.set && e.cn) ? {set:e.set, collector_number:e.cn}
+                   : e.set ? {name:e.name, set:e.set} : {name:e.name};
+  const index = c => {
+    byKey.set("s:"+c.set+"|"+String(c.collector_number).toLowerCase(), c);
+    byKey.set("n:"+c.name.toLowerCase(), c);
+    if (c.card_faces && c.card_faces[0]) byKey.set("n:"+c.card_faces[0].name.toLowerCase(), c);
+  };
+  const resolve = e => byKey.get(keyOf(e)) || byKey.get("n:"+e.name.toLowerCase()) || null;
+  const want = new Map();
+  entries.forEach(e => { if (!want.has(keyOf(e))) want.set(keyOf(e), e); });
+  const all = [...want.values()];
+  let done = 0, total = all.length;
+  async function pass(list, makeId){
+    for (let i=0; i<list.length; i+=75){
+      const chunk = list.slice(i, i+75);
+      const res = await fetch("https://api.scryfall.com/cards/collection", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({identifiers: chunk.map(makeId)})
+      });
+      if (!res.ok) throw new Error("Scryfall returned " + res.status);
+      const d = await res.json();
+      (d.data||[]).forEach(index);
+      done += chunk.length;
+      onProgress && onProgress(Math.min(done,total), total);
+      if (i+75 < list.length) await new Promise(r => setTimeout(r,120));
+    }
+  }
+  await pass(all, idOf);
+  const retry = all.filter(e => !resolve(e));
+  if (retry.length){ done = Math.max(0, total - retry.length); await pass(retry, e => ({name:e.name})); }
+  return {resolve, missing: all.filter(e => !resolve(e))};
+}
+const faceImage = c => c.image_uris ? (c.image_uris.normal||c.image_uris.large)
+  : (c.card_faces && c.card_faces[0].image_uris ? c.card_faces[0].image_uris.normal : "");
+const backImage = c => (c.card_faces && c.card_faces[1] && c.card_faces[1].image_uris)
+  ? c.card_faces[1].image_uris.normal : "";
+const slim = c => ({oid:c.id, name:c.name, img:faceImage(c), back:backImage(c),
+  type:c.type_line||"", cmc:c.cmc||0, rarity:c.rarity||"", legal:c.legalities||{}});
+
+function checkLegal(deck){
+  const f = fmt(deck.format);
+  if (!f || deck.format === "freeform") return [];
+  const notes = [];
+  const total = deck.main.reduce((a,c)=>a+c.qty,0) + deck.commander.reduce((a,c)=>a+c.qty,0);
+  if (f.size && total < f.size) notes.push(`${total} cards — ${f.label} wants at least ${f.size}.`);
+  if (deck.format === "commander" && total > 100) notes.push(`${total} cards — Commander wants exactly 100.`);
+  for (const c of deck.main){
+    const card = deck.cards[c.name]; if (!card) continue;
+    if (/Basic/.test(card.type)) continue;
+    if (c.qty > f.max) notes.push(`${c.qty}× ${c.name} — limit is ${f.max}.`);
+    const st = (card.legal || {})[deck.format];
+    if (st === "banned") notes.push(`${c.name} is banned.`);
+    if (st === "restricted") notes.push(`${c.name} is restricted to 1.`);
+    if (st === "not_legal") notes.push(`${c.name} isn't in the ${f.label} card pool.`);
+  }
+  if (deck.format === "commander" && !deck.commander.length)
+    notes.push("No commander set. Put the card under a COMMANDER line.");
+  return notes;
+}
+
+/* ============================================================
+   DECK SCREEN
+   ============================================================ */
+function renderDecks(){
+  const el = $("#deckList");
+  if (!decks.length){
+    el.innerHTML = `<div class="empty"><h2>No decks yet</h2>
+      <p>Paste a decklist and the cards get pulled from Scryfall with art.</p></div>`;
+    return;
+  }
+  el.innerHTML = decks.map((d,i) => {
+    const n = d.main.reduce((a,c)=>a+c.qty,0) + d.commander.reduce((a,c)=>a+c.qty,0);
+    const issues = checkLegal(d);
+    return `<div class="deckcard"><h3>${esc(d.name)}</h3>
+      <div class="meta">${fmt(d.format).label} · ${n} cards ·
+        ${issues.length ? `<span style="color:var(--blood)">${issues.length} note${issues.length>1?"s":""}</span>`
+                        : `<span style="color:var(--good)">legal</span>`}</div>
+      <div class="row">
+        <button class="btn gold sm" data-play="${i}">Practice</button>
+        <button class="btn sm" data-edit="${i}">Edit</button>
+        <button class="btn sm" data-check="${i}">Check</button>
+        <button class="btn sm" data-del="${i}">Delete</button>
+      </div></div>`;
+  }).join("");
+}
+let editIndex = -1;
+$("#deckBack").onclick = () => show("#menuScreen");
+$("#menuDecks").onclick = () => show("#deckScreen");
+$("#menuPractice").onclick = () => show("#deckScreen");
+$("#newDeckBtn").onclick = () => { editIndex = -1; $("#deckModalTitle").textContent = "Add a deck";
+  $("#dName").value=""; $("#dList").value=""; $("#importStatus").textContent=""; open("#deckModal"); };
+
+$("#deckList").onclick = async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.play !== undefined){
+    currentMatch = null; G2 = null; twoSided = false; opp = null;
+    openNewGameModal(+b.dataset.play);
+  }
+  if (b.dataset.del !== undefined){
+    const d = decks[+b.dataset.del];
+    decks.splice(+b.dataset.del,1); renderDecks();
+    try{ await api("/api/decks/"+d.id+"?username="+encodeURIComponent(currentUser), {method:"DELETE"}); }
+    catch(e){ toast("Deleted here, but the server didn't confirm it — check your connection.", 4000); }
+  }
+  if (b.dataset.check !== undefined){
+    const n = checkLegal(decks[+b.dataset.check]);
+    toast(n.length ? n.slice(0,3).join("  ·  ") : "Deck checks out.", 4200);
+  }
+  if (b.dataset.edit !== undefined){
+    const d = decks[editIndex = +b.dataset.edit];
+    $("#deckModalTitle").textContent = "Edit deck";
+    $("#dName").value = d.name; $("#dFormat").value = d.format; $("#dList").value = d.raw || "";
+    $("#importStatus").textContent = ""; open("#deckModal");
+  }
+};
+
+let pending = null;
+$("#dSave").onclick = async () => {
+  const name = $("#dName").value.trim() || "Untitled deck";
+  const format = $("#dFormat").value, raw = $("#dList").value;
+  const p = parseList(raw), all = [...p.main, ...p.side, ...p.commander];
+  if (!all.length){ $("#importStatus").textContent = "Nothing to import — the list is empty."; return; }
+  $("#dSave").disabled = true; $("#importStatus").textContent = "Looking up cards…";
+  try{
+    const {resolve, missing} = await lookup(all, (a,b) =>
+      $("#importStatus").textContent = `Looking up cards… ${a}/${b}`);
+    pending = {name, format, raw, p, resolve};
+    $("#importStatus").textContent = "";
+    if (missing.length) showMissing(missing, p); else commitDeck();
+  }catch(err){
+    $("#importStatus").textContent = "Import failed: " + err.message + ". Check the card names and try again.";
+  }
+  $("#dSave").disabled = false;
+};
+function showMissing(missing, p){
+  const lost = missing.reduce((a,e) => a + e.qty, 0);
+  const want = [...p.main, ...p.commander].reduce((a,e) => a + e.qty, 0);
+  $("#missCount").textContent =
+    `${want - lost} of ${want} cards found. These ${missing.length} line${missing.length>1?"s":""} didn't match anything on Scryfall:`;
+  $("#missList").innerHTML = missing.map(e =>
+    `<div class="missrow"><span class="mq">${e.qty}×</span><span class="mn">${esc(e.name)}</span>
+       ${e.set ? `<span class="ms">${esc(e.set.toUpperCase())}${e.cn ? " "+esc(e.cn) : ""}</span>` : ""}</div>`).join("");
+  open("#missModal");
+}
+$("#missBack").onclick = () => { close("#missModal"); pending = null; };
+$("#missAnyway").onclick = () => { close("#missModal"); commitDeck(); };
+
+async function commitDeck(){
+  if (!pending) return;
+  const {name, format, raw, p, resolve} = pending;
+  const cards = {};
+  const fix = list => list.map(e => {
+    const c = resolve(e); if (!c) return null;
+    cards[c.name] = slim(c); return {qty:e.qty, name:c.name};
+  }).filter(Boolean);
+  const deck = {id: editIndex >= 0 ? decks[editIndex].id : uid(), name, format, raw, cards,
+    main:fix(p.main), side:fix(p.side), commander:fix(p.commander)};
+  const n = deck.main.reduce((a,c)=>a+c.qty,0) + deck.commander.reduce((a,c)=>a+c.qty,0);
+  if (editIndex >= 0) decks[editIndex] = deck; else decks.push(deck);
+  renderDecks(); pending = null; close("#deckModal");
+  try{
+    await saveDeckToServer(deck);
+    toast(`${deck.name} saved — ${n} cards.`);
+  }catch(e){
+    toast("Cards loaded, but saving to the server failed — check your connection and try again from Edit.", 5000);
+  }
+}
+
+/* ============================================================
+   BACKUP (local file, on top of the server copy)
+   ============================================================ */
+$("#backupBtn").onclick = () => { $("#bkStatus").textContent = ""; open("#backupModal"); };
+function saveFile(filename, text, type){
+  const url = URL.createObjectURL(new Blob([text], {type}));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+const stamp = () => new Date().toISOString().slice(0,10);
+$("#bkExport").onclick = () => {
+  if (!decks.length) return $("#bkStatus").textContent = "No decks to export yet.";
+  saveFile(`proxytable-decks-${stamp()}.json`,
+    JSON.stringify({app:"proxytable", version:1, saved:new Date().toISOString(), decks}, null, 1), "application/json");
+  $("#bkStatus").textContent = `Exported ${decks.length} deck${decks.length>1?"s":""}.`;
+};
+$("#bkExportTxt").onclick = () => {
+  if (!decks.length) return $("#bkStatus").textContent = "No decks to export yet.";
+  saveFile(`proxytable-decklists-${stamp()}.txt`,
+    decks.map(d => `=== ${d.name} (${fmt(d.format).label}) ===\n${d.raw||""}`).join("\n\n"), "text/plain");
+  $("#bkStatus").textContent = "Decklists exported as plain text.";
+};
+let incoming = null;
+$("#bkFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    const text = await f.text();
+    if (f.name.endsWith(".json")){
+      const data = JSON.parse(text);
+      const list = Array.isArray(data) ? data : data.decks;
+      if (!Array.isArray(list)) throw new Error("no decks in that file");
+      incoming = list;
+      $("#bkStatus").textContent = `${list.length} deck${list.length>1?"s":""} ready — tap Add to my decks.`;
+    } else {
+      $("#dName").value = f.name.replace(/\.txt$/,"");
+      $("#dList").value = text; incoming = null; close("#backupModal"); editIndex = -1;
+      $("#deckModalTitle").textContent = "Add a deck"; open("#deckModal");
+      toast("Decklist loaded — pick a format and fetch the cards.");
+    }
+  }catch(err){ $("#bkStatus").textContent = "Couldn't read that file: " + err.message; }
+};
+$("#bkAdd").onclick = async () => {
+  if (!incoming) return $("#bkStatus").textContent = "Pick a backup file first.";
+  let ok = 0;
+  for (const d of incoming){
+    const deck = {...d, id: uid()};
+    decks.push(deck);
+    try{ await saveDeckToServer(deck); ok++; }catch(e){}
+  }
+  renderDecks();
+  $("#bkStatus").textContent = ok === incoming.length ? `Added ${ok}.` : `Added ${ok} of ${incoming.length} — the rest failed to save.`;
+  incoming = null;
+};
+
+/* ============================================================
+   MATCHES + CHALLENGES
+   ============================================================ */
+async function loadMatches(){
+  try{ const d = await api("/api/matches?username=" + encodeURIComponent(currentUser)); renderMatches(d.matches); }
+  catch(e){ /* offline: leave whatever was already shown */ }
+}
+function relTime(iso){
+  const s = (Date.now() - new Date(iso+"Z").getTime()) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s/60) + "m ago";
+  if (s < 86400) return Math.floor(s/3600) + "h ago";
+  return Math.floor(s/86400) + "d ago";
+}
+function renderMatches(matches){
+  const el = $("#matchList");
+  if (!matches.length){ el.innerHTML = `<p class="hint">No matches yet — challenge someone below.</p>`; return; }
+  el.innerHTML = matches.map(m => `
+    <div class="matchrow">
+      <div style="flex:1;">
+        <div class="who">${esc(m.opponent || "waiting for opponent")}</div>
+        <div class="when">${relTime(m.updated_at)}</div>
+      </div>
+      <button class="btn gold sm" data-rejoin="${m.id}">Rejoin</button>
+      <button class="btn sm" data-abandon="${m.id}">Abandon</button>
+    </div>`).join("");
+  el.onclick = e => {
+    const re = e.target.closest("button[data-rejoin]");
+    if (re) return rejoinMatch(re.dataset.rejoin);
+    const ab = e.target.closest("button[data-abandon]");
+    if (ab) abandonMatch(ab.dataset.abandon);
+  };
+}
+function rejoinMatch(matchId){
+  currentMatch = matchId; G = null; G2 = null; twoSided = false; opp = null;
+  goTable();
+}
+async function abandonMatch(matchId){
+  if (!matchId) return;
+  if (!confirm("Abandon this match? No win/loss will be recorded.")) return;
+  // Tell the other player via the live socket first
+  if (currentMatch === matchId && matchWs && matchWs.readyState === 1) {
+    try { matchWs.send(JSON.stringify({ type: "abandon" })); } catch (_) {}
+  }
+  try {
+    await api(`/api/match/${matchId}/abandon`, {
+      method: "POST",
+      body: JSON.stringify({ username: currentUser })
+    });
+  } catch (e) {
+    // still leave locally even if HTTP fails
+  }
+  leaveMatchLocal("Match abandoned.");
+}
+function leaveMatchLocal(msg){
+  stopSync();
+  currentMatch = null;
+  G = null; G2 = null; opp = null; twoSided = false;
+  if (msg) toast(msg, 4000);
+  show("#menuScreen");
+  loadMatches();
+  closeEndScreen();
+}
+
+$("#menuChallenge").onclick = () => { switchTab("tabName"); open("#challengeModal"); };
+$("#menuCode").onclick = () => { switchTab("tabCode"); open("#challengeModal"); };
+function switchTab(id){
+  $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === id));
+  $$(".tabpane").forEach(p => p.classList.toggle("on", p.id === id));
+}
+$("#chTabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (b) switchTab(b.dataset.tab); });
+
+$("#chSend").onclick = async () => {
+  const to = $("#chName").value.trim();
+  if (!to){ $("#chNameStatus").textContent = "Enter their username."; return; }
+  $("#chSend").disabled = true; $("#chNameStatus").textContent = "Sending…";
+  try{
+    const r = await api("/api/challenge", {method:"POST", body: JSON.stringify({from:currentUser, to})});
+    $("#chNameStatus").textContent = `Challenge sent. If ${to} doesn't get a notification, tell them the code: ${r.code}`;
+    pollChallenge(r.code);
+  }catch(e){ $("#chNameStatus").textContent = e.data && e.data.error ? e.data.error : "Couldn't send that challenge."; }
+  $("#chSend").disabled = false;
+};
+$("#chGetCode").onclick = async () => {
+  $("#chCodeStatus").textContent = "Opening…";
+  try{
+    const r = await api("/api/challenge", {method:"POST", body: JSON.stringify({from:currentUser})});
+    $("#codeBox").style.display = ""; $("#codeBig").textContent = r.code;
+    $("#chCodeStatus").textContent = "Waiting for your buddy to join. Good for 24 hours.";
+    try{ await navigator.clipboard.writeText(r.code); $("#chCodeStatus").textContent += " Copied to your clipboard."; }catch(e){}
+    pollChallenge(r.code);
+  }catch(e){ $("#chCodeStatus").textContent = "Couldn't open a table right now."; }
+};
+$("#codeCopy").onclick = async () => { try{ await navigator.clipboard.writeText($("#codeBig").textContent); toast("Copied."); }catch(e){} };
+$("#chJoin").onclick = async () => {
+  const code = $("#chJoinCode").value.trim().toUpperCase();
+  if (!code){ $("#chCodeStatus").textContent = "Enter a code."; return; }
+  $("#chJoin").disabled = true; $("#chCodeStatus").textContent = "Joining…";
+  try{
+    const r = await api(`/api/challenge/${code}/accept`, {method:"POST", body: JSON.stringify({username:currentUser})});
+    close("#challengeModal"); rejoinMatch(r.matchId); loadMatches();
+  }catch(e){ $("#chCodeStatus").textContent = e.data && e.data.error ? e.data.error : "Couldn't join that table."; }
+  $("#chJoin").disabled = false;
+};
+let challengePoll = null;
+function pollChallenge(code){
+  clearInterval(challengePoll);
+  challengePoll = setInterval(async () => {
+    try{
+      const r = await api("/api/challenge/" + code);
+      if (r.challenge.status === "accepted"){
+        clearInterval(challengePoll); close("#challengeModal");
+        rejoinMatch(r.challenge.match_id); loadMatches();
+      } else if (r.challenge.status === "expired" || r.challenge.status === "declined"){
+        clearInterval(challengePoll);
+        toast(r.challenge.status === "declined" ? "They declined." : "That challenge expired.");
+      }
+    }catch(e){}
+  }, 4000);
+}
+
+/* ============================================================
+   NEW GAME MODAL — format first, then filtered decks
+   ============================================================ */
+function openNewGameModal(preselectIdx){
+  const fmtSel = $("#ngFormat");
+  fmtSel.innerHTML = FORMAT_ORDER.map(k =>
+    `<option value="${k}">${FORMATS[k].label}</option>`).join("");
+
+  // Prefer the preselected deck's format, else commander, else first owned format
+  let startFmt = "commander";
+  if (preselectIdx !== undefined && decks[preselectIdx]) {
+    startFmt = decks[preselectIdx].format || "commander";
+  } else if (G && G.format) {
+    startFmt = G.format;
+  } else {
+    const owned = FORMAT_ORDER.find(k => decks.some(d => d.format === k));
+    if (owned) startFmt = owned;
+  }
+  fmtSel.value = startFmt;
+
+  function fillDecks(){
+    const f = fmtSel.value;
+    const matched = decks
+      .map((d,i) => ({d,i}))
+      .filter(x => (x.d.format || "freeform") === f);
+    const sel = $("#ngDeck");
+    if (!matched.length){
+      sel.innerHTML = `<option value="">No ${fmt(f).label} decks yet</option>`;
+      sel.disabled = true;
+      $("#ngStart").disabled = true;
+      $("#ngLegal").textContent = "Add a deck in this format first.";
+      $("#ngLife").value = fmt(f).life;
+      return;
+    }
+    sel.disabled = false;
+    $("#ngStart").disabled = false;
+    sel.innerHTML = matched.map(({d,i}) =>
+      `<option value="${i}">${esc(d.name)}</option>`).join("");
+    if (preselectIdx !== undefined && matched.some(x => x.i === preselectIdx)) {
+      sel.value = String(preselectIdx);
+    }
+    syncNgFromDeck();
+  }
+  function syncNgFromDeck(){
+    const d = decks[+$("#ngDeck").value];
+    const f = fmtSel.value;
+    $("#ngLife").value = d ? fmt(d.format).life : fmt(f).life;
+    $("#ngLegal").textContent = d
+      ? (checkLegal(d).join("  ·  ") || "Deck is legal for its format.")
+      : "";
+  }
+  fmtSel.onchange = fillDecks;
+  $("#ngDeck").onchange = syncNgFromDeck;
+  fillDecks();
+  open("#newGameModal");
+}
+$("#ngStart").onclick = () => {
+  const d = decks[+$("#ngDeck").value];
+  if (!d) return toast("Pick a deck.");
+  const life = +$("#ngLife").value || fmt(d.format).life;
+  close("#newGameModal");
+  if (currentMatch && G) {
+    // Already mid-match — optional result, then mutual reset
+    requestNewGame(d, life);
+  } else {
+    // Practice, or first deal-in to a live match
+    startGame(d, life);
+    if ($("#tableScreen").classList.contains("on")) {
+      renderAll(); pushState();
+    } else {
+      goTable();
+    }
+  }
+};
+
+/* ============================================================
+   GAME STATE
+   ============================================================ */
+const mkCard = c => ({id:uid(), oid:c.oid, name:c.name, img:c.img, back:c.back, type:c.type,
+  x:50, y:50, tapped:false, ctr:0, faceDown:false, flipped:false});
+
+function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+function newGameState(deck, life){
+  const lib = [], cmd = [];
+  deck.main.forEach(e => { for (let i=0;i<e.qty;i++) lib.push(mkCard(deck.cards[e.name])); });
+  deck.commander.forEach(e => { for (let i=0;i<e.qty;i++) cmd.push(mkCard(deck.cards[e.name])); });
+  shuffle(lib);
+  const g = {deckId:deck.id, deckName:deck.name, format:deck.format,
+    life: life ?? fmt(deck.format).life,
+    library:lib, hand:[], field:[], grave:[], exile:[], command:cmd, turn:1, active:true};
+  for (let i=0;i<7 && g.library.length;i++) g.hand.push(g.library.pop());
+  return g;
+}
+function startGame(deck, life){
+  G = newGameState(deck, life);
+  $("#gmLife").value = G.life;
+  if (myZoom) myZoom.reset();
+  if (oppZoom) oppZoom.reset();
+  document.documentElement.style.setProperty("--hand-zoom", "1");
+  renderAll(); pushState();
+  toast(`${deck.name} — ${fmt(deck.format).label}. Opening hand of 7.`);
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+/* In solo play the second seat is a real game state we also control, shaped
+   into the same read-only view the networked opponent uses so one renderer
+   serves both. */
+function oppView(g){
+  if (!g) return null;
+  return {name: g.deckName || "other seat", deckName: g.deckName, life: g.life,
+    turn: g.turn || 1, active: g.active !== false,
+    hand: g.hand.length, library: g.library.length, command: g.command,
+    field: g.field, grave: g.grave, exile: g.exile,
+    /* without this, a target declared from one seat vanishes the moment
+       you swap to the other */
+    pending: g.pending || [],
+    topCard: (g.topRevealed && g.library.length) ? g.library[g.library.length-1] : null};
+}
+/* A seat with no board is a real state, not a broken one: you've joined a
+   match but haven't dealt in yet. Bailing out of the renderer here left the
+   whole table frozen on its static HTML — life stuck at 20, buttons dead,
+   no way to tell that nothing had loaded. Draw the empty seat instead. */
+function renderEmptySeat(){
+  [...$("#myFieldInner").querySelectorAll(".card")].forEach(el => el.remove());
+  [...$("#hand").querySelectorAll(".card")].forEach(el => el.remove());
+  updateHandRail();
+  $("#libN").textContent = "0"; $("#gyN").textContent = "0";
+  $("#exN").textContent = "0";  $("#cmdN").textContent = "0";
+  ["#gyArt","#cmdArt","#libArt"].forEach(s => { $(s).removeAttribute("src"); $(s).style.display = "none"; });
+  $("#zLib").classList.remove("revealed");
+  $("#zCmd").style.display = "none";
+}
+function renderAll(){
+  if (twoSided) opp = oppView(G2);
+  if (!G){
+    renderEmptySeat(); renderLife(); renderOpp(); renderTargetBar();
+    if (!currentMatch) setSyncStatus(false, null);
+    return;
+  }
+  renderField(); renderHand(); renderZones(); renderLife(); renderOpp();
+  renderTargetBar();
+  if (!currentMatch) setSyncStatus(false, null);
+}
+function mkCardEl(c){
+  const el = document.createElement("div");
+  el.className = "card"; el.dataset.id = c.id;
+  el.innerHTML = `<img alt=""><div class="ctr" style="display:none"></div>`;
+  return el;
+}
+function paint(el, c){
+  const img = el.querySelector("img");
+  const src = c.faceDown ? "" : (c.flipped && c.back ? c.back : c.img);
+  if (!src) img.removeAttribute("src");
+  else if (img.getAttribute("src") !== src) img.src = src;
+  el.classList.toggle("back", !!c.faceDown);
+  img.style.display = c.faceDown ? "none" : "block";
+  el.classList.toggle("tapped", !!c.tapped);
+  el.classList.toggle("borrowed", !!c.own);
+  el.classList.toggle("pending", !!c.pendingControl);
+  const ctr = el.querySelector(".ctr");
+  ctr.style.display = c.ctr ? "flex" : "none";
+  ctr.textContent = c.ctr > 0 ? "+"+c.ctr : c.ctr;
+}
+function syncField(host, cards, place, decorate){
+  const keep = new Set(cards.map(c => c.id));
+  [...host.querySelectorAll(".card")].forEach(el => { if (!keep.has(el.dataset.id)) el.remove(); });
+  cards.forEach(c => {
+    let el = host.querySelector(`.card[data-id="${c.id}"]`);
+    if (!el){ el = mkCardEl(c); host.appendChild(el); decorate && decorate(el, c); }
+    paint(el, c); place(el, c);
+  });
+}
+/* A card is a big fraction of a phone-sized battlefield, so positions are
+   stored as the top-left corner and every place/clamp has to account for the
+   card's own width and height — otherwise the mirrored copy on the other side
+   of the table hangs off the edge. Measured on the un-transformed host, not
+   the pinch-scaled inner layer. */
+function cardPct(hostSel){
+  const r = $(hostSel).getBoundingClientRect();
+  const cs = getComputedStyle(document.documentElement);
+  const w = parseFloat(cs.getPropertyValue("--card-w")) || 64;
+  const h = parseFloat(cs.getPropertyValue("--card-h")) || 89;
+  return {w: r.width ? w / r.width * 100 : 12, h: r.height ? h / r.height * 100 : 40};
+}
+/* keep a card fully inside its own half of the table */
+function clampPos(c){
+  const p = cardPct("#myField");
+  c.x = clamp(c.x, 0, Math.max(0, 100 - p.w));
+  c.y = clamp(c.y, 0, Math.max(0, 100 - p.h));
+  return c;
+}
+function renderField(){
+  const p = cardPct("#myField");
+  syncField($("#myFieldInner"), G.field, (el,c) => {
+    el.style.left = clamp(c.x, 0, Math.max(0, 100 - p.w)) + "%";
+    el.style.top  = clamp(c.y, 0, Math.max(0, 100 - p.h)) + "%";
+  }, (el,c) => attachDrag(el,c));
+}
+function renderHand(){
+  const h = $("#hand");
+  syncField(h, G.hand, () => {}, (el,c) => attachHandDrag(el, c));
+  G.hand.forEach(c => h.appendChild(h.querySelector(`.card[data-id="${c.id}"]`)));
+  updateHandRail();
+}
+/* The rail is the only way to scroll the hand now that cards claim every
+   drag direction, so it has to be a real element — not a native scrollbar. */
+function updateHandRail(){
+  const h = $("#hand"), rail = $("#handRail"), thumb = $("#handThumb");
+  const over = h.scrollWidth - h.clientWidth;
+  /* the rail stays put whether or not there's anything to scroll — a bar that
+     appears and disappears with one card reads as a rendering glitch. When the
+     hand fits, the thumb fills the rail and dims. */
+  rail.classList.toggle("full", over <= 1);
+  if (over <= 1){ thumb.style.width = "100%"; thumb.style.left = "0px"; return; }
+  const w = Math.max(30, rail.clientWidth * (h.clientWidth / h.scrollWidth) * 0.9);
+  thumb.style.width = w + "px";
+  thumb.style.left = (h.scrollLeft / over) * (rail.clientWidth - w) + "px";
+}
+(function wireHandRail(){
+  const h = $("#hand"), rail = $("#handRail"), thumb = $("#handThumb");
+  let grab = null;
+  const posTo = clientX => {
+    const rr = rail.getBoundingClientRect();
+    const w = thumb.offsetWidth;
+    const left = clamp(clientX - rr.left - w/2, 0, rr.width - w);
+    const over = h.scrollWidth - h.clientWidth;
+    h.scrollLeft = (rr.width - w) ? left / (rr.width - w) * over : 0;
+    updateHandRail();
+  };
+  rail.addEventListener("pointerdown", e => {
+    if (rail.classList.contains("full")) return;
+    grab = e.pointerId; rail.setPointerCapture(e.pointerId);
+    rail.classList.add("grabbed"); posTo(e.clientX);
+  });
+  rail.addEventListener("pointermove", e => { if (grab === e.pointerId) posTo(e.clientX); });
+  const drop = e => { if (grab === e.pointerId){ grab = null; rail.classList.remove("grabbed"); } };
+  rail.addEventListener("pointerup", drop);
+  rail.addEventListener("pointercancel", drop);
+  h.addEventListener("scroll", updateHandRail);
+  addEventListener("resize", updateHandRail);
+})();
+
+/* Drag a card up out of the hand and drop it where you want it. A horizontal
+   drag still scrolls the hand, and a plain tap still opens the card menu. */
+function attachHandDrag(el, c){
+  let sx, sy, decided = null, ghost = null;
+  el.addEventListener("pointerdown", e => {
+    if (pinching) return;
+    sx = e.clientX; sy = e.clientY; decided = null;
+  });
+  el.addEventListener("pointermove", e => {
+    if (sx === undefined || pinching) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!decided){
+      if (Math.hypot(dx,dy) < 9) return;
+      /* any direction picks the card up — the strip has a scrollbar now, so
+         a sideways drag no longer has to be reserved for scrolling */
+      decided = "lift";
+      {
+        el.setPointerCapture(e.pointerId);
+        closeCardMenu();
+        ghost = document.createElement("div");
+        ghost.className = "dragghost";
+        ghost.style.width = el.offsetWidth + "px";
+        ghost.style.height = el.offsetHeight + "px";
+        ghost.innerHTML = `<img src="${c.faceDown ? "" : c.img}" alt="">`;
+        document.body.appendChild(ghost);
+        el.style.opacity = ".35";
+      }
+    }
+    if (decided !== "lift") return;
+    ghost.style.left = e.clientX + "px";
+    ghost.style.top = e.clientY + "px";
+    highlightDrop(dropTargetAt(e.clientX, e.clientY));
+  });
+  const finish = e => {
+    if (decided === "lift"){
+      const target = dropTargetAt(e.clientX, e.clientY);
+      const box = $("#myFieldInner").getBoundingClientRect();
+      if (ghost) ghost.remove();
+      ghost = null;
+      el.style.opacity = "";
+      highlightDrop(null);
+      if (target === "field"){
+        const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-w")) || 64;
+        const ch = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-h")) || 89;
+        G.hand.splice(G.hand.indexOf(c), 1);
+        c.x = (e.clientX - box.left - cw/2) / box.width * 100;
+        c.y = (e.clientY - box.top - ch/2) / box.height * 100;
+        clampPos(c);
+        c.tapped = false; c.faceDown = false;
+        G.field.push(c);
+        renderAll(); pushState();
+      } else if (target && target !== "hand"){
+        const where = dropInto(c, "hand", target);
+        renderAll(); pushState();
+        toast(`${c.name} to ${where}.`);
+      }
+    } else if (decided === null && sx !== undefined){
+      openCardMenu(c, "hand", el);   // a plain tap
+    }
+    sx = undefined; decided = null;
+  };
+  el.addEventListener("pointerup", finish);
+  el.addEventListener("pointercancel", () => {
+    if (ghost){ ghost.remove(); ghost = null; }
+    el.style.opacity = ""; highlightDrop(null);
+    sx = undefined; decided = null;
+  });
+}
+const inRect = (x, y, r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+
+/* Where a dragged card would land if released here. Zones are checked before
+   the field because they sit outside it in the tray. */
+function dropTargetAt(x, y){
+  const over = sel => {
+    const el = $(sel);
+    if (!el || el.offsetParent === null) return false;
+    return inRect(x, y, el.getBoundingClientRect());
+  };
+  if (over("#zGy"))  return "grave";
+  if (over("#zEx"))  return "exile";
+  if (over("#zCmd")) return "command";
+  if (over("#zLib")) return "library";
+  if (over("#hand")) return "hand";
+  if (over("#myField")) return "field";
+  return null;
+}
+const DROP_EL = {grave:"#zGy", exile:"#zEx", command:"#zCmd", library:"#zLib", hand:"#hand", field:"#myField"};
+function highlightDrop(target){
+  Object.values(DROP_EL).forEach(sel => $(sel).classList.remove("dropzone"));
+  if (target) $(DROP_EL[target]).classList.add("dropzone");
+}
+/* Moves a card into a zone from wherever it is. Returns a label for the toast. */
+function dropInto(c, from, target){
+  const src = from === "hand" ? G.hand : G.field;
+  const i = src.indexOf(c); if (i >= 0) src.splice(i, 1);
+  if (c.own && target !== "hand" && toOwnerZone(c, target === "grave" ? "grave" : target))
+    return "their " + (target === "grave" ? "graveyard" : target);
+  switch(target){
+    case "grave":   reset(c); G.grave.push(c);   return "graveyard";
+    case "exile":   reset(c); G.exile.push(c);   return "exile";
+    case "command": reset(c); G.command.push(c); return "command zone";
+    case "library": reset(c); G.library.push(c); return "top of library";
+    case "hand":    reset(c); G.hand.push(c);    return "hand";
+  }
+  return "";
+}
+function renderOppHand(n){
+  const s = $("#oppHandStrip");
+  const shown = Math.min(n, 12);
+  s.innerHTML = Array.from({length:shown}, () => `<div class="mini"></div>`).join("")
+    + `<span class="n">Hand <b>${n}</b></span>`;
+  s.onclick = () => {
+    if (twoSided && G2) showList(`${G2.deckName || "Other seat"} — hand`, G2.hand, "opphand");
+    else toast(`${(oppName||"They")} ${n === 1 ? "has 1 card" : "has "+n+" cards"} in hand.`);
+  };
+}
+function renderOppZones(o){
+  const tile = (cls, count, label, img) =>
+    `<div class="ozone ${cls}" data-z="${label.toLowerCase()}">
+       ${img ? `<img src="${img}" alt="">` : ""}
+       <div class="lbl"><div class="c mono">${count}</div><div class="z">${label}</div></div>
+     </div>`;
+  const gyTop = o.grave && o.grave.length ? o.grave[o.grave.length-1] : null;
+  /* older builds sent the command zone as a bare count — tolerate both so a
+     phone that hasn't reloaded yet still renders instead of throwing */
+  const cmd = Array.isArray(o.command) ? o.command : [];
+  const cmdN = Array.isArray(o.command) ? o.command.length : (o.command || 0);
+  const cmdTop = cmd.find(c => c.img) || null;
+  let html = tile("lib", o.library, "Deck", o.topCard ? o.topCard.img : null)
+           + tile("", o.grave.length, "Grave", gyTop ? gyTop.img : null)
+           + tile("", o.exile.length, "Exile", null);
+  if (cmdN) html += tile("", cmdN, "Cmd", cmdTop ? cmdTop.img : null);
+  const z = $("#oppZones");
+  z.innerHTML = html;
+  z.onclick = e => {
+    const t = e.target.closest(".ozone"); if (!t) return;
+    const which = t.dataset.z;
+    if (which === "grave") showList("Their graveyard", o.grave, twoSided ? "oppgrave" : null);
+    else if (which === "exile") showList("Their exile", o.exile, twoSided ? "oppexile" : null);
+    /* face up means readable from either seat, networked or not */
+    else if (which === "cmd") showList("Their command zone", cmd, twoSided ? "oppcommand" : null);
+    else if (which === "deck") {
+      if (o.topCard && o.topCard.img) preview(o.topCard);
+      else toast(`${o.library} cards left in their deck.`);
+    }
+  };
+}
+/* Opponent's permanents: a tap opens the small menu, a hold zooms. Only two
+   things you can do to their card, so the menu stays tiny. */
+function attachOppCard(el, c){
+  if (el.dataset.wired) return;
+  el.dataset.wired = "1";
+  let sx, sy, moved = false, timer = null;
+  el.addEventListener("pointerdown", e => {
+    sx = e.clientX; sy = e.clientY; moved = false;
+    timer = setTimeout(() => { timer = null; if (!moved && !pinching && !c.faceDown) preview(c); }, 430);
+  });
+  el.addEventListener("pointermove", e => {
+    if (sx === undefined) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 7){ moved = true; clearTimeout(timer); timer = null; }
+  });
+  const done = () => {
+    if (timer){ clearTimeout(timer); if (!moved && !pinching) openOppMenu(c, el); }
+    timer = null; sx = undefined;
+  };
+  el.addEventListener("pointerup", done);
+  el.addEventListener("pointercancel", () => { clearTimeout(timer); timer = null; sx = undefined; });
+}
+function openOppMenu(c, el){
+  const m = $("#cardMenu");
+  m.innerHTML = `<button data-o="Zoom">Zoom</button><button data-o="Take control">Take control</button>`;
+  m.classList.add("on");
+  const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
+  m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
+  m.style.top  = clamp(r.bottom + 6, 6, innerHeight - mh - 6) + "px";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    if (b.dataset.o === "Zoom"){ if (!c.faceDown) preview(c); return; }
+    takeControl(c);
+  };
+}
+/* Each seat only ever writes its own state, so taking a card means: I add it
+   to my board tagged with whose it is, and they remove it when they hear
+   about it. State-based moves later route back to their owner's zone. */
+function takeControl(c){
+  if (!G) return;
+  if (twoSided && G2){
+    const i = G2.field.findIndex(x => x.id === c.id);
+    if (i < 0) return toast("That card already moved.");
+    const card = G2.field.splice(i,1)[0];
+    card.own = "opp"; card.y = 6; clampPos(card);
+    G.field.push(card);
+    renderAll(); pushState();
+    toast(`You control ${card.name}. It returns to their zones when it leaves the field.`, 3800);
+    return;
+  }
+  if (!currentMatch) return toast("Nothing to take — this seat is playing alone.");
+  const card = {...c, own:"opp", y:6, pendingControl:true};
+  clampPos(card);
+  G.field.push(card);
+  renderAll(); pushState();
+  postEvent("control", {cardId: c.id})
+    .then(() => {
+      card.pendingControl = false;
+      renderAll();
+    })
+    .catch(() => {
+      // roll back the optimistic take
+      const i = G.field.indexOf(card);
+      if (i >= 0) G.field.splice(i, 1);
+      renderAll(); pushState();
+      toast("Couldn't take control — connection failed.");
+    });
+  toast(`You control ${card.name}.`, 3500);
+}
+/* Sending a borrowed card to a zone: it goes to its owner's zone, not yours. */
+function toOwnerZone(c, zone){
+  const card = {...c}; delete card.own; reset(card);
+  if (twoSided && G2){ (G2[zone] || G2.grave).push(card); return true; }
+  if (currentMatch){ postEvent("return", {zone, card}).catch(()=>{}); return true; }
+  return false;
+}
+function renderZones(){
+  $("#libN").textContent = G.library.length;
+  $("#gyN").textContent = G.grave.length;
+  $("#exN").textContent = G.exile.length;
+  $("#cmdN").textContent = G.command.length;
+  $("#zCmd").style.display = (G.format === "commander" || G.command.length) ? "" : "none";
+  const setArt = (el, card) => {
+    if (card && card.img){ el.src = card.img; el.style.display = "block"; }
+    else { el.removeAttribute("src"); el.style.display = "none"; }
+  };
+  setArt($("#gyArt"), G.grave[G.grave.length-1]);
+  setArt($("#cmdArt"), G.command[0]);
+  setArt($("#libArt"), G.topRevealed ? G.library[G.library.length-1] : null);
+  $("#zLib").classList.toggle("revealed", !!G.topRevealed);
+}
+function renderLife(){
+  $("#myLifeN").textContent = G ? G.life : "—";
+  $("#myTurnN").textContent = G ? "Turn " + (G.turn || 1) : "no deck";
+  $("#oppTurnN").textContent = opp ? "Turn " + (opp.turn || 1) : "";
+  /* who holds priority is tracked explicitly — turn counts alone can't say,
+     since each seat only ever counts its own turns */
+  $("#myLife").classList.toggle("active", !!opp && !!G && G.active !== false);
+  $("#oppLife").classList.toggle("active", !!opp && opp.active === true);
+  $("#myLifeN").classList.toggle("hurt", !!G && G.life <= 5);
+  $("#myName").textContent = twoSided && G ? (G.deckName || "this seat") : playerName;
+  /* you only get to move the other seat's life when you're playing both sides */
+  $("#oppLife").classList.toggle("nolife", !twoSided);
+  /* the seat tile deals a second board, then swaps between the two */
+  const solo = !currentMatch;
+  $("#swapBtn").style.display = solo ? "" : "none";
+  $("#swapLabel").textContent = twoSided ? "Swap" : "2nd";
+}
+function renderOpp(){
+  const f = $("#oppFieldInner");
+  if (!opp){
+    [...f.querySelectorAll(".card")].forEach(el => el.remove());
+    $("#oppHandStrip").innerHTML = `<span class="n">${currentMatch ? "waiting for a move" : "no second seat"}</span>`;
+    $("#oppZones").innerHTML = "";
+    $("#oppName").textContent = currentMatch ? (oppName || "opponent") : "practice";
+    /* the static 20 in the markup reads as a real life total — it isn't one
+       until they've actually dealt in */
+    $("#oppLifeN").textContent = "—";
+    $("#oppLifeN").classList.remove("hurt");
+    return;
+  }
+  $("#oppName").textContent = opp.name || oppName || "opponent";
+  $("#oppLifeN").textContent = opp.life;
+  $("#oppLifeN").classList.toggle("hurt", opp.life <= 5);
+  renderOppHand(opp.hand);
+  renderOppZones(opp);
+  const p = cardPct("#oppField");
+  syncField(f, opp.field,
+    /* rotate 180° about the table centre: mirror the far corner, not the
+       near one, or every card lands one card-width and one card-height off */
+    (el,c) => {
+      el.style.left = clamp(100 - c.x - p.w, 0, Math.max(0, 100 - p.w)) + "%";
+      el.style.top  = clamp(100 - c.y - p.h, 0, Math.max(0, 100 - p.h)) + "%";
+    },
+    (el,c) => attachOppCard(el, c));
+}
+
+/* ============================================================
+   DRAG + CARD MENU
+   ============================================================ */
+/* ============================================================
+   CARD PREVIEW — full-size look at any card
+   ============================================================ */
+let pvCard = null, pvFace = 0, pvOpenedAt = 0;
+function preview(c){
+  if (!c || !c.img) return;
+  pvCard = c; pvFace = (c.flipped && c.back) ? 1 : 0;
+  pvOpenedAt = Date.now();
+  paintPreview();
+  $("#previewFlip").style.display = c.back ? "" : "none";
+  open("#preview");
+}
+function paintPreview(){
+  const src = (pvFace === 1 && pvCard.back) ? pvCard.back : pvCard.img;
+  $("#previewImg").src = src;
+  $("#previewName").textContent = pvCard.name || "";
+}
+$("#previewFlip").onclick = e => { e.stopPropagation(); pvFace = pvFace ? 0 : 1; paintPreview(); };
+/* the pointerup that opened this also fires a click on the overlay that just
+   appeared under the finger — ignore it, or the preview shuts instantly */
+$("#preview").onclick = () => { if (Date.now() - pvOpenedAt > 350) close("#preview"); };
+
+function attachDrag(el, c){
+  let sx, sy, ox, oy, bw, bh, moved = false, dragging = false, timer = null, lastTap = 0;
+  let lastX = null, lastY = null;
+  el.addEventListener("pointerdown", e => {
+    el.setPointerCapture(e.pointerId);
+    sx = e.clientX; sy = e.clientY; ox = c.x; oy = c.y; moved = false;
+    /* measure the transform layer, not the field, so drag math stays correct
+       at any pinch zoom level — its rect is already scaled */
+    const box = $("#myFieldInner").getBoundingClientRect(); bw = box.width; bh = box.height;
+    timer = setTimeout(() => { if (!moved && !pinching) openCardMenu(c,"field",el); }, 430);
+  });
+  el.addEventListener("pointermove", e => {
+    if (sx === undefined) return;
+    if (pinching){ clearTimeout(timer); sx = undefined; dragging = false; el.classList.remove("drag"); return; }
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!moved && Math.hypot(dx,dy) > 7){
+      moved = dragging = true; clearTimeout(timer);
+      el.classList.add("drag"); el.parentNode.appendChild(el); closeCardMenu();
+      G.field.push(...G.field.splice(G.field.indexOf(c),1));
+    }
+    if (!dragging) return;
+    lastX = e.clientX; lastY = e.clientY;
+    c.x = ox + dx/bw*100;
+    c.y = oy + dy/bh*100;
+    clampPos(c);
+    el.style.left = c.x+"%"; el.style.top = c.y+"%";
+    const t = dropTargetAt(lastX, lastY);
+    highlightDrop(t === "field" ? null : t);
+    pushState();
+  });
+  const finish = () => {
+    clearTimeout(timer);
+    highlightDrop(null);
+    const target = (dragging && lastY !== null) ? dropTargetAt(lastX, lastY) : null;
+    if (target && target !== "field"){
+      const where = dropInto(c, "field", target);
+      sx = undefined; dragging = false; el.classList.remove("drag");
+      renderAll(); pushState(); toast(`${c.name} to ${where}.`);
+      return;
+    }
+    if (sx !== undefined && !moved && !pinching){
+      const now = Date.now();
+      if (now - lastTap < 320){
+        /* second tap: undo the first tap's toggle and show the card instead */
+        c.tapped = !c.tapped; paint(el, c); lastTap = 0; preview(c);
+      } else {
+        lastTap = now; c.tapped = !c.tapped; paint(el, c);
+      }
+    }
+    sx = undefined; dragging = false; el.classList.remove("drag"); pushState();
+  };
+  el.addEventListener("pointerup", finish);
+  el.addEventListener("pointercancel", finish);
+}
+function openCardMenu(c, from, el){
+  const m = $("#cardMenu");
+  const act = (l,wide) => `<button data-a="${l}"${wide?' class="wide"':""}>${l}</button>`;
+  const cmdZone = (G.format === "commander" || G.command.length) ? act("To command zone") : "";
+  m.innerHTML = from === "hand"
+    ? act("Target…")+act("Zoom")+act("Play")+act("Play face down")+
+      act("Play tapped")+act("Discard")+act("Exile")+act("To top of library")
+    : act("Target…")+act("Zoom")+
+      act("Tap / untap")+act("Add counter")+act("Remove counter")+act("Flip face")+
+      act("Turn face down")+act("Copy")+act("To hand")+act("To graveyard")+
+      act("To exile")+act("To library top")+cmdZone+(c.own ? act("Give back", true) : "");
+  m.classList.add("on");
+  const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
+  m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
+  m.style.top  = clamp(r.top - mh - 6, 6, innerHeight - mh - 6) + "px";
+  m.onclick = e => { const b = e.target.closest("button"); if (!b) return; doAction(b.dataset.a, c, from); closeCardMenu(); };
+}
+const closeCardMenu = () => $("#cardMenu").classList.remove("on");
+document.addEventListener("pointerdown", e => {
+  if (!e.target.closest("#cardMenu") && !e.target.closest(".card")) closeCardMenu();
+}, true);
+function moveOut(c, from){
+  const arr = from === "hand" ? G.hand : from === "command" ? G.command : G.field;
+  const i = arr.indexOf(c); if (i >= 0) arr.splice(i,1);
+}
+const reset = c => { c.tapped=false; c.ctr=0; c.faceDown=false; c.flipped=false; };
+const OWNER_ZONE = {"Discard":"grave","To graveyard":"grave","Exile":"exile","To exile":"exile",
+  "To top of library":"library","To library top":"library","To bottom":"library",
+  "To hand":"hand","To command zone":"command"};
+function doAction(a, c, from){
+  if (c.own && OWNER_ZONE[a]){
+    moveOut(c, from);
+    toOwnerZone(c, OWNER_ZONE[a]);
+    renderAll(); pushState();
+    toast(`${c.name} went back to its owner's ${OWNER_ZONE[a]}.`);
+    return;
+  }
+  if (a === "Give back"){
+    moveOut(c, from);
+    const card = {...c}; delete card.own;
+    if (twoSided && G2) G2.field.push(card);
+    else if (currentMatch) postEvent("return", {zone:"field", card}).catch(()=>{});
+    renderAll(); pushState(); toast(`${c.name} returned to its owner.`);
+    return;
+  }
+  switch(a){
+    case "Play":             moveOut(c,from); Object.assign(c,{x:44,y:30,tapped:false,faceDown:false}); clampPos(c); G.field.push(c); break;
+    case "Play face down":   moveOut(c,from); Object.assign(c,{x:44,y:30,faceDown:true}); clampPos(c); G.field.push(c); break;
+    case "Play tapped":      moveOut(c,from); Object.assign(c,{x:44,y:30,tapped:true}); clampPos(c); G.field.push(c); break;
+    case "Discard": case "To graveyard": moveOut(c,from); reset(c); G.grave.push(c); break;
+    case "Exile": case "To exile":       moveOut(c,from); reset(c); G.exile.push(c); break;
+    case "To top of library": case "To library top": moveOut(c,from); reset(c); G.library.push(c); break;
+    case "To bottom":        moveOut(c,from); reset(c); G.library.unshift(c); break;
+    case "To hand":          moveOut(c,from); reset(c); G.hand.push(c); break;
+    case "To command zone":  moveOut(c,from); reset(c); G.command.push(c); break;
+    case "Tap / untap":      c.tapped = !c.tapped; break;
+    case "Add counter":      c.ctr++; break;
+    case "Remove counter":   c.ctr--; break;
+    case "Flip face":        c.flipped = !c.flipped; break;
+    case "Turn face down":   c.faceDown = !c.faceDown; break;
+    case "Copy":             G.field.push(clampPos({...c, id:uid(), x:c.x+9})); break;
+    case "Zoom":             preview(c); return;
+    case "Target…":          startTargeting(c); return;
+  }
+  renderAll(); pushState();
+}
+
+/* ============================================================
+   ZONES
+   ============================================================ */
+$("#zDraw").onclick = () => { if (!G) return; draw(1); };
+function draw(n){
+  for (let i=0;i<n;i++){
+    if (!G.library.length){
+      if (currentMatch) {
+        pendingLoss = { reason: "deck", loserIsMe: true };
+        showEndPrompt("You drew from an empty library.");
+      } else {
+        toast("Library is empty. That's a loss on your next draw.");
+      }
+      break;
+    }
+    G.hand.push(G.library.pop());
+  }
+  renderAll(); pushState();
+}
+$("#zLib").onclick = () => { if (G) openZoneMenu($("#zLib")); };
+$("#zLib").addEventListener("pointerdown", e => {
+  if (!G || !G.topRevealed || !G.library.length) return;
+  const t = setTimeout(() => preview(G.library[G.library.length - 1]), 400);
+  const clear = () => clearTimeout(t);
+  $("#zLib").addEventListener("pointerup", clear, {once:true});
+  $("#zLib").addEventListener("pointercancel", clear, {once:true});
+});
+$("#zGy").onclick  = () => G && showList("Graveyard", G.grave, "grave");
+$("#zEx").onclick  = () => G && showList("Exile", G.exile, "exile");
+$("#zCmd").onclick = () => G && showList("Command zone", G.command, "command");
+
+/* library quick menu — the deck is the zone you interact with most */
+function openZoneMenu(anchor){
+  const m = $("#cardMenu");
+  const act = (l, wide) => `<button data-z="${l}"${wide?' class="wide"':""}>${l}</button>`;
+  m.innerHTML =
+    act("Draw X") +
+    act(G.topRevealed ? "Hide top card" : "Play with top revealed") +
+    act("Look at top card") + act("Look at top X") +
+    act("Mill 1") +
+    act("Search library", true) + act("Shuffle", true);
+  m.classList.add("on");
+  const r = anchor.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
+  m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
+  m.style.top  = clamp(r.top - mh - 6, 6, innerHeight - mh - 6) + "px";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    doLibrary(b.dataset.z); closeCardMenu();
+  };
+}
+function promptNumber(label, def){
+  const raw = prompt(label, String(def || 1));
+  if (raw === null) return null;
+  const n = parseInt(raw, 10);
+  if (!n || n < 1) { toast("Enter a number of 1 or more."); return null; }
+  return n;
+}
+function doLibrary(a){
+  if (!G) return;
+  switch(a){
+    case "Draw X": {
+      const n = promptNumber("Draw how many?", 1);
+      if (n) draw(n);
+      return;
+    }
+    case "Play with top revealed":
+      G.topRevealed = true;
+      toast("Top card is face up for both of you. Tap it to zoom.");
+      break;
+    case "Hide top card":
+      G.topRevealed = false;
+      break;
+    case "Look at top card": {
+      if (!G.library.length){ toast("Library is empty."); return; }
+      const top = [G.library[G.library.length - 1]];
+      showList("Top card", top, "library-look");
+      return;
+    }
+    case "Look at top X": {
+      const n = promptNumber("Look at how many from the top?", 3);
+      if (!n) return;
+      const top = G.library.slice(-n).reverse();
+      if (!top.length){ toast("Library is empty."); return; }
+      showList(`Top ${top.length}`, top, "library-look");
+      return;
+    }
+    case "Mill 1": {
+      if (!G.library.length){ toast("Library is empty."); return; }
+      const c = G.library.pop(); reset(c); G.grave.push(c);
+      toast(`Milled ${c.name}.`); break;
+    }
+    case "Search library":
+      showList("Library — order is kept, shuffle after", G.library, "library-look");
+      return;
+    case "Shuffle":
+      shuffle(G.library);
+      toast("Library shuffled.");
+      break;
+  }
+  renderAll(); pushState();
+}
+let listCtx = null;
+function showList(title, cards, zone){
+  listCtx = zone ? {zone, cards: cards.slice()} : null;
+  $("#listTitle").textContent = title + (cards.length > 1 ? ` · ${cards.length}` : "");
+  const isLib = zone === "library" || zone === "library-look";
+  $("#listShuffle").style.display = isLib ? "" : "none";
+  const search = $("#listSearch");
+  search.style.display = isLib ? "" : "none";
+  search.value = "";
+  const g = $("#listGrid");
+
+  function renderGrid(filter){
+    const q = (filter || "").trim().toLowerCase();
+    const shown = q ? cards.filter(c => (c.name || "").toLowerCase().includes(q)) : cards;
+    g.innerHTML = shown.map((c) => {
+      const i = cards.indexOf(c);
+      return `<div class="card" data-i="${i}"><img src="${c.img}" alt="${esc(c.name)}"></div>`;
+    }).join("");
+  }
+  renderGrid("");
+  search.oninput = () => renderGrid(search.value);
+
+  /* long-press previews; tap opens move menu for library-look / library */
+  let lpTimer = null, lpFired = false;
+  g.onpointerdown = e => {
+    const el = e.target.closest(".card"); if (!el) return;
+    lpFired = false;
+    lpTimer = setTimeout(() => { lpFired = true; preview(cards[+el.dataset.i]); }, 400);
+  };
+  g.onpointerup = g.onpointercancel = () => clearTimeout(lpTimer);
+  g.onclick = e => {
+    const el = e.target.closest(".card"); if (!el) return;
+    if (lpFired){ lpFired = false; return; }
+    if (!listCtx){ preview(cards[+el.dataset.i]); return; }
+    const c = cards[+el.dataset.i];
+
+    if (listCtx.zone === "opphand"){
+      G2.hand.splice(G2.hand.indexOf(c),1);
+      Object.assign(c,{x:44,y:58,tapped:false,faceDown:false}); G2.field.push(c);
+      close("#listModal"); renderAll();
+      toast("Played to the other seat's board.");
+      return;
+    }
+    if (listCtx.zone === "oppgrave" || listCtx.zone === "oppexile" || listCtx.zone === "oppcommand"){
+      const arr = listCtx.zone === "oppgrave" ? G2.grave
+                : listCtx.zone === "oppexile" ? G2.exile : G2.command;
+      arr.splice(arr.indexOf(c),1); reset(c); G2.hand.push(c);
+      close("#listModal"); renderAll();
+      toast("Returned to the other seat's hand.");
+      return;
+    }
+    if (listCtx.zone === "command"){
+      G.command.splice(G.command.indexOf(c),1); reset(c);
+      Object.assign(c,{x:44,y:58}); G.field.push(c);
+      toast("Commander on the battlefield. Track the tax yourselves.");
+      close("#listModal"); renderAll(); pushState();
+      return;
+    }
+    if (listCtx.zone === "library-look" || listCtx.zone === "library"){
+      openListMoveMenu(c, el);
+      return;
+    }
+    // grave / exile default: to hand
+    const arr = listCtx.zone === "grave" ? G.grave : G.exile;
+    arr.splice(arr.indexOf(c),1); reset(c); G.hand.push(c);
+    close("#listModal"); renderAll(); pushState();
+  };
+  open("#listModal");
+}
+function openListMoveMenu(c, el){
+  const m = $("#cardMenu");
+  m.innerHTML =
+    `<button data-m="hand">Send to Hand</button>` +
+    `<button data-m="field">Send to Battlefield</button>` +
+    `<button data-m="grave">Send to Graveyard</button>` +
+    `<button data-m="exile">Send to Exile</button>` +
+    `<button data-m="zoom">Zoom</button>`;
+  m.classList.add("on");
+  const r = el.getBoundingClientRect(), mw = 214, mh = m.offsetHeight;
+  m.style.left = clamp(r.left + r.width/2 - mw/2, 6, innerWidth - mw - 6) + "px";
+  m.style.top  = clamp(r.bottom + 6, 6, innerHeight - mh - 6) + "px";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    const act = b.dataset.m;
+    if (act === "zoom"){ preview(c); return; }
+    // remove from library (or wherever it currently sits)
+    const idx = G.library.indexOf(c);
+    if (idx >= 0) G.library.splice(idx, 1);
+    else {
+      for (const z of ["grave","exile","hand","command"]) {
+        const i = (G[z] || []).indexOf(c);
+        if (i >= 0){ G[z].splice(i,1); break; }
+      }
+    }
+    reset(c);
+    if (act === "hand") G.hand.push(c);
+    else if (act === "grave") G.grave.push(c);
+    else if (act === "exile") G.exile.push(c);
+    else if (act === "field") {
+      Object.assign(c, {x:44, y:30, tapped:false, faceDown:false});
+      clampPos(c); G.field.push(c);
+    }
+    close("#listModal");
+    renderAll(); pushState();
+    toast(`${c.name} → ${act === "field" ? "battlefield" : act}.`);
+  };
+}
+$("#listShuffle").onclick = () => { shuffle(G.library); close("#listModal"); toast("Library shuffled."); pushState(); };
+$("#myLife").addEventListener("click", e => {
+  const b = e.target.closest("button[data-d]"); if (!b || !G) return;
+  G.life += +b.dataset.d; renderLife(); pushState();
+  checkLossConditions();
+});
+
+/* ============================================================
+   TABLE MENU
+   ============================================================ */
+$("#menuBtn").onclick = () => {
+  const opts = decks.map((d,i) =>
+    `<option value="${i}"${G && d.id===G.deckId?" selected":""}>${esc(d.name)}</option>`).join("");
+  $("#gmDeck").innerHTML = opts;
+  $("#gmOppDeck").innerHTML = decks.map((d,i) =>
+    `<option value="${i}"${G2 && d.id===G2.deckId?" selected":""}>${esc(d.name)}</option>`).join("");
+  $("#soloBlock").style.display = currentMatch ? "none" : "";
+  $("#gmNudge").style.display = currentMatch ? "" : "none";
+  $("#gmAbandon").style.display = currentMatch ? "" : "none";
+  syncGmLife();
+  open("#gameModal");
+};
+/* The starting-life box only ever followed the dropdown's change event, so a
+   deck that was already selected when the menu opened left the box on its
+   markup default of 20 — which is how a Commander game started at 20. */
+function syncGmLife(){
+  const d = decks[+$("#gmDeck").value];
+  $("#gmLife").value = d ? fmt(d.format).life : 20;
+  $("#gmLegal").textContent = d ? (checkLegal(d).join("  ·  ") || "Deck is legal for its format.") : "";
+}
+$("#gmDeck").onchange = syncGmLife;
+$("#gmNew").onclick = () => {
+  close("#gameModal");
+  openNewGameModal();
+};
+function requestNewGame(d, life){
+  const m = $("#cardMenu");
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      New game — record a result first?
+    </div>
+    <button data-r="yes" class="wide">Yes — declare a winner</button>
+    <button data-r="no" class="wide">No — just reset</button>
+    <button data-r="cancel" class="wide">Cancel</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.r === "cancel") return;
+    if (b.dataset.r === "yes") {
+      pickWinnerThenNewGame(d, life);
+    } else {
+      sendNewGameRequest(d, life);
+    }
+  };
+}
+function pickWinnerThenNewGame(d, life){
+  const m = $("#cardMenu");
+  const myDeck = (G && G.deckName) || d.name || "Unknown";
+  const theirDeck = (opp && opp.deckName) || "Unknown";
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      Who won this game?
+    </div>
+    <button data-w="me" class="wide">I win (${esc(myDeck)})</button>
+    <button data-w="them" class="wide">${esc(oppName || "Opponent")} wins (${esc(theirDeck)})</button>
+    <button data-w="skip" class="wide">Skip — no result</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.w === "skip") {
+      sendNewGameRequest(d, life);
+      return;
+    }
+    const iWin = b.dataset.w === "me";
+    const winner = iWin ? currentUser : (oppName || "Opponent");
+    const loser = iWin ? (oppName || "Opponent") : currentUser;
+    const winnerDeck = iWin ? myDeck : theirDeck;
+    const loserDeck = iWin ? theirDeck : myDeck;
+    const format = (G && G.format) || d.format || "freeform";
+    if (matchWs && matchWs.readyState === 1) {
+      matchWs.send(JSON.stringify({
+        type: "result",
+        winner, loser, winnerDeck, loserDeck, format
+      }));
+    }
+    sendNewGameRequest(d, life);
+  };
+}
+function sendNewGameRequest(d, life){
+  postEvent("newgame", { deckId: d.id, deckName: d.name, life, format: d.format })
+    .then(() => toast("New game requested — waiting for them to accept."))
+    .catch(() => toast("Couldn't send the request."));
+}
+$("#gmMull").onclick = () => {
+  if (!G) return; const n = Math.max(0, G.hand.length - 1);
+  G.library.push(...G.hand.splice(0)); shuffle(G.library);
+  for (let i=0;i<n && G.library.length;i++) G.hand.push(G.library.pop());
+  renderAll(); pushState(); close("#gameModal"); toast(`Mulligan to ${n}.`);
+};
+$("#gmShuffle").onclick = () => { if(!G) return; shuffle(G.library); toast("Library shuffled."); pushState(); close("#gameModal"); };
+$("#gmUntap").onclick = () => { if(!G) return; G.field.forEach(c => c.tapped = false); renderAll(); pushState(); close("#gameModal"); };
+$("#gmToken").onclick = () => {
+  const name = prompt("Token or card name — art is pulled from Scryfall","Treasure");
+  close("#gameModal"); if (!name || !G) return;
+  fetch("https://api.scryfall.com/cards/named?fuzzy=" + encodeURIComponent(name))
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(c => { const card = mkCard(slim(c)); card.x = 40; card.y = 20; G.field.push(card); renderAll(); pushState(); })
+    .catch(() => toast("Couldn't find that card."));
+};
+$("#gmCoin").onclick = () => { toast("Coin: " + (Math.random()<.5?"Heads":"Tails")); close("#gameModal"); };
+$("#gmDie").onclick = () => { toast("d20: " + (1+Math.floor(Math.random()*20))); close("#gameModal"); };
+$("#gmNudge").onclick = async () => {
+  close("#gameModal");
+  if (!currentMatch) return toast("This is a practice table — no one to nudge.");
+  try{ await postEvent("nudge", {message: `${currentUser}: your move`}); toast("Nudge sent."); }
+  catch(e){ toast("Couldn't send the nudge — check your connection."); }
+};
+$("#gmAbandon").onclick = () => {
+  close("#gameModal");
+  if (!currentMatch) return;
+  abandonMatch(currentMatch);
+};
+
+/* ---- second seat (solo practice only) ---- */
+$("#gmOppDeal").onclick = () => {
+  const d = decks[+$("#gmOppDeck").value];
+  if (!d) return toast("Add a deck first.");
+  G2 = newGameState(d, fmt(d.format).life);
+  twoSided = true;
+  close("#gameModal"); renderAll();
+  toast(`${d.name} dealt to the other seat. Swap seats to play it.`);
+};
+$("#gmSwap").onclick = () => { close("#gameModal"); swapSeats(); };
+
+/* ============================================================
+   HOW TO PLAY — walks one turn, highlighting the real controls.
+   It runs on a live practice table so every button it points at
+   is the button you'll actually press.
+   ============================================================ */
+const TOUR = [
+  {sel:"#zLib", t:"Your library", d:"Your deck, and the number of cards left. Tap it for draw options — draw one or several, mill, search, shuffle, or reveal the top card."},
+  {sel:"#zDraw", t:"Draw a card", d:"Start of your turn: tap Draw. There's no rules engine here, so nothing draws for you."},
+  {sel:"#hand", t:"Your hand", d:"Drag a card in any direction to pick it up, then drop it on the field to play it, or on a zone tile to send it there. Tap a card instead to get its full menu."},
+  {sel:"#handRail", t:"Scrolling the hand", d:"When your hand size exceeds the visual range, a scroll bar will appear here. It dims again when everything fits again."},
+  {sel:"#myField", t:"Your battlefield", d:"Drag cards to arrange them. Tap once to tap and untap, twice to zoom, hold for the full menu. For examples counters, copies, face down, flip. Spread two fingers or pinch to zoom the board itself."},
+  {sel:"#myLife", t:"Life and turn", d:"Your life total and which turn you're on. The brass outline shows whose turn it is."},
+  {sel:"#callGrid", t:"Talking across the table", d:"In response holds everything until your opponent presses OK on their screen. It won't disappear on its own. Trigger, Attacking and Hold on reach them the same way, but don't require a response before you move forward."},
+  {sel:"#untapBtn", t:"Untap", d:"Untaps everything you control. Used at the start of your turn, before you draw."},
+  {sel:"#endTurnBtn", t:"End turn", d:"Passes to the other player and bumps their turn count. In Practice Mode, it swaps you to the other seat automatically. +Turn is for cards that grant you an extra turn."},
+  {sel:"#menuBtn", t:"Table menu", d:"Mulligans, shuffling, tokens, dice, a second seat to play against yourself in Practice Mode, and the way back out. That's everything, go play!"}
+];
+let tourAt = -1;
+function tourShow(i){
+  if (i < 0 || i >= TOUR.length) return tourEnd();
+  tourAt = i;
+  const step = TOUR[i], el = $(step.sel);
+  if (!el) return tourShow(i + 1);
+  const r = el.getBoundingClientRect();
+  const pad = 5;
+  const hole = $("#tourHole"), box = $("#tourBox");
+  hole.style.display = box.style.display = "";
+  hole.style.left = (r.left - pad) + "px"; hole.style.top = (r.top - pad) + "px";
+  hole.style.width = (r.width + pad*2) + "px"; hole.style.height = (r.height + pad*2) + "px";
+  $("#tourTitle").textContent = step.t;
+  $("#tourText").textContent = step.d;
+  $("#tourStep").textContent = `${i+1} / ${TOUR.length}`;
+  $("#tourBack").style.visibility = i ? "" : "hidden";
+  $("#tourNext").textContent = (i === TOUR.length - 1) ? "Done" : "Next";
+  /* put the caption on whichever side of the highlight has room */
+  const bw = box.offsetWidth, bh = box.offsetHeight;
+  let top = r.bottom + 10;
+  if (top + bh > innerHeight - 6) top = r.top - bh - 10;
+  box.style.top = clamp(top, 6, Math.max(6, innerHeight - bh - 6)) + "px";
+  box.style.left = clamp(r.left + r.width/2 - bw/2, 6, Math.max(6, innerWidth - bw - 6)) + "px";
+}
+function tourEnd(){
+  tourAt = -1;
+  $("#tourHole").style.display = "none";
+  $("#tourBox").style.display = "none";
+  document.body.classList.remove("tour");
+}
+$("#tourNext").onclick = () => tourShow(tourAt + 1);
+$("#tourBack").onclick = () => tourShow(tourAt - 1);
+$("#tourQuit").onclick = tourEnd;
+addEventListener("resize", () => { if (tourAt >= 0) tourShow(tourAt); });
+$("#menuHowto").onclick = async () => {
+  if (!decks.length) return toast("Add a deck first — the walkthrough runs on a real table.", 4000);
+  currentMatch = null; G2 = null; twoSided = false; opp = null;
+  startGame(decks[0]);
+  await goTable();
+  document.body.classList.add("tour");
+  setTimeout(() => tourShow(0), 250);
+};
+
+/* ---- table talk ----
+   Each call is one line on the other player's screen that will not go away
+   until they press OK, and pressing OK sends the acknowledgement back. In a
+   practice game there's nobody to send to, so it shows on your own screen —
+   which is also how you see what your opponent will see. */
+const CALL_TEXT = {
+  "In response":"is responding — hold the stack.",
+  "Trigger":"has a trigger to put on the stack.",
+  "Attacking":"is declaring attackers.",
+  "Hold on":"needs a moment before you continue."
+};
+let callSeq = 0;
+function pushCall(kind, who, urgent){
+  const b = $("#callBanner");
+  const id = "call" + (++callSeq);
+  const row = document.createElement("div");
+  row.className = "callrow" + (urgent ? "" : " calm");
+  row.dataset.id = id;
+  row.innerHTML = `<span><b>${esc(who)}</b> <span class="who">${esc(CALL_TEXT[kind] || kind)}</span></span>`;
+  const ok = document.createElement("button");
+  ok.textContent = "OK";
+  ok.onclick = () => {
+    row.remove();
+    if (!b.children.length){ b.classList.remove("on"); document.body.classList.remove("hascall"); }
+    if (currentMatch) postEvent("callack", {kind}).catch(()=>{});
+  };
+  row.appendChild(ok);
+  b.appendChild(row);
+  b.classList.add("on"); document.body.classList.add("hascall");
+}
+$("#callGrid").onclick = e => {
+  const btn = e.target.closest("button[data-call]"); if (!btn) return;
+  const kind = btn.dataset.call, urgent = btn.classList.contains("urgent");
+  if (currentMatch){
+    postEvent("call", {kind}).then(() => toast(`Sent: ${kind}. It stays on their screen until they acknowledge.`, 3200))
+      .catch(() => toast("Couldn't send that — check your connection."));
+    return;
+  }
+  pushCall(kind, twoSided ? (G && G.deckName) || "this seat" : "you", urgent);
+};
+
+/* ---- turns ---- */
+function untapMine(){
+  if (!G) return;
+  const n = G.field.filter(c => c.tapped).length;
+  G.field.forEach(c => c.tapped = false);
+  renderAll(); pushState();
+  toast(n ? `Untapped ${n}.` : "Nothing was tapped.");
+}
+$("#untapBtn").onclick = untapMine;
+$("#extraTurnBtn").onclick = () => {
+  if (!G) return;
+  G.turn = (G.turn || 1) + 1; G.active = true;
+  renderAll(); pushState();
+  toast(`Extra turn — your turn ${G.turn}.`);
+};
+$("#endTurnBtn").onclick = async () => {
+  if (!G) return;
+  if (currentMatch){
+    G.active = false; renderAll(); pushState();
+    try{ await postEvent("endturn", {}); toast("Turn passed."); }
+    catch(e){ toast("Couldn't reach the server — they may not see the pass."); }
+    return;
+  }
+  if (twoSided && G2){
+    G.active = false;
+    G2.turn = (G2.turn || 1) + 1; G2.active = true;
+    swapSeats();
+    toast(`${G.deckName || "Other seat"} — turn ${G.turn}.`);
+    return;
+  }
+  /* single practice seat: nobody to pass to, so just advance your own count */
+  G.turn = (G.turn || 1) + 1;
+  renderAll(); pushState();
+  toast(`Turn ${G.turn}.`);
+};
+$("#swapBtn").onclick = () => {
+  if (twoSided && G2) return swapSeats();
+  /* no second seat yet — open the menu with the deck picker ready */
+  $("#menuBtn").click();
+  toast("Pick a deck under Second seat, then Deal to the other seat.", 4000);
+};
+function swapSeats(){
+  if (!twoSided || !G2) return toast("Deal a deck to the other seat first.");
+  const t = G; G = G2; G2 = t;
+  renderAll();
+  toast(`Now playing ${G.deckName || "the other seat"}.`);
+}
+$("#gmOppHand").onclick = () => {
+  if (!twoSided || !G2) return toast("Deal a deck to the other seat first.");
+  close("#gameModal");
+  showList(`${G2.deckName || "Other seat"} — hand`, G2.hand, "opphand");
+};
+$("#oppLife").addEventListener("click", e => {
+  const b = e.target.closest("button[data-od]");
+  if (!b || !twoSided || !G2) return;
+  G2.life += +b.dataset.od; renderAll();
+});
+$("#gmMenu").onclick = () => { close("#gameModal"); stopSync(); show("#menuScreen"); loadMatches(); };
+
+async function goTable(){
+  show("#tableScreen");
+  /* note: G and opp are cleared by rejoinMatch before it calls this — don't
+     clear them here, or starting a practice game wipes the deck we just dealt */
+  $("#syncWho").textContent = currentMatch ? "connecting…" : "practice table";
+  setSyncStatus(!!currentMatch, null);
+  renderAll(); renderOpp();
+  if (currentMatch) startSync();
+  try{ await document.documentElement.requestFullscreen(); }catch(e){}
+  try{ await screen.orientation.lock("landscape"); }catch(e){}
+  keepAwake();
+}
+
+/* ============================================================
+   SYNC — Durable Object + WebSocket
+   One live connection per match. Each seat still only owns its
+   own private board; the DO just holds both in memory and
+   forwards updates instantly.
+   ============================================================ */
+let matchWs = null;
+let statePushTimer = null;
+let statePushWanted = false;
+let dealPrompted = false;
+let pendingLoss = null; // {reason, loserIsMe}
+
+function setSyncStatus(ok, name) {
+  if (!currentMatch) {
+    $("#syncWho").textContent = twoSided ? "both seats" : "practice table";
+    const s = $("#syncState");
+    s.textContent = twoSided ? "tap Swap Seat to change sides" : "not synced";
+    s.className = "s";
+    return;
+  }
+  $("#syncWho").textContent = name || "match";
+  const s = $("#syncState");
+  s.textContent = ok ? "synced" : "offline — retrying";
+  s.className = "s " + (ok ? "live" : "bad");
+}
+
+function fullState() {
+  return {
+    deckId: G.deckId, deckName: G.deckName, format: G.format, life: G.life,
+    turn: G.turn || 1, active: G.active !== false,
+    library: G.library, hand: G.hand, field: G.field, grave: G.grave,
+    exile: G.exile, command: G.command,
+    pending: G.pending || [], topRevealed: !!G.topRevealed
+  };
+}
+
+function wsUrl() {
+  const base = API_BASE.replace(/^http/, "ws");
+  return `${base}/api/match/${currentMatch}/ws?username=${encodeURIComponent(currentUser)}`;
+}
+
+function startSync() {
+  stopSync();
+  dealPrompted = false;
+  pendingLoss = null;
+  if (!currentMatch || !currentUser) return;
+
+  const ws = new WebSocket(wsUrl());
+  matchWs = ws;
+
+  ws.onopen = () => {
+    setSyncStatus(true, oppName);
+    // If we already have a local board, push it immediately
+    if (G) pushState();
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch (_) { return; }
+    if (!msg || !msg.type) return;
+
+    if (msg.type === "snapshot") {
+      if (msg.you && !G) G = msg.you;
+      oppName = msg.opponentName;
+      if (msg.opponent) opp = msg.opponent;
+      renderAll();
+      setSyncStatus(true, oppName);
+      if (!G && !dealPrompted) {
+        dealPrompted = true;
+        toast("You're in — pick a format and deck to deal in.", 5000);
+        if ($("#tableScreen").classList.contains("on")) openNewGameModal();
+      }
+    }
+
+    if (msg.type === "opponent") {
+      opp = msg.opponent;
+      renderAll();
+      setSyncStatus(true, oppName);
+    }
+
+    if (msg.type === "event") {
+      handleRemoteEvent(msg.from, msg.eventType, msg.payload || {});
+    }
+
+    if (msg.type === "ended") {
+      showEndScreen(msg.winner, msg.winnerDeck, msg.loser, msg.loserDeck);
+      stopSync();
+      currentMatch = null;
+      setSyncStatus(false, null);
+    }
+
+    if (msg.type === "abandoned") {
+      leaveMatchLocal(`${msg.by || "Opponent"} abandoned the match.`);
+    }
+
+    if (msg.type === "result_recorded") {
+      const iWon = msg.winner === currentUser;
+      toast(iWon
+        ? `Result recorded — you win with ${msg.winnerDeck}.`
+        : `Result recorded — ${msg.winner} wins with ${msg.winnerDeck}.`, 4500);
+    }
+  };
+
+  ws.onclose = () => {
+    if (matchWs === ws) {
+      matchWs = null;
+      setSyncStatus(false, oppName);
+      // Simple reconnect after a short delay if we still think we're in a match
+      if (currentMatch) {
+        setTimeout(() => {
+          if (currentMatch && !matchWs) startSync();
+        }, 2000);
+      }
+    }
+  };
+
+  ws.onerror = () => { /* onclose will fire */ };
+}
+
+function stopSync() {
+  if (matchWs) {
+    try { matchWs.close(); } catch (_) {}
+    matchWs = null;
+  }
+  clearTimeout(statePushTimer);
+  statePushTimer = null;
+  statePushWanted = false;
+  cancelAnimationFrame(arrowRAF);
+}
+
+function pushState() {
+  if (!G || !currentMatch || !matchWs || matchWs.readyState !== 1) return;
+  statePushWanted = true;
+  if (statePushTimer) return;
+  statePushTimer = setTimeout(() => {
+    statePushTimer = null;
+    if (!statePushWanted || !matchWs || matchWs.readyState !== 1) return;
+    statePushWanted = false;
+    try {
+      matchWs.send(JSON.stringify({ type: "state", payload: fullState() }));
+      setSyncStatus(true, oppName);
+    } catch (e) {
+      setSyncStatus(false, oppName);
+    }
+  }, 400);
+}
+
+function postEvent(eventType, payload) {
+  if (!currentMatch || !matchWs || matchWs.readyState !== 1) {
+    return Promise.reject(new Error("not connected"));
+  }
+  matchWs.send(JSON.stringify({ type: "event", eventType, payload }));
+  return Promise.resolve();
+}
+
+function handleRemoteEvent(from, type, payload) {
+  if (type === "nudge") toast((payload && payload.message) || "Your move.", 4000);
+  if (type === "call" && payload) {
+    pushCall(payload.kind, from, payload.kind === "In response");
+  }
+  if (type === "callack" && payload) {
+    toast(`${from} acknowledged: ${payload.kind}.`, 3000);
+  }
+  if (type === "control" && G && payload) {
+    const i = G.field.findIndex(x => x.id === payload.cardId);
+    if (i >= 0) {
+      const gone = G.field.splice(i, 1)[0];
+      renderAll(); pushState();
+      toast(`${from} took control of ${gone.name}.`, 4000);
+    }
+  }
+  if (type === "return" && G && payload && payload.card) {
+    const card = payload.card, z = payload.zone;
+    if (z === "field") { card.y = 6; clampPos(card); G.field.push(card); }
+    else (G[z] || G.grave).push(card);
+    renderAll(); pushState();
+    toast(`${card.name} came back to your ${z}.`, 3500);
+  }
+  if (type === "endturn" && G) {
+    G.turn = (G.turn || 1) + 1; G.active = true;
+    renderAll(); pushState();
+    toast(`${from} passed the turn — your turn ${G.turn}.`, 4000);
+  }
+  if (type === "resolve" && G && G.pending) {
+    const hit = G.pending.find(p => p.id === (payload && payload.actionId));
+    if (hit) {
+      G.pending = G.pending.filter(p => p !== hit);
+      toast(`${from} allowed ${hit.srcName} → ${hit.tgt.label}.`, 3500);
+      renderAll(); pushState();
+    }
+  }
+  if (type === "newgame") {
+    const m = $("#cardMenu");
+    m.innerHTML = `
+      <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+        ${esc(from)} requests a new game${payload && payload.deckName ? ` with <strong>${esc(payload.deckName)}</strong>` : ""}.
+      </div>
+      <button data-ng="yes" class="wide">Accept — reset both boards</button>
+      <button data-ng="no" class="wide">Decline</button>`;
+    m.classList.add("on");
+    m.style.left = "50%";
+    m.style.top = "40%";
+    m.style.transform = "translate(-50%,-50%)";
+    m.onclick = e => {
+      const b = e.target.closest("button"); if (!b) return;
+      closeCardMenu();
+      m.style.transform = "";
+      if (b.dataset.ng === "yes") {
+        // Reset our side with our current deck (or first deck)
+        const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
+        if (d) startGame(d, (payload && payload.life) || fmt(d.format).life);
+        postEvent("newgame_ack", {}).catch(()=>{});
+        toast("New game started.");
+      } else {
+        postEvent("newgame_ack", { declined: true }).catch(()=>{});
+        toast("Declined.");
+      }
+    };
+  }
+  if (type === "newgame_ack") {
+    if (payload && payload.declined) {
+      toast(`${from} declined the new game.`);
+    } else {
+      // They accepted — reset our side too if we still have a deck selected
+      const d = (G && G.deckId && decks.find(x => x.id === G.deckId)) || decks[0];
+      if (d) {
+        startGame(d, fmt(d.format).life);
+        toast("New game started.");
+      }
+    }
+  }
+}
+
+/* ---------- loss detection + confirmation ---------- */
+function checkLossConditions() {
+  if (!G || !currentMatch || pendingLoss) return;
+  if (G.life <= 0) {
+    pendingLoss = { reason: "life", loserIsMe: true };
+    showEndPrompt("Your life total is 0 or less.");
+  }
+}
+
+function showEndPrompt(reason) {
+  // Re-use the existing toast + a simple confirm flow via the game modal area
+  // For now we surface a dedicated confirmation using the cardMenu pattern
+  const m = $("#cardMenu");
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      ${esc(reason)}<br><br>
+      End the match?
+    </div>
+    <button data-end="yes" class="wide">Yes — end match</button>
+    <button data-end="no" class="wide">No — keep playing</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.end === "yes") {
+      showWinnerConfirm();
+    } else {
+      pendingLoss = null;
+    }
+  };
+}
+
+function showWinnerConfirm() {
+  const m = $("#cardMenu");
+  const myDeck = (G && G.deckName) || "Unknown";
+  const theirDeck = (opp && opp.deckName) || "Unknown";
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      Confirm result
+    </div>
+    <button data-w="me" class="wide">I win (${esc(myDeck)})</button>
+    <button data-w="them" class="wide">${esc(oppName || "Opponent")} wins (${esc(theirDeck)})</button>
+    <button data-w="cancel" class="wide">Cancel</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.w === "cancel") {
+      pendingLoss = null;
+      return;
+    }
+    const iWin = b.dataset.w === "me";
+    const winner = iWin ? currentUser : (oppName || "Opponent");
+    const loser = iWin ? (oppName || "Opponent") : currentUser;
+    const winnerDeck = iWin ? myDeck : theirDeck;
+    const loserDeck = iWin ? theirDeck : myDeck;
+    const format = (G && G.format) || "freeform";
+    if (matchWs && matchWs.readyState === 1) {
+      matchWs.send(JSON.stringify({
+        type: "end",
+        winner, loser, winnerDeck, loserDeck, format
+      }));
+    }
+    pendingLoss = null;
+  };
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentMatch && !matchWs) startSync();
+});
+
+function showEndScreen(winner, winnerDeck, loser, loserDeck) {
+  const iWon = winner === currentUser;
+  $("#endTitle").textContent = iWon ? "You win" : "You lose";
+  $("#endBody").innerHTML = iWon
+    ? `<strong>${esc(winnerDeck)}</strong> beat <strong>${esc(loserDeck)}</strong>`
+    : `<strong>${esc(winner)}</strong> wins with <strong>${esc(winnerDeck)}</strong>`;
+  open("#endModal");
+}
+function closeEndScreen() {
+  close("#endModal");
+}
+$("#endMenuBtn").onclick = () => {
+  closeEndScreen();
+  leaveMatchLocal(null);
+};
+
+
+
+/* ============================================================
+   PUSH NOTIFICATIONS
+   ============================================================ */
+$("#menuNotif").onclick = enableNotifications;
+async function enableNotifications(){
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)){
+    toast("This browser doesn't support push here — the code fallback always works."); return;
+  }
+  try{
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted"){ toast("Notifications weren't allowed — you can still use codes."); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const {key} = await api("/api/push/vapid-key");
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+    await api("/api/push/subscribe", {method:"POST", body: JSON.stringify({username:currentUser, subscription:sub})});
+    toast("Notifications on. You'll be pinged for challenges and nudges.");
+  }catch(e){ toast("Couldn't turn on notifications — the code fallback still works."); }
+}
+function urlBase64ToUint8Array(base64String){
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,"+").replace(/_/g,"/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+/* ============================================================
+   TARGETING — declare what a card is pointing at, show it to
+   both players, and wait for the other side to allow it. The app
+   never applies the effect; it just makes the intent visible and
+   gives the opponent a moment to respond before it clears.
+   ============================================================ */
+let targeting = null;        // {srcId, srcName} while choosing a target
+let arrowRAF = null;
+
+function startTargeting(c){
+  targeting = {srcId: c.id, srcName: c.name};
+  document.body.classList.add("targeting");
+  const el = elForCard(c.id); if (el) el.classList.add("tcard");
+  renderTargetBar();
+}
+function cancelTargeting(){
+  if (!targeting) return;
+  const el = elForCard(targeting.srcId); if (el) el.classList.remove("tcard");
+  targeting = null;
+  document.body.classList.remove("targeting");
+  renderTargetBar();
+}
+function elForCard(id){
+  return document.querySelector(`#myFieldInner .card[data-id="${id}"]`)
+      || document.querySelector(`#oppFieldInner .card[data-id="${id}"]`)
+      || document.querySelector(`#hand .card[data-id="${id}"]`);
+}
+function findCardAnywhere(id){
+  if (!G) return null;
+  for (const z of [G.field, G.hand, G.grave, G.exile, G.command]){
+    const c = z.find(x => x.id === id); if (c) return c;
+  }
+  if (opp && opp.field){ const c = opp.field.find(x => x.id === id); if (c) return c; }
+  return null;
+}
+
+/* while targeting, the next tap on a card or a life total picks the target */
+document.addEventListener("click", e => {
+  if (!targeting) return;
+  const life = e.target.closest(".life");
+  const card = e.target.closest(".card");
+  if (!life && !card) return;
+  e.preventDefault(); e.stopPropagation();
+
+  let tgt = null;
+  if (life){
+    const mine = life.id === "myLife";
+    tgt = {type:"player", seat: mine ? "me" : "opp",
+           label: mine ? (twoSided && G ? (G.deckName||"this seat") : playerName)
+                       : (opp && opp.name) || oppName || "opponent"};
+  } else {
+    const id = card.dataset.id;
+    const c = findCardAnywhere(id);
+    if (!id || id === targeting.srcId) { cancelTargeting(); return; }
+    tgt = {type:"card", id, label: (c && c.name) || "a card"};
+  }
+  addPending(targeting.srcId, targeting.srcName, tgt);
+  cancelTargeting();
+}, true);
+
+function addPending(srcId, srcName, tgt){
+  if (!G) return;
+  G.pending = G.pending || [];
+  G.pending.push({id: uid(), srcId, srcName, tgt});
+  renderAll(); pushState();
+  toast(`${srcName} → ${tgt.label}. Waiting for it to be allowed.`);
+}
+function clearPending(actionId){
+  if (!G || !G.pending) return;
+  G.pending = G.pending.filter(p => p.id !== actionId);
+  renderAll(); pushState();
+}
+
+function renderTargetBar(){
+  const bar = $("#targetBar");
+  const rows = [];
+  if (targeting){
+    rows.push(`<div class="trow"><span class="t">Targeting with <b>${esc(targeting.srcName)}</b> — tap a card or a life total</span>
+      <button class="btn sm" data-cancel-target>Cancel</button></div>`);
+  }
+  (G && G.pending || []).forEach(p => {
+    rows.push(`<div class="trow"><span class="t"><b>${esc(p.srcName)}</b> → ${esc(p.tgt.label)}</span>
+      ${twoSided || !currentMatch
+        ? `<button class="btn sm gold" data-resolve="${p.id}">Resolve</button>`
+        : `<button class="btn sm" data-withdraw="${p.id}">Withdraw</button>`}</div>`);
+  });
+  (opp && opp.pending || []).forEach(p => {
+    rows.push(`<div class="trow theirs"><span class="t"><b>${esc(p.srcName)}</b> → ${esc(p.tgt.label)}</span>
+      <button class="btn sm gold" data-allow="${p.id}">Allow</button></div>`);
+  });
+  bar.innerHTML = rows.join("");
+  bar.classList.toggle("on", rows.length > 0);
+  paintTargetHighlights();
+  scheduleArrows();
+}
+$("#targetBar").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.hasAttribute("data-cancel-target")) return cancelTargeting();
+  if (b.dataset.withdraw) return clearPending(b.dataset.withdraw);
+  if (b.dataset.resolve){ clearPending(b.dataset.resolve); toast("Resolved."); return; }
+  if (b.dataset.allow){
+    const id = b.dataset.allow;
+    /* solo play: both boards are ours, so just clear it locally —
+       there is no match to post an event to */
+    if (!currentMatch){
+      if (G2 && G2.pending) G2.pending = G2.pending.filter(p => p.id !== id);
+      renderAll(); toast("Resolved.");
+      return;
+    }
+    b.disabled = true;
+    try{ await postEvent("resolve", {actionId:id}); toast("Allowed — waiting for their side to clear it."); }
+    catch(err){ b.disabled = false; toast("Couldn't send that — check your connection."); }
+  }
+});
+
+function paintTargetHighlights(){
+  $$(".ttarget").forEach(el => el.classList.remove("ttarget"));
+  const marks = [...(G && G.pending || []), ...(opp && opp.pending || [])];
+  marks.forEach(p => {
+    if (p.tgt.type === "card"){
+      const el = elForCard(p.tgt.id); if (el) el.classList.add("ttarget");
+    }
+  });
+}
+
+/* arrows are redrawn continuously while anything is pending, because zoom,
+   panning and dragging all move the endpoints */
+function anchorRect(p, mine){
+  if (p.tgt.type === "player"){
+    /* their "me" is my opponent seat, and vice versa */
+    const seatIsMine = mine ? p.tgt.seat === "me" : p.tgt.seat === "opp";
+    return $(seatIsMine ? "#myLife" : "#oppLife").getBoundingClientRect();
+  }
+  const el = elForCard(p.tgt.id);
+  return el ? el.getBoundingClientRect() : null;
+}
+function drawArrows(){
+  const g = $("#arrowG");
+  const items = [
+    ...(G && G.pending || []).map(p => ({p, mine:true})),
+    ...(opp && opp.pending || []).map(p => ({p, mine:false}))
+  ];
+  if (!items.length){ g.innerHTML = ""; return; }
+  const parts = [];
+  for (const {p, mine} of items){
+    const srcEl = elForCard(p.srcId);
+    if (!srcEl) continue;
+    const a = srcEl.getBoundingClientRect();
+    const b = anchorRect(p, mine);
+    if (!b) continue;
+    const x1 = a.left + a.width/2, y1 = a.top + a.height/2;
+    const x2 = b.left + b.width/2, y2 = b.top + b.height/2;
+    const cx = (x1+x2)/2 + (y2-y1)*0.14, cy = (y1+y2)/2 - (x2-x1)*0.14;
+    parts.push(`<path class="${mine?"mine":"theirs"}" d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}"
+      marker-end="url(#${mine?"arrowhead":"arrowheadTheirs"})"></path>`);
+  }
+  g.innerHTML = parts.join("");
+}
+function scheduleArrows(){
+  cancelAnimationFrame(arrowRAF);
+  const loop = () => {
+    drawArrows();
+    const any = (G && G.pending && G.pending.length) || (opp && opp.pending && opp.pending.length);
+    if (any) arrowRAF = requestAnimationFrame(loop);
+  };
+  arrowRAF = requestAnimationFrame(loop);
+}
+
+/* ============================================================
+   PINCH ZOOM — two fingers on a battlefield pans and scales it;
+   two fingers on the hand resizes the cards. Listeners are in the
+   capture phase so they still see both pointers when a card has
+   captured one for dragging.
+   ============================================================ */
+let pinching = false;
+function attachFieldPinch(hostSel, innerSel){
+  const host = $(hostSel), inner = $(innerSel);
+  const pts = new Map();
+  const st = {s:1, x:0, y:0};
+  let start = null, lastM = null;
+  const apply = () => { inner.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`; };
+  const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+  /* Zoom around the point the gesture is over, not the middle of the table.
+     transform-origin is the centre of the layer, so the offset that keeps the
+     content point under the finger has to be solved for explicitly. Scale
+     bottoms out at 1, and at 1 the pan resets — zooming all the way out always
+     lands you back on the whole field, centred. */
+  function zoomTo(fx, fy, want){
+    const r = host.getBoundingClientRect();
+    const cx = r.width/2, cy = r.height/2;
+    const qx = cx + (fx - cx - st.x) / st.s;
+    const qy = cy + (fy - cy - st.y) / st.s;
+    st.s = clamp(want, 1, 3);
+    st.x = fx - cx - (qx - cx) * st.s;
+    st.y = fy - cy - (qy - cy) * st.s;
+    if (st.s <= 1.002){ st.s = 1; st.x = 0; st.y = 0; }
+    apply();
+  }
+
+  host.addEventListener("pointerdown", e => {
+    pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pts.size === 2){
+      pinching = true; closeCardMenu();
+      const [a,b] = [...pts.values()];
+      const r = host.getBoundingClientRect();
+      lastM = {x:(a.x+b.x)/2 - r.left, y:(a.y+b.y)/2 - r.top};
+      start = {d: dist(a,b) || 1, s: st.s};
+    }
+  }, true);
+  host.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pts.size !== 2 || !start) return;
+    const [a,b] = [...pts.values()];
+    const d = dist(a,b);
+    // Ignore tiny distance jitter so a slight finger shift doesn't zoom
+    if (Math.abs(d - start.d) < 8 && st.s === 1) return;
+    const r = host.getBoundingClientRect();
+    const m = {x:(a.x+b.x)/2 - r.left, y:(a.y+b.y)/2 - r.top};
+    /* two-finger drag pans, the spread scales — both anchored on the fingers */
+    if (lastM && st.s > 1){ st.x += m.x - lastM.x; st.y += m.y - lastM.y; }
+    lastM = m;
+    zoomTo(m.x, m.y, start.s * (d / start.d));
+  }, true);
+  const end = e => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2){
+      start = null; lastM = null;
+      setTimeout(() => { pinching = false; }, 60);
+    }
+  };
+  host.addEventListener("pointerup", end, true);
+  host.addEventListener("pointercancel", end, true);
+
+  /* Trackpad pinch is reported as wheel + ctrlKey. Regular two-finger
+     scroll is plain wheel and must not zoom — that was causing left/up
+     to zoom in and right/down to zoom out on desktop. */
+  host.addEventListener("wheel", e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const r = host.getBoundingClientRect();
+    zoomTo(e.clientX - r.left, e.clientY - r.top, st.s * Math.exp(-e.deltaY * 0.0018));
+  }, {passive:false});
+
+
+  return {reset(){ st.s = 1; st.x = 0; st.y = 0; apply(); }};
+}
+function attachHandPinch(){
+  const host = $("#hand");
+  const pts = new Map();
+  let start = null, zoom = 1;
+  host.addEventListener("pointerdown", e => {
+    pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pts.size === 2){
+      pinching = true; closeCardMenu();
+      const [a,b] = [...pts.values()];
+      start = {d: Math.hypot(a.x-b.x, a.y-b.y) || 1, z: zoom};
+    }
+  }, true);
+  host.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pts.size !== 2 || !start) return;
+    const [a,b] = [...pts.values()];
+    zoom = clamp(start.z * (Math.hypot(a.x-b.x, a.y-b.y) / start.d), 0.6, 2.2);
+    document.documentElement.style.setProperty("--hand-zoom", zoom.toFixed(3));
+  }, true);
+  const end = e => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2){ start = null; setTimeout(() => { pinching = false; }, 60); }
+  };
+  host.addEventListener("pointerup", end, true);
+  host.addEventListener("pointercancel", end, true);
+}
+let myZoom = null, oppZoom = null;
+
+/* ============================================================
+   PLUMBING
+   ============================================================ */
+const show = sel => { $$(".screen").forEach(s => s.classList.remove("on")); $(sel).classList.add("on"); };
+const open = sel => $(sel).classList.add("on");
+const close = sel => $(sel).classList.remove("on");
+$$("[data-close]").forEach(b => b.onclick = () => b.closest(".modal").classList.remove("on"));
+$$(".modal").forEach(m => m.addEventListener("click", e => { if (e.target === m) m.classList.remove("on"); }));
+
+let toastTimer;
+function toast(msg, ms=2400){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), ms);
+}
+let wake = null;
+async function keepAwake(){ try{ if (!wake || wake.released) wake = await navigator.wakeLock.request("screen"); }catch(e){} }
+
+history.replaceState({pt:0}, "");
+history.pushState({pt:1}, "");
+addEventListener("popstate", () => {
+  const m = $$(".modal.on").pop();
+  if (m) m.classList.remove("on");
+  else if (targeting) cancelTargeting();
+  else if ($("#cardMenu").classList.contains("on")) closeCardMenu();
+  else if ($("#tableScreen").classList.contains("on")){ stopSync(); show("#menuScreen"); loadMatches(); }
+  else if ($("#deckScreen").classList.contains("on")) show("#menuScreen");
+  else { history.back(); return; }
+  history.pushState({pt:1}, "");
+});
+
+const vv = window.visualViewport;
+const typing = () => !!document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+/* Only treat it as a virtual keyboard when the visual viewport is
+   meaningfully shorter than the window. On desktop the two stay almost
+   the same, so focusing an input no longer triggers the mobile layout
+   shift that was closing the challenge modal. */
+const keyboardOpen = () => {
+  if (!vv) return false;
+  return (window.innerHeight - vv.height) > 120;
+};
+function fitViewport(){
+  const root = document.documentElement;
+  root.style.setProperty("--vvh", (vv ? vv.height : innerHeight) + "px");
+  root.style.setProperty("--vv-top", (vv ? vv.offsetTop : 0) + "px");
+  document.body.classList.toggle("kbd", typing() && keyboardOpen());
+}
+if (vv){ vv.addEventListener("resize", fitViewport); vv.addEventListener("scroll", fitViewport); }
+addEventListener("resize", fitViewport);
+document.addEventListener("focusin", e => {
+  if (!e.target.matches("input,textarea,select")) return;
+  fitViewport();
+  // scrollIntoView only helps when a real virtual keyboard is present
+  if (keyboardOpen()) {
+    setTimeout(() => { fitViewport(); e.target.scrollIntoView({block:"center", behavior:"smooth"}); }, 280);
+  }
+});
+document.addEventListener("focusout", () => setTimeout(fitViewport, 220));
+
+
+function sizeCards(){
+  if (typing()) return;
+  /* cards were 64% of the height of a half-table on a 400px-tall phone, which
+     is why the board read as cluttered — this keeps them near half */
+  const cardH = clamp(Math.floor((innerHeight - 50) * 0.20), 58, 112);
+  document.documentElement.style.setProperty("--card-h", cardH + "px");
+  document.documentElement.style.setProperty("--card-w", Math.round(cardH/1.395) + "px");
+}
+addEventListener("resize", sizeCards);
+addEventListener("orientationchange", () => setTimeout(() => { sizeCards(); fitViewport(); }, 250));
+
+if ("serviceWorker" in navigator)
+  addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+
+(async function init(){
+  $("#loginTag").textContent = "Sign in · " + BUILD;
+  sizeCards(); fitViewport();
+  myZoom = attachFieldPinch("#myField", "#myFieldInner");
+  oppZoom = attachFieldPinch("#oppField", "#oppFieldInner");
+  attachHandPinch();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+
+  const params = new URLSearchParams(location.search);
+  const stored = getStoredUser();
+  if (stored) await enterAsUser(stored);
+  else show("#loginScreen");
+
+  if (currentUser && params.get("match")) {
+    rejoinMatch(params.get("match"));
+  } else if (currentUser && params.get("code")) {
+    // Came from a challenge notification — open the join flow with the code filled in
+    switchTab("tabCode");
+    open("#challengeModal");
+    const codeInput = $("#chJoinCode");
+    if (codeInput) {
+      codeInput.value = params.get("code");
+      setTimeout(() => { if ($("#chJoin")) $("#chJoin").click(); }, 300);
+    }
+  }
+})();
+
+
+</script>
+</body>
+</html>
