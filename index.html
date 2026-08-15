@@ -687,17 +687,16 @@ SIDEBOARD
 
 <script>
 /* ============================================================
-   Proxy Table v3 — honor-system MTG playtest tabletop with a
-   server backend for accounts, decks, and two-player matches.
-   Rules stay off-app: the server tracks objects and an ordered
-   history of who changed what; the two humans agree on what it
-   means to actually play the game.
+   Proxy Table — honor-system MTG playtest tabletop.
+   Accounts/decks/challenges live on a Cloudflare Worker + D1.
+   Live matches run inside a Durable Object over WebSockets so
+   both seats stay in sync with low latency. Rules stay off-app.
    ============================================================ */
 
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.0.2";
+const BUILD = "v2.1.0-do";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -733,9 +732,7 @@ const fmt = f => FORMATS[f] || FORMATS.freeform;
 
 let decks = [], G = null, G2 = null, opp = null, twoSided = false;
 let currentUser = null, currentMatch = null, oppName = null, playerName = "Player";
-let syncTimer = null, statePushTimer = null, statePushWanted = false;
-/* one deal-in prompt per table entry, not one every 3s poll */
-let dealPrompted = false;
+/* matchWs, statePushTimer, dealPrompted, pendingLoss live in the SYNC section */
 
 /* ============================================================
    ACCOUNTS — no password; typing a name is the whole sign-in
@@ -1745,7 +1742,15 @@ function doAction(a, c, from){
 $("#zDraw").onclick = () => { if (!G) return; draw(1); };
 function draw(n){
   for (let i=0;i<n;i++){
-    if (!G.library.length){ toast("Library is empty. That's a loss on your next draw."); break; }
+    if (!G.library.length){
+      if (currentMatch) {
+        pendingLoss = { reason: "deck", loserIsMe: true };
+        showEndPrompt("You drew from an empty library.");
+      } else {
+        toast("Library is empty. That's a loss on your next draw.");
+      }
+      break;
+    }
     G.hand.push(G.library.pop());
   }
   renderAll(); pushState();
@@ -1851,6 +1856,7 @@ $("#listShuffle").onclick = () => { shuffle(G.library); close("#listModal"); toa
 $("#myLife").addEventListener("click", e => {
   const b = e.target.closest("button[data-d]"); if (!b || !G) return;
   G.life += +b.dataset.d; renderLife(); pushState();
+  checkLossConditions();
 });
 
 /* ============================================================
@@ -2090,14 +2096,19 @@ async function goTable(){
 }
 
 /* ============================================================
-   SYNC — the server holds the match; both phones just read and
-   write it. Every action posts a full snapshot of your own
-   private state as one more row in an append-only log, so the
-   server always has your latest board even if the app closes,
-   and rejoining just re-reads it instead of replaying history.
+   SYNC — Durable Object + WebSocket
+   One live connection per match. Each seat still only owns its
+   own private board; the DO just holds both in memory and
+   forwards updates instantly.
    ============================================================ */
-function setSyncStatus(ok, name){
-  if (!currentMatch){
+let matchWs = null;
+let statePushTimer = null;
+let statePushWanted = false;
+let dealPrompted = false;
+let pendingLoss = null; // {reason, loserIsMe}
+
+function setSyncStatus(ok, name) {
+  if (!currentMatch) {
     $("#syncWho").textContent = twoSided ? "both seats" : "practice table";
     const s = $("#syncState");
     s.textContent = twoSided ? "tap Swap Seat to change sides" : "not synced";
@@ -2109,117 +2120,249 @@ function setSyncStatus(ok, name){
   s.textContent = ok ? "synced" : "offline — retrying";
   s.className = "s " + (ok ? "live" : "bad");
 }
-function startSync(){
-  stopSync();
-  eventsPrimed = false; lastSeq = 0; dealPrompted = false;
-  primeEvents().then(() => pollEvents());
-  pollState();
-  syncTimer = setInterval(() => { pollState(); pollEvents(); }, 3000);
-}
-function stopSync(){
-  clearInterval(syncTimer); syncTimer = null;
-  cancelAnimationFrame(arrowRAF);
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && currentMatch && $("#tableScreen").classList.contains("on")) pollState();
-});
-async function pollState(){
-  if (!currentMatch) return;
-  try{
-    const d = await api(`/api/match/${currentMatch}/state?username=${encodeURIComponent(currentUser)}`);
-    if (!G && d.mine) G = d.mine;
-    oppName = d.opponentName;
-    if (d.opponent) opp = d.opponent;
-    renderAll();
-    setSyncStatus(true, oppName);
-    /* Joining a brand-new match means the server has no board for this seat —
-       nothing to restore, and nothing works until a deck is dealt. Say so once
-       and open the menu, rather than leaving an inert table. */
-    if (!G && !dealPrompted){
-      dealPrompted = true;
-      toast("You're in. Pick your deck and tap New game to deal in.", 6000);
-      if ($("#tableScreen").classList.contains("on")) $("#menuBtn").onclick();
-    }
-  }catch(e){ setSyncStatus(false, oppName); }
-}
-async function postEvent(type, payload){
-  return api(`/api/match/${currentMatch}/events`, { method:"POST", body: JSON.stringify({username:currentUser, type, payload}) });
-}
-function fullState(){
-  return {deckId:G.deckId, deckName:G.deckName, format:G.format, life:G.life,
-    turn:G.turn || 1, active:G.active !== false,
-    library:G.library, hand:G.hand, field:G.field, grave:G.grave, exile:G.exile, command:G.command,
-    pending:G.pending || [], topRevealed: !!G.topRevealed};
+
+function fullState() {
+  return {
+    deckId: G.deckId, deckName: G.deckName, format: G.format, life: G.life,
+    turn: G.turn || 1, active: G.active !== false,
+    library: G.library, hand: G.hand, field: G.field, grave: G.grave,
+    exile: G.exile, command: G.command,
+    pending: G.pending || [], topRevealed: !!G.topRevealed
+  };
 }
 
-/* Events carry the things one player does TO the other: allowing a declared
-   target, and nudges. State snapshots can't express those, since each player
-   only ever writes their own state. */
-let lastSeq = 0, eventsPrimed = false;
-async function primeEvents(){
-  try{
-    const d = await api(`/api/match/${currentMatch}/events?since=0`);
-    lastSeq = d.events.reduce((m,e) => Math.max(m, e.seq), 0);
-  }catch(e){ lastSeq = 0; }
-  eventsPrimed = true;
+function wsUrl() {
+  const base = API_BASE.replace(/^http/, "ws");
+  return `${base}/api/match/${currentMatch}/ws?username=${encodeURIComponent(currentUser)}`;
 }
-async function pollEvents(){
-  if (!currentMatch || !eventsPrimed) return;
-  try{
-    const d = await api(`/api/match/${currentMatch}/events?since=${lastSeq}`);
-    for (const ev of d.events){
-      lastSeq = Math.max(lastSeq, ev.seq);
-      if (ev.username === currentUser) continue;      // my own events echo back
-      if (ev.type === "nudge") toast((ev.payload && ev.payload.message) || "Your move.", 4000);
-      if (ev.type === "call" && ev.payload){
-        pushCall(ev.payload.kind, ev.username, ev.payload.kind === "In response");
-      }
-      if (ev.type === "callack" && ev.payload){
-        toast(`${ev.username} acknowledged: ${ev.payload.kind}.`, 3000);
-      }
-      if (ev.type === "control" && G && ev.payload){
-        const i = G.field.findIndex(x => x.id === ev.payload.cardId);
-        if (i >= 0){
-          const gone = G.field.splice(i,1)[0];
-          renderAll(); pushState();
-          toast(`${ev.username} took control of ${gone.name}.`, 4000);
-        }
-      }
-      if (ev.type === "return" && G && ev.payload && ev.payload.card){
-        const card = ev.payload.card, z = ev.payload.zone;
-        if (z === "field"){ card.y = 6; clampPos(card); G.field.push(card); }
-        else (G[z] || G.grave).push(card);
-        renderAll(); pushState();
-        toast(`${card.name} came back to your ${z}.`, 3500);
-      }
-      if (ev.type === "endturn" && G){
-        G.turn = (G.turn || 1) + 1; G.active = true;
-        renderAll(); pushState();
-        toast(`${ev.username} passed the turn — your turn ${G.turn}.`, 4000);
-      }
-      if (ev.type === "resolve" && G && G.pending){
-        const hit = G.pending.find(p => p.id === (ev.payload && ev.payload.actionId));
-        if (hit){
-          G.pending = G.pending.filter(p => p !== hit);
-          toast(`${ev.username} allowed ${hit.srcName} → ${hit.tgt.label}.`, 3500);
-          renderAll(); pushState();
-        }
+
+function startSync() {
+  stopSync();
+  dealPrompted = false;
+  pendingLoss = null;
+  if (!currentMatch || !currentUser) return;
+
+  const ws = new WebSocket(wsUrl());
+  matchWs = ws;
+
+  ws.onopen = () => {
+    setSyncStatus(true, oppName);
+    // If we already have a local board, push it immediately
+    if (G) pushState();
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch (_) { return; }
+    if (!msg || !msg.type) return;
+
+    if (msg.type === "snapshot") {
+      if (msg.you && !G) G = msg.you;
+      oppName = msg.opponentName;
+      if (msg.opponent) opp = msg.opponent;
+      renderAll();
+      setSyncStatus(true, oppName);
+      if (!G && !dealPrompted) {
+        dealPrompted = true;
+        toast("You're in. Pick your deck and tap New game to deal in.", 6000);
+        if ($("#tableScreen").classList.contains("on")) $("#menuBtn").onclick();
       }
     }
-  }catch(e){}
+
+    if (msg.type === "opponent") {
+      opp = msg.opponent;
+      renderAll();
+      setSyncStatus(true, oppName);
+    }
+
+    if (msg.type === "event") {
+      handleRemoteEvent(msg.from, msg.eventType, msg.payload || {});
+    }
+
+    if (msg.type === "ended") {
+      toast(`Match over — ${msg.winner} wins with ${msg.winnerDeck}.`, 6000);
+      stopSync();
+      currentMatch = null;
+      setSyncStatus(false, null);
+      // Optional: bounce back to the lobby after a moment
+      setTimeout(() => {
+        if (!$("#tableScreen").classList.contains("on")) return;
+        // stay on table for now; user can leave manually
+      }, 1000);
+    }
+  };
+
+  ws.onclose = () => {
+    if (matchWs === ws) {
+      matchWs = null;
+      setSyncStatus(false, oppName);
+      // Simple reconnect after a short delay if we still think we're in a match
+      if (currentMatch) {
+        setTimeout(() => {
+          if (currentMatch && !matchWs) startSync();
+        }, 2000);
+      }
+    }
+  };
+
+  ws.onerror = () => { /* onclose will fire */ };
 }
-function pushState(){
-  if (!G || !currentMatch) return;
+
+function stopSync() {
+  if (matchWs) {
+    try { matchWs.close(); } catch (_) {}
+    matchWs = null;
+  }
+  clearTimeout(statePushTimer);
+  statePushTimer = null;
+  statePushWanted = false;
+  cancelAnimationFrame(arrowRAF);
+}
+
+function pushState() {
+  if (!G || !currentMatch || !matchWs || matchWs.readyState !== 1) return;
   statePushWanted = true;
   if (statePushTimer) return;
-  statePushTimer = setTimeout(async () => {
+  statePushTimer = setTimeout(() => {
     statePushTimer = null;
-    if (!statePushWanted) return;
+    if (!statePushWanted || !matchWs || matchWs.readyState !== 1) return;
     statePushWanted = false;
-    try{ await postEvent("state", fullState()); setSyncStatus(true, oppName); }
-    catch(e){ setSyncStatus(false, oppName); }
-  }, 700);
+    try {
+      matchWs.send(JSON.stringify({ type: "state", payload: fullState() }));
+      setSyncStatus(true, oppName);
+    } catch (e) {
+      setSyncStatus(false, oppName);
+    }
+  }, 400);
 }
+
+function postEvent(eventType, payload) {
+  if (!currentMatch || !matchWs || matchWs.readyState !== 1) {
+    return Promise.reject(new Error("not connected"));
+  }
+  matchWs.send(JSON.stringify({ type: "event", eventType, payload }));
+  return Promise.resolve();
+}
+
+function handleRemoteEvent(from, type, payload) {
+  if (type === "nudge") toast((payload && payload.message) || "Your move.", 4000);
+  if (type === "call" && payload) {
+    pushCall(payload.kind, from, payload.kind === "In response");
+  }
+  if (type === "callack" && payload) {
+    toast(`${from} acknowledged: ${payload.kind}.`, 3000);
+  }
+  if (type === "control" && G && payload) {
+    const i = G.field.findIndex(x => x.id === payload.cardId);
+    if (i >= 0) {
+      const gone = G.field.splice(i, 1)[0];
+      renderAll(); pushState();
+      toast(`${from} took control of ${gone.name}.`, 4000);
+    }
+  }
+  if (type === "return" && G && payload && payload.card) {
+    const card = payload.card, z = payload.zone;
+    if (z === "field") { card.y = 6; clampPos(card); G.field.push(card); }
+    else (G[z] || G.grave).push(card);
+    renderAll(); pushState();
+    toast(`${card.name} came back to your ${z}.`, 3500);
+  }
+  if (type === "endturn" && G) {
+    G.turn = (G.turn || 1) + 1; G.active = true;
+    renderAll(); pushState();
+    toast(`${from} passed the turn — your turn ${G.turn}.`, 4000);
+  }
+  if (type === "resolve" && G && G.pending) {
+    const hit = G.pending.find(p => p.id === (payload && payload.actionId));
+    if (hit) {
+      G.pending = G.pending.filter(p => p !== hit);
+      toast(`${from} allowed ${hit.srcName} → ${hit.tgt.label}.`, 3500);
+      renderAll(); pushState();
+    }
+  }
+}
+
+/* ---------- loss detection + confirmation ---------- */
+function checkLossConditions() {
+  if (!G || !currentMatch || pendingLoss) return;
+  if (G.life <= 0) {
+    pendingLoss = { reason: "life", loserIsMe: true };
+    showEndPrompt("Your life total is 0 or less.");
+  }
+}
+
+function showEndPrompt(reason) {
+  // Re-use the existing toast + a simple confirm flow via the game modal area
+  // For now we surface a dedicated confirmation using the cardMenu pattern
+  const m = $("#cardMenu");
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      ${esc(reason)}<br><br>
+      End the match?
+    </div>
+    <button data-end="yes" class="wide">Yes — end match</button>
+    <button data-end="no" class="wide">No — keep playing</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.end === "yes") {
+      showWinnerConfirm();
+    } else {
+      pendingLoss = null;
+    }
+  };
+}
+
+function showWinnerConfirm() {
+  const m = $("#cardMenu");
+  const myDeck = (G && G.deckName) || "Unknown";
+  const theirDeck = (opp && opp.deckName) || "Unknown";
+  m.innerHTML = `
+    <div style="padding:10px 12px;font-size:13px;line-height:1.35;color:var(--parchment);">
+      Confirm result
+    </div>
+    <button data-w="me" class="wide">I win (${esc(myDeck)})</button>
+    <button data-w="them" class="wide">${esc(oppName || "Opponent")} wins (${esc(theirDeck)})</button>
+    <button data-w="cancel" class="wide">Cancel</button>`;
+  m.classList.add("on");
+  m.style.left = "50%";
+  m.style.top = "40%";
+  m.style.transform = "translate(-50%,-50%)";
+  m.onclick = e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    closeCardMenu();
+    m.style.transform = "";
+    if (b.dataset.w === "cancel") {
+      pendingLoss = null;
+      return;
+    }
+    const iWin = b.dataset.w === "me";
+    const winner = iWin ? currentUser : (oppName || "Opponent");
+    const loser = iWin ? (oppName || "Opponent") : currentUser;
+    const winnerDeck = iWin ? myDeck : theirDeck;
+    const loserDeck = iWin ? theirDeck : myDeck;
+    const format = (G && G.format) || "freeform";
+    if (matchWs && matchWs.readyState === 1) {
+      matchWs.send(JSON.stringify({
+        type: "end",
+        winner, loser, winnerDeck, loserDeck, format
+      }));
+    }
+    pendingLoss = null;
+  };
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentMatch && !matchWs) startSync();
+});
+
 
 /* ============================================================
    PUSH NOTIFICATIONS
