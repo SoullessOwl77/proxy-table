@@ -1,8 +1,6 @@
-# Proxy Table — one-shot deploy
-# Double-click deploy.bat, or run:  powershell -ExecutionPolicy Bypass -File .\deploy.ps1
-
-$ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Proxy Table deploy script
+$root = $PSScriptRoot
+if (-not $root) { $root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 Set-Location $root
 
 Write-Host ""
@@ -10,37 +8,40 @@ Write-Host "=== Proxy Table deploy ===" -ForegroundColor Cyan
 Write-Host "Folder: $root"
 Write-Host ""
 
-# --- Git ---
 $msg = Read-Host "Commit message (leave blank for timestamp)"
-if ([string]::IsNullOrWhiteSpace($msg)) {
-  $msg = "deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+if (-not $msg) {
+  $msg = "deploy " + (Get-Date -Format "yyyy-MM-dd HH:mm")
 }
 
 Write-Host ""
-Write-Host "git add / commit / push..." -ForegroundColor Yellow
+Write-Host "Running git..." -ForegroundColor Yellow
 git add -A
-$status = git status --porcelain
-if ($status) {
+$changes = git status --porcelain
+if ($changes) {
   git commit -m $msg
   git push
-  Write-Host "Git push done." -ForegroundColor Green
+  Write-Host "Git done." -ForegroundColor Green
 } else {
-  Write-Host "Nothing new to commit — skipping push." -ForegroundColor DarkYellow
-}
-
-# --- Worker ---
-$worker = Join-Path $root "worker"
-if (Test-Path $worker) {
-  Write-Host ""
-  Write-Host "wrangler deploy..." -ForegroundColor Yellow
-  Set-Location $worker
-  wrangler deploy
-  Write-Host "Worker deploy done." -ForegroundColor Green
-} else {
-  Write-Host "No worker folder found — skipped wrangler." -ForegroundColor DarkYellow
+  Write-Host "No file changes to commit." -ForegroundColor DarkYellow
 }
 
 Write-Host ""
+$worker = Join-Path $root "worker"
+Write-Host "Looking for worker at: $worker"
+
+if (Test-Path $worker) {
+  Set-Location $worker
+  Write-Host "Running wrangler deploy..." -ForegroundColor Yellow
+  wrangler deploy
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Worker done." -ForegroundColor Green
+  } else {
+    Write-Host "Wrangler exited with code $LASTEXITCODE" -ForegroundColor Red
+  }
+} else {
+  Write-Host "Worker folder not found." -ForegroundColor Red
+}
+
+Set-Location $root
+Write-Host ""
 Write-Host "=== All done ===" -ForegroundColor Cyan
-Write-Host "Press any key to close..."
-[void][System.Console]::ReadKey($true)
