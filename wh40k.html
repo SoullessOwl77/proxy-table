@@ -73,11 +73,26 @@ canvas.dragging{cursor:grabbing;}
 .rotate h2{font-family:Fraunces,serif;font-weight:400;}
 @media (orientation:portrait) and (max-width:860px){.rotate{display:flex;}}
 @media (max-width:900px){.tips{width:min(260px,42vw);font-size:12px;}}
+.guide{position:fixed;top:52px;left:calc(10px + var(--edge-l));z-index:5;width:min(320px,42vw);
+  background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
+  max-height:calc(100vh - 200px);overflow:auto;box-shadow:0 8px 24px #0008;display:none;}
+.guide.on{display:block;}
+.guide .gbar{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.guide .gbar h3{flex:1;font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0;}
+.guide .phase{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);margin:0 0 8px;}
+.guide .do,.guide .dont{margin:0 0 8px;padding-left:16px;font-size:12px;line-height:1.45;}
+.guide .do{color:var(--good);}
+.guide .dont{color:#d4a0a0;}
+.guide .do li,.guide .dont li{margin-bottom:3px;}
+.guide .nextwhen{font-size:12px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:4px;}
+.guide .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
+@media (max-width:900px){.guide{width:min(280px,46vw);font-size:12px;}}
 </style>
 </head>
 <body>
 <div class="bar">
   <button class="btn" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
+  <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <h1>Warhammer 40,000</h1>
   <span class="sub" id="whoSub">Practice</span>
   <span class="sync" id="syncState"></span>
@@ -96,6 +111,18 @@ canvas.dragging{cursor:grabbing;}
     <div class="short" id="tipShort"></div>
     <div class="long" id="tipLong"></div>
   </div>
+</aside>
+<aside class="guide" id="guide">
+  <div class="gbar">
+    <h3>Walkthrough</h3>
+    <button class="btn sm ghost" id="btnGuideHide" title="Hide walkthrough">–</button>
+  </div>
+  <div class="phase" id="guidePhase">Command</div>
+  <div class="label">Do</div>
+  <ul class="do" id="guideDo"></ul>
+  <div class="label">Don’t</div>
+  <ul class="dont" id="guideDont"></ul>
+  <div class="nextwhen" id="guideNext"></div>
 </aside>
 <canvas id="c"></canvas>
 <div class="dock">
@@ -158,7 +185,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.7.2-40k-tips";
+const BUILD = "v2.8.0-40k-guide";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -224,6 +251,11 @@ const TIPS = {
     short:"Leaves this table and returns to the hub (matches + game chooser).",
     more:"Practice progress is saved in this browser. PVP stays on the server — rejoin from Your Matches."
   },
+  guide: {
+    title:"Guide",
+    short:"Phase walkthrough: what to do and what to avoid this step.",
+    more:"On by default in Practice, off in PVP. Toggle any time. Content is phase-based now; later it can highlight steps for the models on the table."
+  },
   exposed: {
     title:"Exposed terrain",
     short:"Does not grant Cover. Still useful as a footprint for placement and blocking.",
@@ -238,6 +270,81 @@ const TIPS = {
     title:"Dense cover",
     short:"Same as Light on this table: −1 to hit if on it or shot through it.",
     more:"Ruins are Dense. In a full game Dense also tightens visibility more strictly. Here it matches Light for Cover. Lock ruins after you like the layout."
+  }
+};
+
+/* Phase walkthrough. Shape supports future unit-aware lines:
+   each do/dont entry may later be { text, when: { keywords:[], role:"" } }.
+   getGuideBlock() already passes the unit list for that filtering. */
+const GUIDE = {
+  command: {
+    title: "Command phase",
+    do: [
+      "Note whose turn it is (P0 / P1) and the battle round (R#).",
+      "If the board is empty: Generate terrain, then Demo forces (Units tool).",
+      "Plan the turn: who will move, shoot, or charge."
+    ],
+    dont: [
+      "Don’t move models or shoot yet — that is later phases.",
+      "Don’t skip reading the log if something looks wrong."
+    ],
+    next: "When you know the plan, tap Next → Movement."
+  },
+  movement: {
+    title: "Movement phase",
+    do: [
+      "Select a model (Units tool). Gold ring = its Move (M″).",
+      "Drag it up to about that distance. Stay in your half early on if learning.",
+      "Keep same-color models near each other (coherency reminder lines)."
+    ],
+    dont: [
+      "Don’t end on top of an enemy model.",
+      "Don’t move through the whole table in one go — honor the M″ ring.",
+      "Don’t start shooting; that is the Shooting phase."
+    ],
+    next: "When every model you wanted to move has moved (or stayed), Next → Shooting."
+  },
+  shooting: {
+    title: "Shooting phase",
+    do: [
+      "Switch to Combat. Tap your model, then an enemy in gun range (not within 2″).",
+      "Check the bar: weapon, range, and Cover. Attack to roll Hit → Wound → Save → Damage.",
+      "Use terrain: targets on or behind Light/Dense get −1 to be hit."
+    ],
+    dont: [
+      "Don’t shoot into 2″ Engagement Range with normal guns (Fight is for that).",
+      "Don’t pick a friendly model as the target.",
+      "Don’t forget to clear attacker/target if you change your mind."
+    ],
+    next: "When you’ve shot with the models you want, Next → Charge."
+  },
+  charge: {
+    title: "Charge phase",
+    do: [
+      "Pick models that still need to reach combat (usually those that did not Advance).",
+      "Measure the gap to an enemy. In a real game you roll 2D6; here, move into 2″ if you could make that distance.",
+      "End in Engagement Range (red 2″ ring) of the target if the charge succeeds."
+    ],
+    dont: [
+      "Don’t charge from more than 12″ away (max charge distance).",
+      "Don’t resolve fights yet — that is the Fight phase.",
+      "Don’t leave charged models stranded mid-table with no plan."
+    ],
+    next: "When charges are done, Next → Fight."
+  },
+  fight: {
+    title: "Fight phase",
+    do: [
+      "Combat tool: tap a model in 2″ of an enemy, then the enemy, then Attack (melee profile).",
+      "Fight with models that charged or are already in Engagement Range.",
+      "Watch wounds on the token; destroyed models disappear."
+    ],
+    dont: [
+      "Don’t swing at targets outside 2″.",
+      "Don’t use guns here unless a profile is truly melee.",
+      "Don’t skip ending the turn — after Fight, Next starts the other player’s Command."
+    ],
+    next: "Tap Next to pass the turn (other seat’s Command, or next battle round)."
   }
 };
 const PRESETS = {
@@ -278,6 +385,8 @@ let nid = 1, uidn = 1;
 let tape = null;
 let matchWs = null, pushTimer = null, pushWanted = false;
 let tipMore = false;
+/* Practice: guide on. PVP: guide off. User can toggle either way this session. */
+let guideOn = false;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -331,7 +440,7 @@ function renderPhases(){
 function setPhase(p){
   S.turn.phase = p;
   logLine("Phase → " + p);
-  save(); draw(); refreshTip();
+  save(); draw(); refreshTip(); refreshGuide();
 }
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
@@ -342,7 +451,7 @@ document.getElementById("btnNext").onclick = () => {
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
     else { S.turn.activeSeat = 0; S.turn.battleRound++; }
     logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat);
-    save(); draw(); refreshTip();
+    save(); draw(); refreshTip(); refreshGuide();
   }
 };
 
@@ -397,6 +506,37 @@ document.getElementById("btnTipMore").onclick = () => {
 document.getElementById("btnTipHide").onclick = () => {
   document.getElementById("tips").classList.toggle("collapsed");
 };
+
+/* Walkthrough: phase do/don't. units argument reserved for future model-aware lines. */
+function getGuideBlock(phase, units){
+  const block = GUIDE[phase] || GUIDE.command;
+  // Future: filter block.do / block.dont by entry.when against `units` on the table.
+  void units;
+  return block;
+}
+function refreshGuide(){
+  const panel = document.getElementById("guide");
+  const btn = document.getElementById("btnGuide");
+  panel.classList.toggle("on", guideOn);
+  btn.classList.toggle("on", guideOn);
+  btn.classList.toggle("gold", guideOn);
+  if (!guideOn) return;
+  const block = getGuideBlock(S.turn.phase, S.units || []);
+  document.getElementById("guidePhase").textContent = block.title;
+  document.getElementById("guideDo").innerHTML = (block.do || []).map(t => "<li>"+t+"</li>").join("");
+  document.getElementById("guideDont").innerHTML = (block.dont || []).map(t => "<li>"+t+"</li>").join("");
+  document.getElementById("guideNext").textContent = block.next || "";
+}
+function setGuide(on){
+  guideOn = !!on;
+  refreshGuide();
+}
+document.getElementById("btnGuide").onclick = () => {
+  setGuide(!guideOn);
+  showTip(TIPS.guide);
+};
+document.getElementById("btnGuide").addEventListener("pointerenter", () => showTip(TIPS.guide));
+document.getElementById("btnGuideHide").onclick = () => setGuide(false);
 
 const cam = { x: W/2, y: H/2, scale: 12 };
 let resizedOnce = false;
@@ -940,7 +1080,7 @@ function applyRemote(board){
   if ((board.rev||0) <= (S.rev||0)) return;
   S = board;
   if (!S.units) S.units=[];
-  renderLog(); renderPhases(); draw(); refreshTip();
+  renderLog(); renderPhases(); draw(); refreshTip(); refreshGuide();
 }
 function pushState(){
   if (practice || !matchWs || matchWs.readyState!==1) return;
@@ -986,7 +1126,8 @@ function startSync(){
   };
 }
 
-renderLog(); renderPhases(); refreshTip(); resize();
+guideOn = !!practice; // practice on, PVP off; user may toggle either way
+renderLog(); renderPhases(); refreshTip(); refreshGuide(); resize();
 if (!practice) startSync();
 </script>
 </body>
