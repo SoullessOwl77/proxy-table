@@ -64,7 +64,7 @@ canvas.dragging{cursor:grabbing;}
 .tips.collapsed .tipsbody{display:none;}
 .tips h3{font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0 0 4px;}
 .tips .short{font-size:13px;line-height:1.4;}
-.tips .long{display:none;font-size:12px;line-height:1.5;color:var(--parchment-dim);margin-top:8px;}
+.tips .long{display:none;font-size:12px;line-height:1.5;color:var(--parchment-dim);margin-top:8px;white-space:pre-line;}
 .tips.more .long{display:block;}
 .tips .tipbar{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
 .tips .tipbar h3{flex:1;margin:0;}
@@ -93,6 +93,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="bar">
   <button class="btn" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
+  <button class="btn sm danger" id="btnReset" title="Clear the practice table and start over" style="display:none">Reset</button>
   <h1>Warhammer 40,000</h1>
   <span class="sub" id="whoSub">Practice</span>
   <span class="sync" id="syncState"></span>
@@ -185,7 +186,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.1-40k-turn-combat";
+const BUILD = "v2.8.2-40k-stabilize";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -387,6 +388,8 @@ let matchWs = null, pushTimer = null, pushWanted = false;
 let tipMore = false;
 /* Practice: guide on. PVP: guide off. User can toggle either way this session. */
 let guideOn = false;
+/* While dragging a unit, rings stay on the start position until drop. */
+let moveOrigin = null;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -483,12 +486,29 @@ function tipKey(){
   if (tool==="terrain") return "terrain";
   return S.turn.phase;
 }
+function fmtWep(w, kind){
+  if (!w) return "none";
+  if (kind === "ranged")
+    return w.name+": A"+w.A+", BS "+w.skill+"+, S"+w.S+", AP"+w.AP+", D"+w.D+", Range "+w.rng+"″";
+  return w.name+": A"+w.A+", WS "+w.skill+"+, S"+w.S+", AP"+w.AP+", D"+w.D;
+}
 function unitTip(u){
-  const inv = u.Inv ? (" Invulnerable "+u.Inv+"+ ignores AP.") : " No invulnerable save.";
+  const inv = u.Inv
+    ? ("Invulnerable save "+u.Inv+"+ (ignores AP — use if better than the armour save).")
+    : "No invulnerable save.";
+  const kw = (u.keywords && u.keywords.length) ? u.keywords.join(", ") : "—";
   return {
     title: u.name,
-    short: "M"+u.M+"″  T"+u.T+"  Sv"+u.Sv+"+"+(u.Inv?" Inv"+u.Inv+"+":"")+"  W "+(u.wounds??u.W)+"/"+u.W+". Gold ring = Move, red = 2″ ER.",
-    more: "Movement is up to M″. Toughness is used on the wound roll (equal Strength needs 4+). Armour save is Sv+, worsened by AP. "+inv+" Remaining wounds are on the token. Destroyed at 0."
+    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. Gold ring = Move, red = 2″ ER.",
+    more:
+      "Move (M): up to "+u.M+"″ this Movement phase.\n"+
+      "Toughness (T): "+u.T+" — compared to weapon Strength on the wound roll (equal Strength needs 4+).\n"+
+      "Save (Sv): "+u.Sv+"+ armour, made worse by AP (e.g. AP−1 means you need one higher).\n"+
+      inv+"\n"+
+      "Wounds (W): "+(u.wounds??u.W)+" remaining of "+u.W+". Removed at 0.\n"+
+      "Keywords: "+kw+".\n"+
+      "Ranged — "+fmtWep(u.ranged, "ranged")+".\n"+
+      "Melee — "+fmtWep(u.melee, "melee")+"."
   };
 }
 function showTip(pack){
@@ -668,8 +688,14 @@ function draw(){
   S.terrain.forEach(t => drawPiece(t, selected && selected.kind==="t" && selected.id===t.id));
   const selU = selected && selected.kind==="u" ? S.units.find(u=>u.id===selected.id) : null;
   if (selU){
-    drawRing(selU.x, selU.y, selU.M||6, "#c39a4e66", 1.5);
-    drawRing(selU.x, selU.y, 2, "#a8443c88", 1);
+    const ringAt = (moveOrigin && moveOrigin.id === selU.id) ? moveOrigin : selU;
+    drawRing(ringAt.x, ringAt.y, selU.M||6, "#c39a4e66", 1.5);
+    drawRing(ringAt.x, ringAt.y, 2, "#a8443c88", 1);
+    if (moveOrigin && moveOrigin.id === selU.id){
+      const a = toScreen(moveOrigin.x, moveOrigin.y), b = toScreen(selU.x, selU.y);
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.setLineDash([3,4]); ctx.strokeStyle="#c39a4e88"; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
+    }
     S.units.filter(u => u.groupId && u.groupId===selU.groupId && u.id!==selU.id).forEach(u => {
       const a=toScreen(selU.x,selU.y), b=toScreen(u.x,u.y);
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
@@ -819,6 +845,26 @@ function addDrop(key){
 
 document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
 document.getElementById("btnMenu").addEventListener("pointerenter", () => showTip(TIPS.menu));
+function resetPractice(){
+  if (!practice) return;
+  if (!confirm("Reset the practice table?\nClears terrain, units, turn, and log.")) return;
+  S = emptyBoard();
+  selected = null;
+  clearCombatPair();
+  tape = null;
+  moveOrigin = null;
+  nid = 1;
+  uidn = 1;
+  S.log = [{ t: Date.now(), seat: 0, line: "Practice table reset" }];
+  try{ localStorage.removeItem(STORE); }catch(_){}
+  save();
+  fit();
+  draw();
+  refreshTip();
+  refreshGuide();
+}
+document.getElementById("btnReset").onclick = resetPractice;
+if (practice) document.getElementById("btnReset").style.display = "";
 document.getElementById("btnFit").onclick = () => { fit(); draw(); showTip(TIPS.fit); };
 document.getElementById("btnFit").addEventListener("pointerenter", () => showTip(TIPS.fit));
 document.getElementById("btnNext").addEventListener("pointerenter", () => showTip(TIPS.next));
@@ -1042,7 +1088,9 @@ canvas.addEventListener("pointerdown", e => {
   const hu = hitUnit(wpt.x,wpt.y);
   if (hu){
     selectObj("u", hu);
-    mode="move"; drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+    mode="move";
+    drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+    moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
   } else {
     const ht = hitTerrain(wpt.x,wpt.y);
     if (ht){
@@ -1091,12 +1139,16 @@ function endPtr(e){
   if (mode==="move"||mode==="rot"){
     if (mode==="move" && drag && drag.kind==="u"){
       const u=S.units.find(x=>x.id===drag.id);
-      if (u) logLine("Moved "+u.name);
+      if (u){
+        const from = moveOrigin;
+        const dist = from ? Math.hypot(u.x-from.x, u.y-from.y) : 0;
+        logLine("Moved "+u.name+(from ? " "+dist.toFixed(1)+"\"" : ""));
+      }
     }
     save();
   }
-  if (!ptrs.size){ mode=null; drag=null; canvas.classList.remove("dragging"); }
-  else if (ptrs.size===1){ const p=[...ptrs.values()][0]; mode="pan"; drag={cx:cam.x,cy:cam.y,sx:p.x,sy:p.y}; }
+  if (!ptrs.size){ mode=null; drag=null; moveOrigin=null; canvas.classList.remove("dragging"); draw(); }
+  else if (ptrs.size===1){ const p=[...ptrs.values()][0]; mode="pan"; drag={cx:cam.x,cy:cam.y,sx:p.x,sy:p.y}; moveOrigin=null; }
 }
 canvas.addEventListener("pointerup", endPtr);
 canvas.addEventListener("pointercancel", endPtr);
