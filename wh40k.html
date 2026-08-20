@@ -21,45 +21,60 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--ink);color:var(-
   font-family:Archivo,system-ui,sans-serif;overscroll-behavior:none;-webkit-user-select:none;user-select:none;}
 button{font-family:inherit;color:inherit;background:none;border:none;padding:0;}
 button:not(:disabled){cursor:pointer;}
-.bar{position:fixed;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:8px 12px;padding-left:calc(12px + var(--edge-l));padding-right:calc(12px + var(--edge-r));
-  background:#1b2825ee;border-bottom:1px solid #000;backdrop-filter:blur(8px);}
-.bar h1{font-family:Fraunces,serif;font-weight:900;font-size:16px;margin:0;}
-.bar .sub{font-size:11px;color:var(--parchment-dim);letter-spacing:.12em;text-transform:uppercase;}
-.phases{display:flex;gap:4px;flex-wrap:wrap;}
-.phases .btn{padding:5px 8px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;}
-.btn{background:var(--felt-3);border:1px solid #0006;border-radius:6px;padding:7px 12px;
+/* Thin top status — title only; chrome lives in side rails */
+.bar{position:fixed;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:6px 72px;padding-left:calc(72px + var(--edge-l));padding-right:calc(72px + var(--edge-r));
+  background:#1b2825cc;border-bottom:1px solid #0006;backdrop-filter:blur(8px);pointer-events:none;}
+.bar h1{font-family:Fraunces,serif;font-weight:900;font-size:15px;margin:0;pointer-events:auto;}
+.bar .sub{font-size:10px;color:var(--parchment-dim);letter-spacing:.1em;text-transform:uppercase;pointer-events:none;}
+.bar .sync{pointer-events:none;}
+.phases{display:flex;flex-direction:column;gap:4px;width:100%;}
+.phases .btn{padding:6px 4px;font-size:9px;letter-spacing:.05em;text-transform:uppercase;width:100%;}
+.phases .sub{font-size:9px;text-align:center;padding:2px 0;}
+.btn{background:var(--felt-3);border:1px solid #0006;border-radius:6px;padding:7px 10px;
   font-size:12px;font-weight:500;letter-spacing:.03em;}
 .btn:active{background:var(--brass-dim);}
 .btn.gold{background:var(--brass);color:#191207;font-weight:700;}
 .btn.ghost{background:none;border:1px solid var(--brass-dim);color:var(--brass);}
-.btn.sm{padding:5px 9px;font-size:11px;}
+.btn.sm{padding:5px 8px;font-size:11px;}
 .btn.on{background:var(--brass);color:#191207;font-weight:700;}
 .btn.danger{border-color:var(--blood);color:var(--blood);}
 .sync.live{color:var(--good);} .sync.bad{color:var(--blood);}
 .spacer{flex:1;}
+/* Side rails — open the center map */
+.rail{position:fixed;top:0;bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
+  padding:8px 6px;padding-top:calc(8px + env(safe-area-inset-top,0px));
+  padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));
+  width:62px;background:#1b2825f0;border:none;backdrop-filter:blur(8px);overflow-y:auto;overflow-x:hidden;}
+.rail.left{left:0;padding-left:calc(6px + var(--edge-l));border-right:1px solid #0008;}
+.rail.right{right:0;padding-right:calc(6px + var(--edge-r));border-left:1px solid #0008;}
+.rail .btn{width:100%;padding:8px 4px;font-size:10px;line-height:1.15;text-align:center;}
+.rail .btn.sm{padding:7px 4px;font-size:10px;}
+.rail .rail-label{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--parchment-dim);
+  text-align:center;margin:4px 0 2px;}
+.rail .rail-gap{flex:1;min-height:6px;}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;}
 canvas.dragging{cursor:grabbing;}
-.dock{position:fixed;left:0;right:0;bottom:0;z-index:4;display:flex;flex-direction:column;gap:7px;
-  padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));
-  padding-left:calc(12px + var(--edge-l));padding-right:calc(12px + var(--edge-r));
-  background:linear-gradient(transparent,#0a0f0ef2 22%);pointer-events:none;}
-.dock .row{display:flex;gap:7px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
+.dock{position:fixed;left:62px;right:62px;bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));
+  padding-left:calc(10px + var(--edge-l));padding-right:calc(10px + var(--edge-r));
+  background:linear-gradient(transparent,#0a0f0ef2 28%);pointer-events:none;max-width:calc(100% - 124px);}
+.dock .row{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
 .selbar,.combat{display:none;align-items:center;gap:8px;flex-wrap:wrap;
   background:#1b2825f0;border:1px solid var(--brass-dim);border-radius:10px;padding:8px 10px;pointer-events:auto;}
 .selbar.on,.combat.on{display:flex;}
 .selbar .name,.combat .name{font-family:Fraunces,serif;font-weight:600;font-size:14px;}
 .selbar .meta,.combat .meta{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--parchment-dim);}
-.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:1.2em;}
-.log{max-height:70px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.4;pointer-events:none;
-  margin-bottom:6px;padding-bottom:2px;}
+.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:1.2em;pointer-events:none;}
+.log{max-height:56px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.35;pointer-events:none;
+  margin-bottom:4px;}
 .combat{margin-top:2px;}
 .hint{font-size:11px;color:var(--parchment-dim);}
-.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
-.tips{position:fixed;top:52px;right:calc(10px + var(--edge-r));z-index:5;width:min(300px,38vw);
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);pointer-events:none;}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
+.tips{position:fixed;top:40px;right:calc(70px + var(--edge-r));z-index:5;width:min(280px,32vw);
   background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
-  max-height:calc(100vh - 200px);overflow:auto;box-shadow:0 8px 24px #0008;}
+  max-height:calc(100vh - 160px);overflow:auto;box-shadow:0 8px 24px #0008;}
 .tips.collapsed{width:auto;padding:6px 8px;}
 .tips.collapsed .tipsbody{display:none;}
 .tips h3{font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0 0 4px;}
@@ -72,10 +87,9 @@ canvas.dragging{cursor:grabbing;}
   text-align:center;z-index:40;padding:24px;}
 .rotate h2{font-family:Fraunces,serif;font-weight:400;}
 @media (orientation:portrait) and (max-width:860px){.rotate{display:flex;}}
-@media (max-width:900px){.tips{width:min(260px,42vw);font-size:12px;}}
-.guide{position:fixed;top:52px;left:calc(10px + var(--edge-l));z-index:5;width:min(320px,42vw);
+.guide{position:fixed;top:40px;left:calc(70px + var(--edge-l));z-index:5;width:min(300px,34vw);
   background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
-  max-height:calc(100vh - 200px);overflow:auto;box-shadow:0 8px 24px #0008;display:none;}
+  max-height:calc(100vh - 160px);overflow:auto;box-shadow:0 8px 24px #0008;display:none;}
 .guide.on{display:block;}
 .guide .gbar{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
 .guide .gbar h3{flex:1;font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0;}
@@ -86,9 +100,8 @@ canvas.dragging{cursor:grabbing;}
 .guide .do li,.guide .dont li{margin-bottom:3px;}
 .guide .nextwhen{font-size:12px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:4px;}
 .guide .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
-@media (max-width:900px){.guide{width:min(280px,46vw);font-size:12px;}}
-.rollpanel{position:fixed;bottom:calc(150px + env(safe-area-inset-bottom,0px));right:calc(10px + var(--edge-r));z-index:5;
-  width:min(340px,46vw);max-height:min(42vh,360px);overflow:auto;
+.rollpanel{position:fixed;bottom:calc(120px + env(safe-area-inset-bottom,0px));right:calc(70px + var(--edge-r));z-index:5;
+  width:min(320px,36vw);max-height:min(40vh,320px);overflow:auto;
   background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
   box-shadow:0 8px 24px #0008;display:none;font-size:12px;line-height:1.4;}
 .rollpanel.on{display:block;}
@@ -105,23 +118,40 @@ canvas.dragging{cursor:grabbing;}
 .rollpanel .die.skip{opacity:.45;}
 .rollpanel .math{color:var(--parchment-dim);font-size:11px;margin-top:2px;}
 .rollpanel .empty{color:var(--parchment-dim);font-style:italic;}
-@media (max-width:900px){.rollpanel{width:min(300px,50vw);font-size:11px;}}
+@media (max-width:900px){
+  .tips{width:min(240px,36vw);font-size:12px;}
+  .guide{width:min(250px,38vw);font-size:12px;}
+  .rollpanel{width:min(260px,40vw);font-size:11px;}
+  .rail{width:56px;}
+  .dock{left:56px;right:56px;max-width:calc(100% - 112px);}
+  .bar{padding-left:calc(64px + var(--edge-l));padding-right:calc(64px + var(--edge-r));}
+}
 </style>
 </head>
 <body>
 <div class="bar">
-  <button class="btn" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
-  <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
-  <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
-  <button class="btn sm danger" id="btnReset" title="Clear the practice table and start over" style="display:none">Reset</button>
   <h1 id="pageTitle" title="Tap to refresh" style="cursor:pointer">Warhammer 40,000</h1>
   <span class="sub" id="whoSub">Practice</span>
   <span class="sync" id="syncState"></span>
-  <span class="spacer"></span>
+</div>
+<nav class="rail left" aria-label="Table controls">
+  <button class="btn sm" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
+  <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
+  <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
+  <button class="btn sm danger" id="btnReset" title="Clear the practice table and start over" style="display:none">Reset</button>
+  <div class="rail-label">Tools</div>
+  <button class="btn sm on" data-tool="terrain">Terrain</button>
+  <button class="btn sm" data-tool="unit">Units</button>
+  <button class="btn sm" data-tool="measure">Measure</button>
+  <button class="btn sm" data-tool="combat">Combat</button>
+</nav>
+<nav class="rail right" aria-label="Phases">
+  <div class="rail-label">Phase</div>
   <div class="phases" id="phases"></div>
+  <div class="rail-gap"></div>
   <button class="btn sm gold" id="btnNext" title="Advance to the next phase (or the other player’s turn)">Next</button>
   <button class="btn sm" id="btnFit" title="Reset zoom and center the table on screen">Fit</button>
-</div>
+</nav>
 <aside class="tips" id="tips">
   <div class="tipbar">
     <h3 id="tipTitle">Rules tip</h3>
@@ -174,12 +204,6 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn sm" id="btnLock">Lock</button>
     <button class="btn sm danger" id="btnDel">Delete</button>
   </div>
-  <div class="row">
-    <button class="btn sm on" data-tool="terrain">Terrain</button>
-    <button class="btn sm" data-tool="unit">Units</button>
-    <button class="btn sm" data-tool="measure">Measure</button>
-    <button class="btn sm" data-tool="combat">Combat</button>
-  </div>
   <div class="row" id="rowTerrain">
     <button class="btn" data-preset="ruin">Ruin</button>
     <button class="btn" data-preset="woods">Woods</button>
@@ -214,7 +238,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.5-title-refresh";
+const BUILD = "v2.8.6-side-rails";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
