@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Proxy Table — 40K</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#141d1b">
+<link rel="icon" href="./icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Archivo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --felt:#141d1b; --felt-2:#1b2825; --felt-3:#233330; --ink:#0a0f0e;
+  --brass:#c39a4e; --brass-dim:#7d6433;
+  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
+  --edge-l:env(safe-area-inset-left,0px);
+  --edge-r:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ink);color:var(--parchment);
+  font-family:Archivo,system-ui,sans-serif;overscroll-behavior:none;-webkit-user-select:none;user-select:none;}
+button{font-family:inherit;color:inherit;background:none;border:none;padding:0;}
+button:not(:disabled){cursor:pointer;}
+.bar{position:fixed;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 12px;padding-left:calc(12px + var(--edge-l));padding-right:calc(12px + var(--edge-r));
+  background:#1b2825ee;border-bottom:1px solid #000;backdrop-filter:blur(8px);}
+.bar h1{font-family:Fraunces,serif;font-weight:900;font-size:16px;margin:0;}
+.bar .sub{font-size:11px;color:var(--parchment-dim);letter-spacing:.12em;text-transform:uppercase;}
+.phases{display:flex;gap:4px;flex-wrap:wrap;}
+.phases .btn{padding:5px 8px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;}
+.btn{background:var(--felt-3);border:1px solid #0006;border-radius:6px;padding:7px 12px;
+  font-size:12px;font-weight:500;letter-spacing:.03em;}
+.btn:active{background:var(--brass-dim);}
+.btn.gold{background:var(--brass);color:#191207;font-weight:700;}
+.btn.ghost{background:none;border:1px solid var(--brass-dim);color:var(--brass);}
+.btn.sm{padding:5px 9px;font-size:11px;}
+.btn.on{background:var(--brass);color:#191207;font-weight:700;}
+.btn.danger{border-color:var(--blood);color:var(--blood);}
+.sync.live{color:var(--good);} .sync.bad{color:var(--blood);}
+.spacer{flex:1;}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;}
+canvas.dragging{cursor:grabbing;}
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:4;display:flex;flex-direction:column;gap:7px;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));
+  padding-left:calc(12px + var(--edge-l));padding-right:calc(12px + var(--edge-r));
+  background:linear-gradient(transparent,#0a0f0ef2 22%);pointer-events:none;}
+.dock .row{display:flex;gap:7px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
+.selbar,.combat{display:none;align-items:center;gap:8px;flex-wrap:wrap;
+  background:#1b2825f0;border:1px solid var(--brass-dim);border-radius:10px;padding:8px 10px;pointer-events:auto;}
+.selbar.on,.combat.on{display:flex;}
+.selbar .name,.combat .name{font-family:Fraunces,serif;font-weight:600;font-size:14px;}
+.selbar .meta,.combat .meta{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--parchment-dim);}
+.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);}
+.log{max-height:52px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.35;pointer-events:none;}
+.hint{font-size:11px;color:var(--parchment-dim);}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
+.tips{position:fixed;top:52px;right:calc(10px + var(--edge-r));z-index:5;width:min(300px,38vw);
+  background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
+  max-height:calc(100vh - 200px);overflow:auto;box-shadow:0 8px 24px #0008;}
+.tips.collapsed{width:auto;padding:6px 8px;}
+.tips.collapsed .tipsbody{display:none;}
+.tips h3{font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0 0 4px;}
+.tips .short{font-size:13px;line-height:1.4;}
+.tips .long{display:none;font-size:12px;line-height:1.5;color:var(--parchment-dim);margin-top:8px;}
+.tips.more .long{display:block;}
+.tips .tipbar{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.tips .tipbar h3{flex:1;margin:0;}
+.rotate{position:fixed;inset:0;background:var(--ink);display:none;align-items:center;justify-content:center;
+  text-align:center;z-index:40;padding:24px;}
+.rotate h2{font-family:Fraunces,serif;font-weight:400;}
+@media (orientation:portrait) and (max-width:860px){.rotate{display:flex;}}
+@media (max-width:900px){.tips{width:min(260px,42vw);font-size:12px;}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="btn" id="btnMenu">Menu</button>
+  <h1>Warhammer 40,000</h1>
+  <span class="sub" id="whoSub">Practice</span>
+  <span class="sync" id="syncState"></span>
+  <span class="spacer"></span>
+  <div class="phases" id="phases"></div>
+  <button class="btn sm gold" id="btnNext">Next</button>
+  <button class="btn sm" id="btnFit">Fit</button>
+</div>
+<aside class="tips" id="tips">
+  <div class="tipbar">
+    <h3 id="tipTitle">Rules tip</h3>
+    <button class="btn sm" id="btnTipMore">More</button>
+    <button class="btn sm ghost" id="btnTipHide" title="Hide tips">–</button>
+  </div>
+  <div class="tipsbody">
+    <div class="short" id="tipShort"></div>
+    <div class="long" id="tipLong"></div>
+  </div>
+</aside>
+<canvas id="c"></canvas>
+<div class="dock">
+  <div class="log" id="log"></div>
+  <div class="combat" id="combat">
+    <span class="name" id="atkName">Attacker</span>
+    <span class="meta">→</span>
+    <span class="name" id="tgtName">Target</span>
+    <span class="meta" id="wepMeta"></span>
+    <span class="spacer"></span>
+    <button class="btn sm gold" id="btnResolve">Attack</button>
+    <button class="btn sm" id="btnClearAtk">Clear</button>
+  </div>
+  <div class="dice" id="dice"></div>
+  <div class="selbar" id="selbar">
+    <span class="name" id="selName">Ruin</span>
+    <span class="meta" id="selMeta">Dense</span>
+    <span class="spacer"></span>
+    <button class="btn sm" id="btnRotL">−15°</button>
+    <button class="btn sm" id="btnRotR">+15°</button>
+    <button class="btn sm" id="btnLock">Lock</button>
+    <button class="btn sm danger" id="btnDel">Delete</button>
+  </div>
+  <div class="row">
+    <button class="btn sm on" data-tool="terrain">Terrain</button>
+    <button class="btn sm" data-tool="unit">Units</button>
+    <button class="btn sm" data-tool="measure">Measure</button>
+    <button class="btn sm" data-tool="combat">Combat</button>
+  </div>
+  <div class="row" id="rowTerrain">
+    <button class="btn" data-preset="ruin">Ruin</button>
+    <button class="btn" data-preset="woods">Woods</button>
+    <button class="btn" data-preset="hill">Hill</button>
+    <button class="btn" data-preset="obstacle">Obstacle</button>
+    <button class="btn gold" id="btnGen">Generate</button>
+    <button class="btn ghost" id="btnClearT">Clear terrain</button>
+  </div>
+  <div class="row" id="rowUnits" style="display:none">
+    <button class="btn gold" id="btnDemo">Demo forces</button>
+    <button class="btn" data-drop="inf">Infantry</button>
+    <button class="btn" data-drop="cmd">Commander</button>
+    <button class="btn" data-drop="wlk">Walker</button>
+    <button class="btn ghost" id="btnClearU">Clear units</button>
+  </div>
+  <div class="row" id="rowMeasure" style="display:none">
+    <span class="hint">Tap two points for a tape. Selected unit shows M″, 2″ engagement, and coherency.</span>
+    <button class="btn sm" id="btnClearM">Clear tape</button>
+  </div>
+  <div class="row" id="rowCombat" style="display:none">
+    <span class="hint">Tap your model, then an enemy. Attack uses ranged in Shooting, melee in Fight, or whichever fits range. Cover: −1 to hit if the target sits in Light/Dense.</span>
+  </div>
+  <div class="legend">
+    <span><i style="background:#8a7a62"></i>Exposed</span>
+    <span><i style="background:#3f6b4a"></i>Light</span>
+    <span><i style="background:#4a3d38"></i>Dense</span>
+    <span><i style="background:#6b8fbf"></i>Seat 0</span>
+    <span><i style="background:#bf6b6b"></i>Seat 1</span>
+  </div>
+</div>
+<div class="rotate"><div><h2>Turn the phone sideways</h2>
+  <p class="hint">The table is built for landscape.</p></div></div>
+<script>
+const BUILD = "v2.7.0-40k-learn";
+const STORE = "pt_wh40k_practice";
+const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
+const W = 60, H = 44, ZONE = 12;
+const PHASES = ["command","movement","shooting","charge","fight"];
+const TIPS = {
+  command: {
+    title:"Command phase",
+    short:"Start of this player’s turn. Mark the round, then move on.",
+    more:"In a full game you would take Battle-shock tests here and spend Command points. This proxy only tracks whose turn it is. Next advances you through the rest of the battle round."
+  },
+  movement: {
+    title:"Movement phase",
+    short:"Each unit can move up to its M″. The gold ring on a selected model is that distance.",
+    more:"A Normal Move is up to M″. Pivoting on the spot does not cost movement. Models generally cannot end on top of enemies. Engagement Range is 2″ — if you start in it you usually Remain Stationary or Fall Back (Fall Back is honor-system here)."
+  },
+  shooting: {
+    title:"Shooting phase",
+    short:"Eligible units fire. Sequence: Hit → Wound → Save → Damage. Cover is −1 to hit.",
+    more:"Pick Combat, tap your model then an enemy in range and not in 2″ ER. Roll to hit on BS (1 always fails, 6 always hits). Then Strength vs Toughness to wound. Then armour save, worsened by AP; an Invulnerable save ignores AP. Light or Dense under the target’s base gives the shooter −1 to hit."
+  },
+  charge: {
+    title:"Charge phase",
+    short:"Try to close to 2″ of an enemy. Success is a 2D6 vs the remaining distance.",
+    more:"Eligible units that did not Advance or Fall Back can charge. Roll 2D6; if the result covers the edge-to-edge gap (max 12″), move in and end in Engagement Range. Fighting happens in the Fight phase, not here. Charge pathing is still player-moved."
+  },
+  fight: {
+    title:"Fight phase",
+    short:"Models within 2″ use melee. Use Combat to resolve Hit → Wound → Save → Damage.",
+    more:"Engagement Range is 2″. Pile-in and Consolidate are 3″ moves (honor-system here). Chargers and Fights First units usually strike first; then players alternate. This table uses the same attack engine as shooting, with WS and the melee profile."
+  },
+  terrain: {
+    title:"Terrain tool",
+    short:"Place, rotate, lock, or Generate a starter layout. Categories: Exposed, Light, Dense.",
+    more:"Generate always uses the same layout so you can learn it. Lock a piece so it cannot be dragged. Rules care about category, not the pretty name. Select a piece to see what Cover it gives."
+  },
+  unit: {
+    title:"Units tool",
+    short:"Drop demo forces or single models. Drag to move. Gold ring = M″, red ring = 2″ ER.",
+    more:"One token is one model. Blue is seat 0, red is seat 1. Green dashed lines are coherency helpers for models that share a group. Coherency is a reminder, not a hard block yet."
+  },
+  measure: {
+    title:"Measure",
+    short:"Tap two points. The tape shows inches on the 60″ × 44″ table.",
+    more:"All distances in 40K are in inches. Shooting range is edge-to-edge (base to base). The tape is for you; it is not synced to the other player."
+  },
+  combat: {
+    title:"Combat tool",
+    short:"Tap your model, then an enemy, then Attack. Uses guns in Shooting, melee in Fight.",
+    more:"Hit uses BS or WS. Cover −1 if the target sits in Light/Dense. Wound compares Strength to Toughness (equal = 4+). Save uses Sv modified by AP, or Inv if the model has one. Damage comes off remaining wounds; 0 wounds removes the model."
+  },
+  exposed: {
+    title:"Exposed terrain",
+    short:"Does not grant Cover. Still useful as a footprint for placement and blocking.",
+    more:"Obstacles and similar pieces are Exposed in this proxy. They do not apply the −1 to hit Cover penalty. Full line of sight is not simulated yet — treat blocking as honor-system."
+  },
+  light: {
+    title:"Light cover",
+    short:"If a target’s base sits in this piece, shooters take −1 to hit.",
+    more:"11th edition Cover is a hit penalty, not a better armour save. Woods and hills use Light here. The proxy checks the target’s center, not true visibility. Dense uses the same Cover rule in this slice."
+  },
+  dense: {
+    title:"Dense cover",
+    short:"Same Cover as Light on this table: −1 to hit if the target is on it.",
+    more:"Ruins are Dense. In a full game Dense terrain also affects visibility and movement more strictly. This proxy applies Cover when the target’s center is inside the piece. Lock ruins after you like the layout."
+  }
+};
+const PRESETS = {
+  ruin:     { preset:"ruin",     category:"dense",   w:8, h:6, label:"Ruin" },
+  woods:    { preset:"woods",    category:"light",   w:8, h:8, label:"Woods" },
+  hill:     { preset:"hill",     category:"light",   w:10,h:6, label:"Hill" },
+  obstacle: { preset:"obstacle", category:"exposed", w:6, h:2, label:"Obstacle" }
+};
+const DROPS = {
+  inf: {
+    name:"Infantry", keywords:["INFANTRY"], M:6, T:4, Sv:3, Inv:0, W:2, baseMm:32,
+    ranged:{ name:"Rifle", A:2, skill:3, S:4, AP:0, D:1, rng:24 },
+    melee:{ name:"Blade", A:3, skill:3, S:4, AP:0, D:1 }
+  },
+  cmd: {
+    name:"Commander", keywords:["INFANTRY","CHARACTER"], M:6, T:4, Sv:3, Inv:4, W:5, baseMm:40,
+    ranged:{ name:"Pistol", A:1, skill:2, S:4, AP:-1, D:1, rng:12 },
+    melee:{ name:"Power blade", A:5, skill:2, S:5, AP:-2, D:2 }
+  },
+  wlk: {
+    name:"Walker", keywords:["VEHICLE","WALKER"], M:8, T:10, Sv:3, Inv:0, W:7, baseMm:80,
+    ranged:{ name:"Cannon", A:3, skill:3, S:8, AP:-1, D:2, rng:36 },
+    melee:{ name:"Fist", A:4, skill:3, S:8, AP:-2, D:2 }
+  }
+};
+const CAT_FILL = { exposed:"#8a7a62cc", light:"#3f6b4acc", dense:"#4a3d38ee" };
+const CAT_STROKE = { exposed:"#c4b08a", light:"#6bbf8a", dense:"#a88870" };
+
+const params = new URLSearchParams(location.search);
+const matchId = params.get("match");
+const who = (localStorage.getItem("pt_user") || "").trim();
+const practice = !matchId;
+let mySeat = 0;
+let tool = "terrain";
+let selected = null;
+let attackerId = null, targetId = null;
+let nid = 1, uidn = 1;
+let tape = null;
+let matchWs = null, pushTimer = null, pushWanted = false;
+let tipMore = false;
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+function emptyBoard(){
+  return {
+    v:1, game:"wh40k", rev:0,
+    board:{ wIn:W, hIn:H },
+    terrain:[], units:[],
+    zones:[{seat:0, depthIn:ZONE},{seat:1, depthIn:ZONE}],
+    turn:{ battleRound:1, activeSeat:0, phase:"command", deploymentDone:false },
+    log:[], players:{ "0": practice ? who : "", "1": "" }
+  };
+}
+let S = emptyBoard();
+if (practice){
+  try{ const p = JSON.parse(localStorage.getItem(STORE)||"null"); if (p && p.game==="wh40k") S = p; }catch(_){}
+}
+if (!S.units) S.units = [];
+if (!S.log) S.log = [];
+if (!S.turn) S.turn = { battleRound:1, activeSeat:0, phase:"command", deploymentDone:false };
+(S.terrain||[]).forEach(t => { const n=+String(t.id).slice(2); if(n>=nid) nid=n+1; });
+(S.units||[]).forEach(u => { const n=+String(u.id).slice(2); if(n>=uidn) uidn=n+1; });
+
+function setWho(){
+  const mode = practice ? "Practice" : ("Match " + (matchId||"").slice(0,8));
+  document.getElementById("whoSub").textContent = (who? who+" · ":"") + mode + " · seat "+mySeat+" · "+BUILD;
+}
+setWho();
+
+function logLine(line){
+  S.log.push({ t: Date.now(), seat: mySeat, line });
+  if (S.log.length > 40) S.log = S.log.slice(-40);
+  renderLog();
+}
+function renderLog(){
+  document.getElementById("log").innerHTML = (S.log||[]).slice(-4).map(l => l.line).join("<br>");
+}
+function renderPhases(){
+  const el = document.getElementById("phases");
+  el.innerHTML = PHASES.map(p =>
+    `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}">${p}</button>`
+  ).join("") + `<span class="sub">R${S.turn.battleRound} · P${S.turn.activeSeat}</span>`;
+  el.querySelectorAll("[data-phase]").forEach(b => b.onclick = () => setPhase(b.dataset.phase));
+}
+function setPhase(p){
+  S.turn.phase = p;
+  logLine("Phase → " + p);
+  save(); draw(); refreshTip();
+}
+document.getElementById("btnNext").onclick = () => {
+  const i = PHASES.indexOf(S.turn.phase);
+  if (i < PHASES.length-1) setPhase(PHASES[i+1]);
+  else {
+    S.turn.phase = "command";
+    if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
+    else { S.turn.activeSeat = 0; S.turn.battleRound++; }
+    logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat);
+    save(); draw(); refreshTip();
+  }
+};
+
+function save(){
+  S.rev = (S.rev||0)+1;
+  if (practice){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(_){ } }
+  else pushState();
+  renderPhases(); renderLog();
+}
+
+function tipKey(){
+  if (tool==="combat" && attackerId && targetId) return "combat";
+  if (selected && selected.kind==="t"){
+    const t = S.terrain.find(x=>x.id===selected.id);
+    if (t) return t.category;
+  }
+  if (selected && selected.kind==="u") return "unitSel";
+  if (tool==="measure") return "measure";
+  if (tool==="combat") return "combat";
+  if (tool==="unit") return "unit";
+  if (tool==="terrain") return "terrain";
+  return S.turn.phase;
+}
+function unitTip(u){
+  const inv = u.Inv ? (" Invulnerable "+u.Inv+"+ ignores AP.") : " No invulnerable save.";
+  return {
+    title: u.name,
+    short: "M"+u.M+"″  T"+u.T+"  Sv"+u.Sv+"+"+(u.Inv?" Inv"+u.Inv+"+":"")+"  W "+(u.wounds??u.W)+"/"+u.W+". Gold ring = Move, red = 2″ ER.",
+    more: "Movement is up to M″. Toughness is used on the wound roll (equal Strength needs 4+). Armour save is Sv+, worsened by AP. "+inv+" Remaining wounds are on the token. Destroyed at 0."
+  };
+}
+function showTip(pack){
+  document.getElementById("tipTitle").textContent = pack.title;
+  document.getElementById("tipShort").textContent = pack.short;
+  document.getElementById("tipLong").textContent = pack.more;
+  document.getElementById("tips").classList.toggle("more", tipMore);
+  document.getElementById("btnTipMore").textContent = tipMore ? "Less" : "More";
+}
+function refreshTip(){
+  const k = tipKey();
+  if (k==="unitSel"){
+    const u = S.units.find(x=>x.id===selected.id);
+    if (u){ showTip(unitTip(u)); return; }
+  }
+  showTip(TIPS[k] || TIPS[S.turn.phase] || TIPS.command);
+}
+document.getElementById("btnTipMore").onclick = () => {
+  tipMore = !tipMore;
+  document.getElementById("tips").classList.toggle("more", tipMore);
+  document.getElementById("btnTipMore").textContent = tipMore ? "Less" : "More";
+};
+document.getElementById("btnTipHide").onclick = () => {
+  document.getElementById("tips").classList.toggle("collapsed");
+};
+
+const cam = { x: W/2, y: H/2, scale: 12 };
+let resizedOnce = false;
+function flipPt(wx, wy){
+  if (mySeat !== 1) return { x:wx, y:wy };
+  return { x: W-wx, y: H-wy };
+}
+function toScreen(wx, wy){
+  const p = flipPt(wx, wy);
+  return { x: (p.x-cam.x)*cam.scale + canvas.clientWidth/2, y: (cam.y-p.y)*cam.scale + canvas.clientHeight/2 };
+}
+function toWorld(sx, sy){
+  const x = cam.x + (sx - canvas.clientWidth/2)/cam.scale;
+  const y = cam.y - (sy - canvas.clientHeight/2)/cam.scale;
+  return flipPt(x, y);
+}
+function fit(){
+  const pad = 36;
+  cam.scale = Math.min((canvas.clientWidth-pad*2)/W, (canvas.clientHeight-pad*2-130)/H);
+  cam.x = W/2; cam.y = H/2;
+}
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  canvas.width = Math.floor(canvas.clientWidth*dpr);
+  canvas.height = Math.floor(canvas.clientHeight*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if (!resizedOnce){ fit(); resizedOnce = true; }
+  draw();
+}
+
+function localOf(t, wx, wy){
+  const rad = (t.rot||0)*Math.PI/180;
+  const dx = wx-t.x, dy = wy-t.y;
+  const c = Math.cos(-rad), s = Math.sin(-rad);
+  return { x: dx*c - dy*s, y: dx*s + dy*c };
+}
+function hitTerrain(wx, wy){
+  for (let i=S.terrain.length-1;i>=0;i--){
+    const t = S.terrain[i];
+    const p = localOf(t, wx, wy);
+    if (Math.abs(p.x)<=t.w/2 && Math.abs(p.y)<=t.h/2) return t;
+  }
+  return null;
+}
+function unitR(u){ return (u.baseMm||32)/25.4/2; }
+function hitUnit(wx, wy){
+  let best = null, bestD = 1e9;
+  for (const u of S.units){
+    const d = Math.hypot(wx-u.x, wy-u.y);
+    if (d <= unitR(u)+0.15 && d < bestD){ best = u; bestD = d; }
+  }
+  return best;
+}
+function handleAt(t){
+  const rad = (t.rot||0)*Math.PI/180;
+  const dist = t.h/2 + 1.1;
+  return { x: t.x + Math.sin(rad)*dist, y: t.y + Math.cos(rad)*dist };
+}
+function inCover(u){
+  for (const t of S.terrain){
+    if (t.category !== "light" && t.category !== "dense") continue;
+    const p = localOf(t, u.x, u.y);
+    if (Math.abs(p.x)<=t.w/2 && Math.abs(p.y)<=t.h/2) return t.category;
+  }
+  return null;
+}
+function edgeDist(a,b){ return Math.max(0, Math.hypot(a.x-b.x, a.y-b.y) - unitR(a) - unitR(b)); }
+
+function draw(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = "#0a0f0e"; ctx.fillRect(0,0,w,h);
+  const o = toScreen(0,0), p = toScreen(W,H);
+  const x0 = Math.min(o.x,p.x), y0 = Math.min(o.y,p.y);
+  const bw = Math.abs(p.x-o.x), bh = Math.abs(p.y-o.y);
+  ctx.fillStyle = "#1b2825"; ctx.fillRect(x0,y0,bw,bh);
+  const z0 = toScreen(0, ZONE), z1 = toScreen(W, H-ZONE);
+  ctx.fillStyle = "rgba(195,154,78,0.10)";
+  ctx.fillRect(x0, Math.min(z0.y, y0+bh), bw, Math.abs(y0+bh-z0.y));
+  ctx.fillRect(x0, y0, bw, Math.abs(z1.y-y0));
+  ctx.save(); ctx.beginPath(); ctx.rect(x0,y0,bw,bh); ctx.clip();
+  for (let i=0;i<=W;i++){
+    const a=toScreen(i,0), b=toScreen(i,H);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+    ctx.strokeStyle = i%12===0?"#c39a4e44":i%6===0?"#e9e3d418":"#e9e3d40c";
+    ctx.lineWidth = i%12===0?1.2:1; ctx.stroke();
+  }
+  for (let j=0;j<=H;j++){
+    const a=toScreen(0,j), b=toScreen(W,j);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+    ctx.strokeStyle = j%12===0?"#c39a4e44":j%6===0?"#e9e3d418":"#e9e3d40c";
+    ctx.lineWidth = j%12===0?1.2:1; ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = "#c39a4e88"; ctx.lineWidth = 2; ctx.strokeRect(x0,y0,bw,bh);
+  ctx.fillStyle = "#c39a4e99"; ctx.font = "600 11px Archivo,sans-serif"; ctx.textAlign="center";
+  const midX = x0+bw/2;
+  ctx.fillText("SEAT 0  ·  12\"", midX, z0.y - 6);
+  ctx.fillText("SEAT 1  ·  12\"", midX, z1.y + 14);
+
+  S.terrain.forEach(t => drawPiece(t, selected && selected.kind==="t" && selected.id===t.id));
+  const selU = selected && selected.kind==="u" ? S.units.find(u=>u.id===selected.id) : null;
+  if (selU){
+    drawRing(selU.x, selU.y, selU.M||6, "#c39a4e66", 1.5);
+    drawRing(selU.x, selU.y, 2, "#a8443c88", 1);
+    S.units.filter(u => u.groupId && u.groupId===selU.groupId && u.id!==selU.id).forEach(u => {
+      const a=toScreen(selU.x,selU.y), b=toScreen(u.x,u.y);
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.setLineDash([4,4]); ctx.strokeStyle="#6bbf8aaa"; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
+    });
+  }
+  if (attackerId && targetId){
+    const a=S.units.find(u=>u.id===attackerId), t=S.units.find(u=>u.id===targetId);
+    if (a&&t){
+      const pa=toScreen(a.x,a.y), pt=toScreen(t.x,t.y);
+      ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pt.x,pt.y);
+      ctx.strokeStyle="#c39a4ecc"; ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  S.units.forEach(u => drawUnit(u));
+  if (tape && tape.a){
+    const a = toScreen(tape.a.x, tape.a.y);
+    ctx.beginPath(); ctx.arc(a.x,a.y,5,0,Math.PI*2); ctx.fillStyle="#c39a4e"; ctx.fill();
+    if (tape.b){
+      const b = toScreen(tape.b.x, tape.b.y);
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle="#c39a4e"; ctx.lineWidth=2; ctx.stroke();
+      const d = Math.hypot(tape.b.x-tape.a.x, tape.b.y-tape.a.y);
+      ctx.fillStyle="#e9e3d4"; ctx.font="700 13px Archivo,sans-serif"; ctx.textAlign="center";
+      ctx.fillText(d.toFixed(1)+"\"", (a.x+b.x)/2, (a.y+b.y)/2 - 8);
+    }
+  }
+  if (!S.terrain.length && !S.units.length){
+    ctx.fillStyle="#e9e3d4aa"; ctx.font="400 22px Fraunces,serif"; ctx.textAlign="center";
+    ctx.fillText("Empty table", w/2, h/2-10);
+    ctx.font="12px Archivo,sans-serif"; ctx.fillStyle="#8e9490";
+    ctx.fillText("Generate terrain, drop demo forces, then open Combat to resolve attacks.", w/2, h/2+16);
+  }
+  renderPhases();
+  renderCombatBar();
+}
+function drawRing(wx,wy,rIn,color,lw){
+  const c = toScreen(wx,wy);
+  ctx.beginPath(); ctx.arc(c.x,c.y, rIn*cam.scale, 0, Math.PI*2);
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.stroke();
+}
+function roundRect(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2); ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawPiece(t, isSel){
+  const sc=cam.scale, p=toScreen(t.x,t.y);
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(-(t.rot||0)*Math.PI/180);
+  const pw=t.w*sc, ph=t.h*sc;
+  roundRect(-pw/2,-ph/2,pw,ph,4);
+  ctx.fillStyle=CAT_FILL[t.category]||CAT_FILL.exposed; ctx.fill();
+  ctx.strokeStyle=isSel?"#c39a4e":(CAT_STROKE[t.category]||"#c4b08a");
+  ctx.lineWidth=isSel?2.5:1.4; ctx.setLineDash(t.locked?[5,4]:[]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle="#e9e3d4"; ctx.font="600 "+Math.max(10,Math.min(14,sc*0.9))+"px Archivo,sans-serif";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText((PRESETS[t.preset]||{}).label||t.preset,0,0);
+  if (t.locked){ ctx.fillStyle="#c39a4e"; ctx.font="10px Archivo,sans-serif"; ctx.fillText("LOCKED",0,ph/2-8); }
+  ctx.restore();
+  if (isSel && !t.locked){
+    const hs=toScreen(handleAt(t).x, handleAt(t).y);
+    ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(hs.x,hs.y);
+    ctx.strokeStyle="#c39a4eaa"; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hs.x,hs.y,8,0,Math.PI*2); ctx.fillStyle="#c39a4e"; ctx.fill();
+  }
+}
+function drawUnit(u){
+  const p=toScreen(u.x,u.y), r=unitR(u)*cam.scale;
+  const isSel = selected && selected.kind==="u" && selected.id===u.id;
+  const isAtk = u.id===attackerId, isTgt = u.id===targetId;
+  ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+  ctx.fillStyle = u.seat===0 ? "#6b8fbfdd" : "#bf6b6bdd";
+  ctx.fill();
+  ctx.strokeStyle = isTgt ? "#a8443c" : isAtk ? "#c39a4e" : isSel ? "#e9e3d4" : "#e9e3d4aa";
+  ctx.lineWidth = (isAtk||isTgt||isSel) ? 2.6 : 1.2; ctx.stroke();
+  ctx.fillStyle="#0a0f0e"; ctx.font="700 "+Math.max(9, Math.min(12,r*0.7))+"px Archivo,sans-serif";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText((u.name||"?")[0], p.x, p.y);
+  ctx.fillStyle="#e9e3d4"; ctx.font="10px Archivo,sans-serif"; ctx.textBaseline="alphabetic";
+  ctx.fillText((u.wounds??u.W)+"/"+u.W, p.x, p.y+r+11);
+}
+
+function selectObj(kind, obj){
+  selected = obj ? { kind, id: obj.id } : null;
+  const bar = document.getElementById("selbar");
+  const lock = document.getElementById("btnLock");
+  if (!obj || tool==="combat"){ bar.classList.remove("on"); if(!obj){ refreshTip(); return; } }
+  if (obj && tool!=="combat"){
+    bar.classList.add("on");
+    if (kind==="t"){
+      document.getElementById("selName").textContent = (PRESETS[obj.preset]||{}).label || obj.preset;
+      document.getElementById("selMeta").textContent = obj.category + (obj.locked?" · locked":"");
+      lock.style.display=""; lock.textContent = obj.locked ? "Unlock" : "Lock";
+    } else {
+      document.getElementById("selName").textContent = obj.name;
+      const inv = obj.Inv ? (" Inv"+obj.Inv+"+") : "";
+      document.getElementById("selMeta").textContent = "M"+obj.M+" T"+obj.T+" Sv"+obj.Sv+"+"+inv+" W "+(obj.wounds??obj.W)+"/"+obj.W;
+      lock.style.display="none";
+    }
+  }
+  refreshTip();
+}
+
+function addPreset(kind){
+  const d = PRESETS[kind];
+  const t = { id:"t_"+(nid++), preset:d.preset, category:d.category, x:W/2, y:H/2, w:d.w, h:d.h, rot:0, locked:false };
+  S.terrain.push(t); selectObj("t", t); logLine("Placed "+d.label); save(); draw();
+}
+function generate(){
+  const layout = [
+    {preset:"ruin",x:16,y:22,rot:12},{preset:"ruin",x:46,y:24,rot:-18},
+    {preset:"woods",x:30,y:18,rot:8},{preset:"woods",x:22,y:30,rot:-6},
+    {preset:"hill",x:40,y:31,rot:20},{preset:"obstacle",x:31,y:24,rot:90},{preset:"obstacle",x:12,y:28,rot:15}
+  ];
+  S.terrain = layout.map(p => {
+    const d=PRESETS[p.preset];
+    return { id:"t_"+(nid++), preset:d.preset, category:d.category, x:p.x, y:p.y, w:d.w, h:d.h, rot:p.rot, locked:false };
+  });
+  selectObj(null); logLine("Generated terrain"); save(); draw();
+}
+function dropUnit(key, seat, x, y, groupId){
+  const d = DROPS[key];
+  const u = {
+    id:"u_"+(uidn++), seat, name:d.name, keywords:d.keywords.slice(),
+    M:d.M, T:d.T, Sv:d.Sv, Inv:d.Inv||0, W:d.W, wounds:d.W, baseMm:d.baseMm,
+    ranged: Object.assign({}, d.ranged), melee: Object.assign({}, d.melee),
+    x, y, rot:0, groupId: groupId||null, flags:{ battleShock:false }
+  };
+  S.units.push(u); return u;
+}
+function demoForces(){
+  S.units = [];
+  const g0="g0", g1="g1";
+  for (let i=0;i<5;i++) dropUnit("inf", 0, 18+i*1.6, 6, g0);
+  dropUnit("cmd", 0, 22, 8.5, g0);
+  dropUnit("wlk", 0, 40, 7, "w0");
+  for (let i=0;i<5;i++) dropUnit("inf", 1, 18+i*1.6, 38, g1);
+  dropUnit("cmd", 1, 22, 35.5, g1);
+  dropUnit("wlk", 1, 40, 37, "w1");
+  selectObj(null); logLine("Demo forces deployed"); save(); draw();
+}
+function addDrop(key){
+  const y = mySeat===0 ? 6 : H-6;
+  const u = dropUnit(key, mySeat, W/2, y, key==="inf"?"solo"+uidn:null);
+  selectObj("u", u); logLine("Placed "+u.name); save(); draw();
+}
+
+document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
+document.getElementById("btnFit").onclick = () => { fit(); draw(); };
+document.getElementById("btnGen").onclick = generate;
+document.getElementById("btnClearT").onclick = () => { S.terrain=[]; selectObj(null); logLine("Cleared terrain"); save(); draw(); };
+document.getElementById("btnClearU").onclick = () => { S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw(); };
+document.getElementById("btnDemo").onclick = demoForces;
+document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
+document.getElementById("btnRotL").onclick = () => rotSel(-15);
+document.getElementById("btnRotR").onclick = () => rotSel(15);
+document.getElementById("btnLock").onclick = () => {
+  if (!selected || selected.kind!=="t") return;
+  const t = S.terrain.find(x=>x.id===selected.id); if(!t) return;
+  t.locked=!t.locked; selectObj("t",t); logLine((t.locked?"Locked ":"Unlocked ")+t.preset); save(); draw();
+};
+document.getElementById("btnDel").onclick = () => {
+  if (!selected) return;
+  if (selected.kind==="t") S.terrain = S.terrain.filter(t=>t.id!==selected.id);
+  else {
+    S.units = S.units.filter(u=>u.id!==selected.id);
+    if (attackerId===selected.id) attackerId=null;
+    if (targetId===selected.id) targetId=null;
+  }
+  logLine("Deleted"); selectObj(null); save(); draw();
+};
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => addPreset(b.dataset.preset));
+document.querySelectorAll("[data-drop]").forEach(b => b.onclick = () => addDrop(b.dataset.drop));
+document.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => setTool(b.dataset.tool));
+function setTool(t){
+  tool=t;
+  document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("on", b.dataset.tool===t));
+  document.getElementById("rowTerrain").style.display = t==="terrain"?"":"none";
+  document.getElementById("rowUnits").style.display = t==="unit"?"":"none";
+  document.getElementById("rowMeasure").style.display = t==="measure"?"":"none";
+  document.getElementById("rowCombat").style.display = t==="combat"?"":"none";
+  if (t!=="combat") document.getElementById("selbar").classList.toggle("on", !!selected && selected.kind);
+  else document.getElementById("selbar").classList.remove("on");
+  renderCombatBar();
+  refreshTip();
+}
+function rotSel(d){
+  if (!selected) return;
+  if (selected.kind==="t"){
+    const t=S.terrain.find(x=>x.id===selected.id); if(!t||t.locked) return;
+    t.rot=((t.rot||0)+d+360)%360;
+  } else {
+    const u=S.units.find(x=>x.id===selected.id); if(!u) return;
+    u.rot=((u.rot||0)+d+360)%360;
+  }
+  save(); draw();
+}
+
+/* ---------- combat ---------- */
+function d6(){ return 1 + Math.floor(Math.random()*6); }
+function woundNeed(Sval, T){
+  if (Sval >= T*2) return 2;
+  if (Sval > T) return 3;
+  if (Sval === T) return 4;
+  if (Sval*2 <= T) return 6;
+  return 5;
+}
+function pickWeapon(atk, tgt){
+  const phase = S.turn.phase;
+  const dist = edgeDist(atk, tgt);
+  const er = dist <= 2.01;
+  if (phase === "fight" || phase === "charge") return { kind:"melee", w: atk.melee, dist, er };
+  if (phase === "shooting") return { kind:"ranged", w: atk.ranged, dist, er };
+  if (er) return { kind:"melee", w: atk.melee, dist, er };
+  return { kind:"ranged", w: atk.ranged, dist, er };
+}
+function renderCombatBar(){
+  const box = document.getElementById("combat");
+  const atk = S.units.find(u=>u.id===attackerId);
+  const tgt = S.units.find(u=>u.id===targetId);
+  if (!atk || !tgt){ box.classList.remove("on"); return; }
+  box.classList.add("on");
+  document.getElementById("atkName").textContent = atk.name + " (P"+atk.seat+")";
+  document.getElementById("tgtName").textContent = tgt.name + " (P"+tgt.seat+")";
+  const pw = pickWeapon(atk, tgt);
+  const cov = inCover(tgt);
+  const bits = [
+    pw.w.name,
+    "A"+pw.w.A,
+    (pw.kind==="ranged"?"BS":"WS")+pw.w.skill+"+",
+    "S"+pw.w.S+" AP"+pw.w.AP+" D"+pw.w.D,
+    pw.kind==="ranged" ? (pw.w.rng+"\" / "+pw.dist.toFixed(1)+"\"") : (pw.er ? "ER" : pw.dist.toFixed(1)+"\""),
+    cov ? ("Cover "+cov+" −1 hit") : "no cover"
+  ];
+  document.getElementById("wepMeta").textContent = bits.join(" · ");
+}
+function resolveAttack(){
+  const atk = S.units.find(u=>u.id===attackerId);
+  const tgt = S.units.find(u=>u.id===targetId);
+  if (!atk || !tgt){ document.getElementById("dice").textContent = "Pick attacker then target."; return; }
+  if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return; }
+  const pw = pickWeapon(atk, tgt);
+  const w = pw.w;
+  if (pw.kind === "ranged"){
+    if (pw.er && S.turn.phase === "shooting"){
+      document.getElementById("dice").textContent = "In Engagement Range — use Fight, or a close-quarters weapon (not in this slice).";
+      return;
+    }
+    if (pw.dist > (w.rng||24)+0.05){
+      document.getElementById("dice").textContent = "Out of range ("+pw.dist.toFixed(1)+"\" > "+w.rng+"\").";
+      return;
+    }
+  } else if (!pw.er){
+    document.getElementById("dice").textContent = "Not in 2\" Engagement Range.";
+    return;
+  }
+  const cov = inCover(tgt);
+  const hitMod = cov ? -1 : 0;
+  const hits=[], wounds=[], saves=[];
+  let hitN=0, woundN=0, unsaved=0, dmg=0;
+  for (let i=0;i<w.A;i++){
+    const h = d6();
+    const need = Math.max(2, Math.min(7, w.skill - hitMod));
+    const hit = (h===1) ? false : (h===6 || h>=need);
+    hits.push(h+(hit?"":"×"));
+    if (!hit) continue;
+    hitN++;
+    const wr = d6();
+    const wn = woundNeed(w.S, tgt.T);
+    const wounded = wr!==1 && (wr===6 || wr>=wn);
+    wounds.push(wr+(wounded?"":"×"));
+    if (!wounded) continue;
+    woundN++;
+    const sv = d6();
+    let saved = false, how = "Sv";
+    if (sv === 1) saved = false;
+    else if (tgt.Inv && sv >= tgt.Inv){ saved = true; how = "Inv"; }
+    else {
+      const armourNeed = Math.max(2, Math.min(7, tgt.Sv - (w.AP||0)));
+      saved = sv >= armourNeed;
+      how = "Sv"+armourNeed+"+";
+    }
+    saves.push(sv+(saved?(" "+how):" fail"));
+    if (saved) continue;
+    unsaved++;
+    const deal = Math.min(w.D, tgt.wounds);
+    tgt.wounds -= deal;
+    dmg += deal;
+    if (tgt.wounds <= 0) break;
+  }
+  let line = atk.name+" → "+tgt.name+" "+w.name+": hit "+hitN+"/"+w.A+" wound "+woundN+" dmg "+dmg;
+  if (cov) line += " (cover −1)";
+  if (tgt.wounds <= 0){
+    line += " — destroyed";
+    S.units = S.units.filter(u => u.id !== tgt.id);
+    targetId = null;
+  } else line += " ("+tgt.wounds+"/"+tgt.W+" left)";
+  logLine(line);
+  document.getElementById("dice").textContent =
+    "Hits ["+hits.join(" ")+"]  Wounds ["+wounds.join(" ")+"]  Saves ["+saves.join(" ")+"]";
+  save(); draw(); refreshTip();
+}
+document.getElementById("btnResolve").onclick = resolveAttack;
+document.getElementById("btnClearAtk").onclick = () => { attackerId=targetId=null; document.getElementById("dice").textContent=""; draw(); refreshTip(); };
+
+const ptrs = new Map();
+let mode=null, drag=null;
+function canvasPt(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+
+canvas.addEventListener("pointerdown", e => {
+  canvas.setPointerCapture(e.pointerId);
+  const pt=canvasPt(e), wpt=toWorld(pt.x,pt.y);
+  ptrs.set(e.pointerId,{x:pt.x,y:pt.y});
+  if (ptrs.size===2){
+    mode="pinch"; const [a,b]=[...ptrs.values()];
+    drag={dist:Math.hypot(a.x-b.x,a.y-b.y), scale:cam.scale}; return;
+  }
+  if (tool==="measure"){
+    if (!tape || tape.b) tape={a:wpt,b:null};
+    else tape.b=wpt;
+    draw(); return;
+  }
+  if (tool==="combat"){
+    const hu = hitUnit(wpt.x,wpt.y);
+    if (hu){
+      if (!attackerId || hu.seat=== (S.units.find(u=>u.id===attackerId)||{}).seat){
+        attackerId = hu.id; if (targetId===hu.id) targetId=null;
+      } else {
+        targetId = hu.id;
+      }
+      selectObj("u", hu);
+    }
+    draw(); return;
+  }
+  if (selected && selected.kind==="t"){
+    const t=S.terrain.find(x=>x.id===selected.id);
+    if (t && !t.locked){
+      const hs=toScreen(handleAt(t).x, handleAt(t).y);
+      if (Math.hypot(pt.x-hs.x,pt.y-hs.y)<16){ mode="rot"; drag={kind:"t",id:t.id}; canvas.classList.add("dragging"); return; }
+    }
+  }
+  const hu = hitUnit(wpt.x,wpt.y);
+  if (hu){
+    selectObj("u", hu);
+    mode="move"; drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+  } else {
+    const ht = hitTerrain(wpt.x,wpt.y);
+    if (ht){
+      selectObj("t", ht);
+      if (!ht.locked){ mode="move"; drag={kind:"t",id:ht.id,ox:wpt.x-ht.x,oy:wpt.y-ht.y}; }
+      else mode="pan";
+    } else {
+      selectObj(null); mode="pan";
+      drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
+    }
+  }
+  canvas.classList.add("dragging"); draw();
+});
+canvas.addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId)) return;
+  const pt=canvasPt(e); ptrs.set(e.pointerId,{x:pt.x,y:pt.y});
+  if (mode==="pinch" && ptrs.size===2){
+    const [a,b]=[...ptrs.values()];
+    const dist=Math.hypot(a.x-b.x,a.y-b.y);
+    if (drag&&drag.dist){ cam.scale=Math.max(6,Math.min(36, drag.scale*dist/drag.dist)); draw(); }
+    return;
+  }
+  const wpt=toWorld(pt.x,pt.y);
+  if (mode==="pan" && drag && drag.sx!=null){
+    cam.x=drag.cx-(pt.x-drag.sx)/cam.scale;
+    cam.y=drag.cy+(pt.y-drag.sy)/cam.scale; draw();
+  } else if (mode==="move" && drag){
+    if (drag.kind==="t"){
+      const t=S.terrain.find(x=>x.id===drag.id); if(!t||t.locked) return;
+      t.x=Math.max(t.w/2,Math.min(W-t.w/2,wpt.x-drag.ox));
+      t.y=Math.max(t.h/2,Math.min(H-t.h/2,wpt.y-drag.oy));
+    } else {
+      const u=S.units.find(x=>x.id===drag.id); if(!u) return;
+      const r=unitR(u);
+      u.x=Math.max(r,Math.min(W-r,wpt.x-drag.ox));
+      u.y=Math.max(r,Math.min(H-r,wpt.y-drag.oy));
+    }
+    draw();
+  } else if (mode==="rot" && drag){
+    const t=S.terrain.find(x=>x.id===drag.id); if(!t||t.locked) return;
+    t.rot=(Math.atan2(wpt.x-t.x,wpt.y-t.y)*180/Math.PI+360)%360; draw();
+  }
+});
+function endPtr(e){
+  ptrs.delete(e.pointerId);
+  if (mode==="move"||mode==="rot"){
+    if (mode==="move" && drag && drag.kind==="u"){
+      const u=S.units.find(x=>x.id===drag.id);
+      if (u) logLine("Moved "+u.name);
+    }
+    save();
+  }
+  if (!ptrs.size){ mode=null; drag=null; canvas.classList.remove("dragging"); }
+  else if (ptrs.size===1){ const p=[...ptrs.values()][0]; mode="pan"; drag={cx:cam.x,cy:cam.y,sx:p.x,sy:p.y}; }
+}
+canvas.addEventListener("pointerup", endPtr);
+canvas.addEventListener("pointercancel", endPtr);
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  const pt=canvasPt(e), before=toWorld(pt.x,pt.y);
+  cam.scale=Math.max(6,Math.min(36, cam.scale*(e.deltaY>0?0.92:1.08)));
+  const after=toWorld(pt.x,pt.y); cam.x+=before.x-after.x; cam.y+=before.y-after.y; draw();
+}, {passive:false});
+window.addEventListener("resize", resize);
+
+function applyRemote(board){
+  if (!board || board.game!=="wh40k") return;
+  if ((board.rev||0) <= (S.rev||0)) return;
+  S = board;
+  if (!S.units) S.units=[];
+  renderLog(); renderPhases(); draw(); refreshTip();
+}
+function pushState(){
+  if (practice || !matchWs || matchWs.readyState!==1) return;
+  pushWanted = true;
+  if (pushTimer) return;
+  pushTimer = setTimeout(() => {
+    pushTimer=null;
+    if (!pushWanted || !matchWs || matchWs.readyState!==1) return;
+    pushWanted=false;
+    try{ matchWs.send(JSON.stringify({ type:"state", payload:S })); setSync(true); }catch(_){ setSync(false); }
+  }, 400);
+}
+function setSync(ok){
+  const el=document.getElementById("syncState");
+  if (practice){ el.textContent=""; return; }
+  el.textContent = ok ? "synced" : "offline";
+  el.className = "sync "+(ok?"live":"bad");
+}
+function claimSeat(){
+  if (S.players["0"]===who) mySeat=0;
+  else if (S.players["1"]===who) mySeat=1;
+  else if (!S.players["0"]){ S.players["0"]=who; mySeat=0; save(); }
+  else { S.players["1"]=who; mySeat=1; save(); }
+  setWho();
+}
+function startSync(){
+  if (practice || !who || !matchId) return;
+  const url = API_BASE.replace(/^http/,"ws") + "/api/match/"+encodeURIComponent(matchId)+"/ws?username="+encodeURIComponent(who);
+  const ws = new WebSocket(url);
+  matchWs = ws;
+  ws.onopen = () => { setSync(true); pushState(); };
+  ws.onclose = () => { setSync(false); setTimeout(startSync, 1500); };
+  ws.onerror = () => setSync(false);
+  ws.onmessage = ev => {
+    let msg; try{ msg=JSON.parse(ev.data); }catch(_){ return; }
+    if (!msg||!msg.type) return;
+    if (msg.type==="snapshot"){
+      if (msg.you && msg.you.game==="wh40k") applyRemote(msg.you);
+      else if (msg.opponent && msg.opponent.game==="wh40k") applyRemote(msg.opponent);
+      claimSeat(); setSync(true);
+    }
+    if (msg.type==="opponent" && msg.opponent && msg.opponent.game==="wh40k") applyRemote(msg.opponent);
+  };
+}
+
+renderLog(); renderPhases(); refreshTip(); resize();
+if (!practice) startSync();
+</script>
+</body>
+</html>

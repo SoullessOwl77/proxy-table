@@ -1,0 +1,2 @@
+ALTER TABLE matches ADD COLUMN game TEXT DEFAULT 'mtg';
+ALTER TABLE challenges ADD COLUMN game TEXT DEFAULT 'mtg';
