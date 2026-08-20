@@ -172,7 +172,7 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn sm" id="btnClearM">Clear tape</button>
   </div>
   <div class="row" id="rowCombat" style="display:none">
-    <span class="hint">Tap your model, then an enemy. Attack uses ranged in Shooting, melee in Fight. Cover −1 if the target is on Light/Dense or the shot crosses it.</span>
+    <span class="hint">Active player (P#) first: tap their model, then an enemy. Shooting = guns; Fight = melee. Cover −1 if on/through Light/Dense.</span>
   </div>
   <div class="legend">
     <span><i style="background:#8a7a62"></i>Exposed</span>
@@ -185,7 +185,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.0-40k-guide";
+const BUILD = "v2.8.1-40k-turn-combat";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -307,14 +307,14 @@ const GUIDE = {
   shooting: {
     title: "Shooting phase",
     do: [
-      "Switch to Combat. Tap your model, then an enemy in gun range (not within 2″).",
+      "Switch to Combat. Tap a model belonging to the active player (P# in the bar), then an enemy.",
       "Check the bar: weapon, range, and Cover. Attack to roll Hit → Wound → Save → Damage.",
       "Use terrain: targets on or behind Light/Dense get −1 to be hit."
     ],
     dont: [
+      "Don’t shoot with the other seat’s models — only the active player attacks.",
       "Don’t shoot into 2″ Engagement Range with normal guns (Fight is for that).",
-      "Don’t pick a friendly model as the target.",
-      "Don’t forget to clear attacker/target if you change your mind."
+      "Don’t pick a friendly model as the target."
     ],
     next: "When you’ve shot with the models you want, Next → Charge."
   },
@@ -335,13 +335,13 @@ const GUIDE = {
   fight: {
     title: "Fight phase",
     do: [
-      "Combat tool: tap a model in 2″ of an enemy, then the enemy, then Attack (melee profile).",
+      "Combat tool: tap an active-player model in 2″ of an enemy, then the enemy, then Attack.",
       "Fight with models that charged or are already in Engagement Range.",
       "Watch wounds on the token; destroyed models disappear."
     ],
     dont: [
+      "Don’t attack with the inactive seat — wait for their turn.",
       "Don’t swing at targets outside 2″.",
-      "Don’t use guns here unless a profile is truly melee.",
       "Don’t skip ending the turn — after Fight, Next starts the other player’s Command."
     ],
     next: "Tap Next to pass the turn (other seat’s Command, or next battle round)."
@@ -437,8 +437,15 @@ function renderPhases(){
     b.addEventListener("pointerenter", () => { if (TIPS[b.dataset.phase]) showTip(TIPS[b.dataset.phase]); });
   });
 }
+function clearCombatPair(){
+  attackerId = null;
+  targetId = null;
+  const dice = document.getElementById("dice");
+  if (dice) dice.textContent = "";
+}
 function setPhase(p){
   S.turn.phase = p;
+  clearCombatPair();
   logLine("Phase → " + p);
   save(); draw(); refreshTip(); refreshGuide();
 }
@@ -450,6 +457,7 @@ document.getElementById("btnNext").onclick = () => {
     S.turn.phase = "command";
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
     else { S.turn.activeSeat = 0; S.turn.battleRound++; }
+    clearCombatPair();
     logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat);
     save(); draw(); refreshTip(); refreshGuide();
   }
@@ -905,7 +913,15 @@ function resolveAttack(){
   const atk = S.units.find(u=>u.id===attackerId);
   const tgt = S.units.find(u=>u.id===targetId);
   if (!atk || !tgt){ document.getElementById("dice").textContent = "Pick attacker then target."; return; }
+  if (atk.seat !== S.turn.activeSeat){
+    document.getElementById("dice").textContent = "Active player is P"+S.turn.activeSeat+" — attacker must be their model.";
+    return;
+  }
   if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return; }
+  if (tgt.seat === S.turn.activeSeat){
+    document.getElementById("dice").textContent = "Target must be the enemy (not P"+S.turn.activeSeat+").";
+    return;
+  }
   const pw = pickWeapon(atk, tgt);
   const w = pw.w;
   if (pw.kind === "ranged"){
@@ -990,12 +1006,29 @@ canvas.addEventListener("pointerdown", e => {
   if (tool==="combat"){
     const hu = hitUnit(wpt.x,wpt.y);
     if (hu){
-      if (!attackerId || hu.seat=== (S.units.find(u=>u.id===attackerId)||{}).seat){
-        attackerId = hu.id; if (targetId===hu.id) targetId=null;
+      const active = S.turn.activeSeat;
+      if (hu.seat === active){
+        // Active player's model → attacker
+        attackerId = hu.id;
+        if (targetId === hu.id) targetId = null;
+        document.getElementById("dice").textContent = "Attacker P"+active+" · now tap an enemy";
       } else {
-        targetId = hu.id;
+        // Enemy model → target (only if attacker already set)
+        if (!attackerId){
+          document.getElementById("dice").textContent = "P"+active+"'s turn — tap one of their models first, then an enemy.";
+        } else {
+          const atk = S.units.find(u=>u.id===attackerId);
+          if (!atk || atk.seat !== active){
+            attackerId = null;
+            document.getElementById("dice").textContent = "P"+active+"'s turn — tap one of their models first.";
+          } else {
+            targetId = hu.id;
+            document.getElementById("dice").textContent = "";
+          }
+        }
       }
       selectObj("u", hu);
+      renderCombatBar();
     }
     draw(); return;
   }
