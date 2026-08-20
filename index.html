@@ -3332,4 +3332,26 @@ if ("serviceWorker" in navigator) {
   attachHandPinch();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
 
-  con
+  const params = new URLSearchParams(location.search);
+  const stored = getStoredUser();
+  if (stored) await enterAsUser(stored);
+  else show("#loginScreen");
+
+  if (currentUser && params.get("match")) {
+    rejoinMatch(params.get("match"), params.get("game"));
+  } else if (currentUser && params.get("code")) {
+    // Came from a challenge notification — open the join flow with the code filled in
+    switchTab("tabCode");
+    open("#challengeModal");
+    const codeInput = $("#chJoinCode");
+    if (codeInput) {
+      codeInput.value = params.get("code");
+      setTimeout(() => { if ($("#chJoin")) $("#chJoin").click(); }, 300);
+    }
+  }
+})();
+
+
+</script>
+</body>
+</html>
