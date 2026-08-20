@@ -77,14 +77,14 @@ canvas.dragging{cursor:grabbing;}
 </head>
 <body>
 <div class="bar">
-  <button class="btn" id="btnMenu">Menu</button>
+  <button class="btn" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
   <h1>Warhammer 40,000</h1>
   <span class="sub" id="whoSub">Practice</span>
   <span class="sync" id="syncState"></span>
   <span class="spacer"></span>
   <div class="phases" id="phases"></div>
-  <button class="btn sm gold" id="btnNext">Next</button>
-  <button class="btn sm" id="btnFit">Fit</button>
+  <button class="btn sm gold" id="btnNext" title="Advance to the next phase (or the other player’s turn)">Next</button>
+  <button class="btn sm" id="btnFit" title="Reset zoom and center the table on screen">Fit</button>
 </div>
 <aside class="tips" id="tips">
   <div class="tipbar">
@@ -158,7 +158,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.7.1-40k-cover";
+const BUILD = "v2.7.2-40k-tips";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -208,6 +208,21 @@ const TIPS = {
     title:"Combat tool",
     short:"Tap your model, then an enemy, then Attack. Uses guns in Shooting, melee in Fight.",
     more:"Hit uses BS or WS. Cover −1 if the target’s base overlaps Light/Dense, or the shot line crosses Light/Dense. Wound compares Strength to Toughness (equal = 4+). Save uses Sv modified by AP, or Inv if the model has one. Damage comes off remaining wounds; 0 wounds removes the model."
+  },
+  next: {
+    title:"Next",
+    short:"Steps the battle: Command → Movement → Shooting → Charge → Fight, then the other seat’s Command.",
+    more:"Use this when you’ve finished the current phase. After Fight it flips to the other player (P0 ↔ P1) and starts their Command. The R# label is the battle round."
+  },
+  fit: {
+    title:"Fit",
+    short:"Resets pan/zoom so the full 60″ × 44″ table is centered on screen.",
+    more:"Pinch or scroll to zoom any time. Fit is the “I’m lost, show me the whole board” button. It does not move models or change the phase."
+  },
+  menu: {
+    title:"Menu",
+    short:"Leaves this table and returns to the hub (matches + game chooser).",
+    more:"Practice progress is saved in this browser. PVP stays on the server — rejoin from Your Matches."
   },
   exposed: {
     title:"Exposed terrain",
@@ -303,10 +318,15 @@ function renderLog(){
 }
 function renderPhases(){
   const el = document.getElementById("phases");
-  el.innerHTML = PHASES.map(p =>
-    `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}">${p}</button>`
-  ).join("") + `<span class="sub">R${S.turn.battleRound} · P${S.turn.activeSeat}</span>`;
-  el.querySelectorAll("[data-phase]").forEach(b => b.onclick = () => setPhase(b.dataset.phase));
+  el.innerHTML = PHASES.map(p => {
+    const tip = (TIPS[p] && TIPS[p].short) || p;
+    return `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}" title="${tip.replace(/"/g,"&quot;")}">${p}</button>`;
+  }).join("") + `<span class="sub" title="Battle round · active player seat">R${S.turn.battleRound} · P${S.turn.activeSeat}</span>`;
+  el.querySelectorAll("[data-phase]").forEach(b => {
+    b.onclick = () => setPhase(b.dataset.phase);
+    // Preview the phase tip without requiring a long hover (helps on desktop + tablet)
+    b.addEventListener("pointerenter", () => { if (TIPS[b.dataset.phase]) showTip(TIPS[b.dataset.phase]); });
+  });
 }
 function setPhase(p){
   S.turn.phase = p;
@@ -314,6 +334,7 @@ function setPhase(p){
   save(); draw(); refreshTip();
 }
 document.getElementById("btnNext").onclick = () => {
+  showTip(TIPS.next);
   const i = PHASES.indexOf(S.turn.phase);
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
@@ -649,7 +670,10 @@ function addDrop(key){
 }
 
 document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
-document.getElementById("btnFit").onclick = () => { fit(); draw(); };
+document.getElementById("btnMenu").addEventListener("pointerenter", () => showTip(TIPS.menu));
+document.getElementById("btnFit").onclick = () => { fit(); draw(); showTip(TIPS.fit); };
+document.getElementById("btnFit").addEventListener("pointerenter", () => showTip(TIPS.fit));
+document.getElementById("btnNext").addEventListener("pointerenter", () => showTip(TIPS.next));
 document.getElementById("btnGen").onclick = generate;
 document.getElementById("btnClearT").onclick = () => { S.terrain=[]; selectObj(null); logLine("Cleared terrain"); save(); draw(); };
 document.getElementById("btnClearU").onclick = () => { S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw(); };
