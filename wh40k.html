@@ -50,8 +50,10 @@ canvas.dragging{cursor:grabbing;}
 .selbar.on,.combat.on{display:flex;}
 .selbar .name,.combat .name{font-family:Fraunces,serif;font-weight:600;font-size:14px;}
 .selbar .meta,.combat .meta{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--parchment-dim);}
-.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);}
-.log{max-height:52px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.35;pointer-events:none;}
+.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:1.2em;}
+.log{max-height:70px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.4;pointer-events:none;
+  margin-bottom:6px;padding-bottom:2px;}
+.combat{margin-top:2px;}
 .hint{font-size:11px;color:var(--parchment-dim);}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
@@ -143,7 +145,7 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn sm" id="btnClearM">Clear tape</button>
   </div>
   <div class="row" id="rowCombat" style="display:none">
-    <span class="hint">Tap your model, then an enemy. Attack uses ranged in Shooting, melee in Fight, or whichever fits range. Cover: −1 to hit if the target sits in Light/Dense.</span>
+    <span class="hint">Tap your model, then an enemy. Attack uses ranged in Shooting, melee in Fight. Cover −1 if the target is on Light/Dense or the shot crosses it.</span>
   </div>
   <div class="legend">
     <span><i style="background:#8a7a62"></i>Exposed</span>
@@ -156,7 +158,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.7.0-40k-learn";
+const BUILD = "v2.7.1-40k-cover";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -175,7 +177,7 @@ const TIPS = {
   shooting: {
     title:"Shooting phase",
     short:"Eligible units fire. Sequence: Hit → Wound → Save → Damage. Cover is −1 to hit.",
-    more:"Pick Combat, tap your model then an enemy in range and not in 2″ ER. Roll to hit on BS (1 always fails, 6 always hits). Then Strength vs Toughness to wound. Then armour save, worsened by AP; an Invulnerable save ignores AP. Light or Dense under the target’s base gives the shooter −1 to hit."
+    more:"Pick Combat, tap your model then an enemy in range and not in 2″ ER. Roll to hit on BS (1 always fails, 6 always hits). Then Strength vs Toughness to wound. Then armour save, worsened by AP; an Invulnerable save ignores AP. Cover (−1 to hit) if the target’s base overlaps Light/Dense, or the shot crosses Light/Dense between the two models."
   },
   charge: {
     title:"Charge phase",
@@ -205,22 +207,22 @@ const TIPS = {
   combat: {
     title:"Combat tool",
     short:"Tap your model, then an enemy, then Attack. Uses guns in Shooting, melee in Fight.",
-    more:"Hit uses BS or WS. Cover −1 if the target sits in Light/Dense. Wound compares Strength to Toughness (equal = 4+). Save uses Sv modified by AP, or Inv if the model has one. Damage comes off remaining wounds; 0 wounds removes the model."
+    more:"Hit uses BS or WS. Cover −1 if the target’s base overlaps Light/Dense, or the shot line crosses Light/Dense. Wound compares Strength to Toughness (equal = 4+). Save uses Sv modified by AP, or Inv if the model has one. Damage comes off remaining wounds; 0 wounds removes the model."
   },
   exposed: {
     title:"Exposed terrain",
     short:"Does not grant Cover. Still useful as a footprint for placement and blocking.",
-    more:"Obstacles and similar pieces are Exposed in this proxy. They do not apply the −1 to hit Cover penalty. Full line of sight is not simulated yet — treat blocking as honor-system."
+    more:"Obstacles and similar pieces are Exposed in this proxy. They do not apply the −1 to hit Cover penalty. True blocking LoS is still simplified — treat absolute blocked shots as honor-system."
   },
   light: {
     title:"Light cover",
-    short:"If a target’s base sits in this piece, shooters take −1 to hit.",
-    more:"11th edition Cover is a hit penalty, not a better armour save. Woods and hills use Light here. The proxy checks the target’s center, not true visibility. Dense uses the same Cover rule in this slice."
+    short:"Target on it, or shot through it → shooters take −1 to hit.",
+    more:"11th edition Cover is a hit penalty, not a better armour save. Woods and hills use Light here. Dense uses the same Cover rule in this slice. Stand the target on the piece, or put the piece between the models."
   },
   dense: {
     title:"Dense cover",
-    short:"Same Cover as Light on this table: −1 to hit if the target is on it.",
-    more:"Ruins are Dense. In a full game Dense terrain also affects visibility and movement more strictly. This proxy applies Cover when the target’s center is inside the piece. Lock ruins after you like the layout."
+    short:"Same as Light on this table: −1 to hit if on it or shot through it.",
+    more:"Ruins are Dense. In a full game Dense also tightens visibility more strictly. Here it matches Light for Cover. Lock ruins after you like the layout."
   }
 };
 const PRESETS = {
@@ -432,11 +434,31 @@ function handleAt(t){
   const dist = t.h/2 + 1.1;
   return { x: t.x + Math.sin(rad)*dist, y: t.y + Math.cos(rad)*dist };
 }
-function inCover(u){
+/* Cover if the target’s base overlaps Light/Dense, or the shot line
+   crosses Light/Dense between attacker and target (intervening). */
+function unitOverlapsTerrain(u, t){
+  const r = unitR(u);
+  const p = localOf(t, u.x, u.y);
+  return Math.abs(p.x) <= t.w/2 + r && Math.abs(p.y) <= t.h/2 + r;
+}
+function segmentHitsTerrain(x0, y0, x1, y1, t){
+  for (let i = 1; i <= 10; i++){
+    const a = i / 11;
+    const p = localOf(t, x0 + (x1 - x0) * a, y0 + (y1 - y0) * a);
+    if (Math.abs(p.x) <= t.w/2 && Math.abs(p.y) <= t.h/2) return true;
+  }
+  return false;
+}
+function inCover(tgt, atk){
   for (const t of S.terrain){
     if (t.category !== "light" && t.category !== "dense") continue;
-    const p = localOf(t, u.x, u.y);
-    if (Math.abs(p.x)<=t.w/2 && Math.abs(p.y)<=t.h/2) return t.category;
+    if (unitOverlapsTerrain(tgt, t)) return t.category;
+  }
+  if (atk){
+    for (const t of S.terrain){
+      if (t.category !== "light" && t.category !== "dense") continue;
+      if (segmentHitsTerrain(atk.x, atk.y, tgt.x, tgt.y, t)) return t.category;
+    }
   }
   return null;
 }
@@ -704,7 +726,7 @@ function renderCombatBar(){
   document.getElementById("atkName").textContent = atk.name + " (P"+atk.seat+")";
   document.getElementById("tgtName").textContent = tgt.name + " (P"+tgt.seat+")";
   const pw = pickWeapon(atk, tgt);
-  const cov = inCover(tgt);
+  const cov = inCover(tgt, atk);
   const bits = [
     pw.w.name,
     "A"+pw.w.A,
@@ -735,7 +757,7 @@ function resolveAttack(){
     document.getElementById("dice").textContent = "Not in 2\" Engagement Range.";
     return;
   }
-  const cov = inCover(tgt);
+  const cov = inCover(tgt, atk);
   const hitMod = cov ? -1 : 0;
   const hits=[], wounds=[], saves=[];
   let hitN=0, woundN=0, unsaved=0, dmg=0;
