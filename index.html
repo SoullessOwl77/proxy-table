@@ -381,7 +381,7 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
 <body>
 
 <div class="screen on" id="loginScreen"><div class="center"><div class="panel">
-  <h1>Proxy Table</h1>
+  <h1 id="loginTitle" title="Tap to refresh" style="cursor:pointer">Proxy Table</h1>
   <div class="tag" id="loginTag">Sign in</div>
   <label>Your name</label>
   <input id="loginName" placeholder="Kyle" maxlength="20" autocomplete="off">
@@ -394,7 +394,7 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
 
 <div class="screen" id="menuScreen">
   <div class="bar">
-    <h1>Proxy Table</h1><span class="sub" id="menuWho"></span>
+    <h1 id="menuTitle" title="Tap to refresh" style="cursor:pointer">Proxy Table</h1><span class="sub" id="menuWho"></span>
     <span class="spacer"></span>
     <button class="btn" id="menuNotif">Notifications</button>
     <button class="btn" id="menuSwitch">Switch account</button>
@@ -779,7 +779,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.0-40k-learn";
+const BUILD = "v2.7.1-title-refresh";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -824,6 +824,13 @@ let currentUser = null, currentMatch = null, oppName = null, playerName = "Playe
    ============================================================ */
 function getStoredUser(){ try{ return localStorage.getItem("pt_user") || null; }catch(e){ return null; } }
 function setStoredUser(u){ try{ u ? localStorage.setItem("pt_user", u) : localStorage.removeItem("pt_user"); }catch(e){} }
+
+function hardRefresh(){
+  /* Mobile PWA often has no browser refresh control — titles act as reload. */
+  location.reload();
+}
+$("#loginTitle").onclick = hardRefresh;
+$("#menuTitle").onclick = hardRefresh;
 
 $("#loginGo").onclick = async () => {
   const name = $("#loginName").value.trim();

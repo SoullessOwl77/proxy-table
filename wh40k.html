@@ -87,14 +87,34 @@ canvas.dragging{cursor:grabbing;}
 .guide .nextwhen{font-size:12px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:4px;}
 .guide .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
 @media (max-width:900px){.guide{width:min(280px,46vw);font-size:12px;}}
+.rollpanel{position:fixed;bottom:calc(150px + env(safe-area-inset-bottom,0px));right:calc(10px + var(--edge-r));z-index:5;
+  width:min(340px,46vw);max-height:min(42vh,360px);overflow:auto;
+  background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
+  box-shadow:0 8px 24px #0008;display:none;font-size:12px;line-height:1.4;}
+.rollpanel.on{display:block;}
+.rollpanel .rbar{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.rollpanel .rbar h3{flex:1;font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0;}
+.rollpanel .summary{font-size:11px;color:var(--parchment-dim);margin-bottom:8px;}
+.rollpanel .step{border-top:1px solid #0006;padding:6px 0;}
+.rollpanel .step:first-of-type{border-top:none;}
+.rollpanel .step h4{margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);}
+.rollpanel .die{display:inline-block;min-width:1.4em;text-align:center;font-variant-numeric:tabular-nums;
+  padding:1px 4px;margin:1px 2px;border-radius:4px;background:#0a0f0e;border:1px solid #0008;}
+.rollpanel .die.ok{border-color:var(--good);color:var(--good);}
+.rollpanel .die.fail{border-color:var(--blood);color:#d4a0a0;}
+.rollpanel .die.skip{opacity:.45;}
+.rollpanel .math{color:var(--parchment-dim);font-size:11px;margin-top:2px;}
+.rollpanel .empty{color:var(--parchment-dim);font-style:italic;}
+@media (max-width:900px){.rollpanel{width:min(300px,50vw);font-size:11px;}}
 </style>
 </head>
 <body>
 <div class="bar">
   <button class="btn" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
+  <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
   <button class="btn sm danger" id="btnReset" title="Clear the practice table and start over" style="display:none">Reset</button>
-  <h1>Warhammer 40,000</h1>
+  <h1 id="pageTitle" title="Tap to refresh" style="cursor:pointer">Warhammer 40,000</h1>
   <span class="sub" id="whoSub">Practice</span>
   <span class="sync" id="syncState"></span>
   <span class="spacer"></span>
@@ -124,6 +144,13 @@ canvas.dragging{cursor:grabbing;}
   <div class="label">Don’t</div>
   <ul class="dont" id="guideDont"></ul>
   <div class="nextwhen" id="guideNext"></div>
+</aside>
+<aside class="rollpanel" id="rollpanel">
+  <div class="rbar">
+    <h3>Dice math</h3>
+    <button class="btn sm ghost" id="btnRollsHide" title="Hide dice math">–</button>
+  </div>
+  <div id="rollBody" class="empty">Resolve an attack to see each roll here.</div>
 </aside>
 <canvas id="c"></canvas>
 <div class="dock">
@@ -160,6 +187,7 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn" data-preset="obstacle">Obstacle</button>
     <button class="btn gold" id="btnGen">Generate</button>
     <button class="btn ghost" id="btnClearT">Clear terrain</button>
+    <span class="hint" id="terrainLiveHint" style="display:none">Terrain is locked for battle (real 40K doesn’t move scenery mid-game). Reset practice to re-place.</span>
   </div>
   <div class="row" id="rowUnits" style="display:none">
     <button class="btn gold" id="btnDemo">Demo forces</button>
@@ -186,7 +214,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.2-40k-stabilize";
+const BUILD = "v2.8.5-title-refresh";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -220,7 +248,7 @@ const TIPS = {
   terrain: {
     title:"Terrain tool",
     short:"Place, rotate, lock, or Generate a starter layout. Categories: Exposed, Light, Dense.",
-    more:"Generate always uses the same layout so you can learn it. Lock a piece so it cannot be dragged. Rules care about category, not the pretty name. Select a piece to see what Cover it gives."
+    more:"During setup (Command, before the battle starts) you can Generate, place, rotate, and lock pieces. The first time you leave Command (Next → Movement), all terrain locks for the rest of the battle — same as real 40K. Practice Reset returns to setup."
   },
   unit: {
     title:"Units tool",
@@ -257,6 +285,11 @@ const TIPS = {
     short:"Phase walkthrough: what to do and what to avoid this step.",
     more:"On by default in Practice, off in PVP. Toggle any time. Content is phase-based now; later it can highlight steps for the models on the table."
   },
+  rolls: {
+    title:"Dice math",
+    short:"Shows every hit, wound, save, and damage roll from the last Attack.",
+    more:"Toggle with Rolls. Each attack is listed with the number needed and pass/fail. Structured for a later step where you can choose which dice count."
+  },
   exposed: {
     title:"Exposed terrain",
     short:"Does not grant Cover. Still useful as a footprint for placement and blocking.",
@@ -282,14 +315,14 @@ const GUIDE = {
     title: "Command phase",
     do: [
       "Note whose turn it is (P0 / P1) and the battle round (R#).",
-      "If the board is empty: Generate terrain, then Demo forces (Units tool).",
+      "Setup only: Generate/place terrain and Demo forces (Units tool).",
       "Plan the turn: who will move, shoot, or charge."
     ],
     dont: [
       "Don’t move models or shoot yet — that is later phases.",
-      "Don’t skip reading the log if something looks wrong."
+      "Don’t count on moving terrain later — the first phase after Command locks it for the battle."
     ],
-    next: "When you know the plan, tap Next → Movement."
+    next: "When the board is set, tap Next → Movement (terrain locks for the battle)."
   },
   movement: {
     title: "Movement phase",
@@ -388,6 +421,10 @@ let matchWs = null, pushTimer = null, pushWanted = false;
 let tipMore = false;
 /* Practice: guide on. PVP: guide off. User can toggle either way this session. */
 let guideOn = false;
+/* Dice math panel — practice on by default; PVP off but toggleable. */
+let rollsOn = false;
+/* Structured last attack for the Rolls panel (and future “pick which dice” UI). */
+let lastRoll = null;
 /* While dragging a unit, rings stay on the start position until drop. */
 let moveOrigin = null;
 
@@ -446,23 +483,64 @@ function clearCombatPair(){
   const dice = document.getElementById("dice");
   if (dice) dice.textContent = "";
 }
+function terrainEditable(){
+  return !(S.turn && S.turn.deploymentDone);
+}
+function lockAllTerrain(reason){
+  let n = 0;
+  for (const t of S.terrain){
+    if (!t.locked){ t.locked = true; n++; }
+  }
+  if (!S.turn.deploymentDone){
+    S.turn.deploymentDone = true;
+    logLine(reason || "Battle started — terrain locked");
+  } else if (n) logLine("Locked "+n+" terrain piece(s)");
+  updateTerrainTools();
+}
+function beginBattleIfNeeded(nextPhase){
+  /* Leaving Command for the first time ends setup (matches real 40K: scenery stays put). */
+  if (S.turn.deploymentDone) return;
+  if (nextPhase === "command") return;
+  lockAllTerrain("Setup done — terrain locked for battle");
+}
+function updateTerrainTools(){
+  const live = !terrainEditable();
+  const hint = document.getElementById("terrainLiveHint");
+  if (hint) hint.style.display = live ? "" : "none";
+  document.querySelectorAll("#rowTerrain [data-preset], #btnGen, #btnClearT").forEach(b => {
+    b.disabled = live;
+    b.style.opacity = live ? "0.45" : "";
+  });
+  const lock = document.getElementById("btnLock");
+  const rotL = document.getElementById("btnRotL");
+  const rotR = document.getElementById("btnRotR");
+  const del = document.getElementById("btnDel");
+  if (live){
+    if (lock) lock.style.display = "none";
+    if (rotL) rotL.style.display = "none";
+    if (rotR) rotR.style.display = "none";
+    if (del) del.style.display = "none";
+  }
+}
 function setPhase(p){
+  beginBattleIfNeeded(p);
   S.turn.phase = p;
   clearCombatPair();
   logLine("Phase → " + p);
-  save(); draw(); refreshTip(); refreshGuide();
+  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools();
 }
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
   const i = PHASES.indexOf(S.turn.phase);
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
+    beginBattleIfNeeded("command");
     S.turn.phase = "command";
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
     else { S.turn.activeSeat = 0; S.turn.battleRound++; }
     clearCombatPair();
     logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat);
-    save(); draw(); refreshTip(); refreshGuide();
+    save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools();
   }
 };
 
@@ -565,6 +643,61 @@ document.getElementById("btnGuide").onclick = () => {
 };
 document.getElementById("btnGuide").addEventListener("pointerenter", () => showTip(TIPS.guide));
 document.getElementById("btnGuideHide").onclick = () => setGuide(false);
+
+function setRolls(on){
+  rollsOn = !!on;
+  const panel = document.getElementById("rollpanel");
+  const btn = document.getElementById("btnRolls");
+  panel.classList.toggle("on", rollsOn);
+  btn.classList.toggle("on", rollsOn);
+  btn.classList.toggle("gold", rollsOn);
+  if (rollsOn) renderRollPanel();
+}
+function renderRollPanel(){
+  const body = document.getElementById("rollBody");
+  if (!lastRoll){
+    body.className = "empty";
+    body.textContent = "Resolve an attack to see each roll here.";
+    return;
+  }
+  body.className = "";
+  const R = lastRoll;
+  const skillLabel = R.kind === "ranged" ? "BS" : "WS";
+  let html = `<div class="summary"><strong>${R.atkName}</strong> → <strong>${R.tgtName}</strong><br>
+    ${R.wepName} · A${R.attacks} · ${skillLabel} ${R.skill}+ · S${R.S} AP${R.AP} D${R.D}
+    ${R.cover ? " · Cover −1 to hit" : ""}<br>
+    Need: hit ${R.hitNeed}+ · wound ${R.woundNeed}+ · save ${R.saveLabel}<br>
+    Result: ${R.hitN} hit · ${R.woundN} wound · ${R.unsaved} unsaved · ${R.dmg} damage
+    ${R.destroyed ? " · destroyed" : " · target "+R.tgtWoundsLeft+"/"+R.tgtW+" W"}</div>`;
+  R.dice.forEach((d, i) => {
+    html += `<div class="step"><h4>Attack ${i+1}</h4>`;
+    html += `<div>Hit <span class="die ${d.hit.ok?"ok":"fail"}">${d.hit.roll}</span>
+      <span class="math">need ${d.hit.need}+${d.hit.modNote || ""} → ${d.hit.ok?"HIT":"miss"}</span></div>`;
+    if (d.wound){
+      html += `<div>Wound <span class="die ${d.wound.ok?"ok":"fail"}">${d.wound.roll}</span>
+        <span class="math">S${R.S} vs T${R.T} need ${d.wound.need}+ → ${d.wound.ok?"WOUND":"fail"}</span></div>`;
+    } else {
+      html += `<div class="math">Wound — skipped</div>`;
+    }
+    if (d.save){
+      html += `<div>Save <span class="die ${d.save.ok?"ok":"fail"}">${d.save.roll}</span>
+        <span class="math">${d.save.how} → ${d.save.ok?"saved":"fail (damage)"}</span></div>`;
+    } else if (d.wound && d.wound.ok){
+      html += `<div class="math">Save — skipped</div>`;
+    }
+    if (d.dmg){
+      html += `<div>Damage <span class="die ok">${d.dmg}</span> <span class="math">applied to target</span></div>`;
+    }
+    html += `</div>`;
+  });
+  body.innerHTML = html;
+}
+document.getElementById("btnRolls").onclick = () => {
+  setRolls(!rollsOn);
+  showTip(TIPS.rolls);
+};
+document.getElementById("btnRolls").addEventListener("pointerenter", () => showTip(TIPS.rolls));
+document.getElementById("btnRollsHide").onclick = () => setRolls(false);
 
 const cam = { x: W/2, y: H/2, scale: 12 };
 let resizedOnce = false;
@@ -782,29 +915,49 @@ function selectObj(kind, obj){
   selected = obj ? { kind, id: obj.id } : null;
   const bar = document.getElementById("selbar");
   const lock = document.getElementById("btnLock");
+  const rotL = document.getElementById("btnRotL");
+  const rotR = document.getElementById("btnRotR");
+  const del = document.getElementById("btnDel");
   if (!obj || tool==="combat"){ bar.classList.remove("on"); if(!obj){ refreshTip(); return; } }
   if (obj && tool!=="combat"){
     bar.classList.add("on");
     if (kind==="t"){
+      const live = !terrainEditable();
       document.getElementById("selName").textContent = (PRESETS[obj.preset]||{}).label || obj.preset;
-      document.getElementById("selMeta").textContent = obj.category + (obj.locked?" · locked":"");
-      lock.style.display=""; lock.textContent = obj.locked ? "Unlock" : "Lock";
+      document.getElementById("selMeta").textContent = obj.category + (obj.locked || live ? " · locked" : "");
+      if (live){
+        lock.style.display = "none";
+        if (rotL) rotL.style.display = "none";
+        if (rotR) rotR.style.display = "none";
+        if (del) del.style.display = "none";
+      } else {
+        lock.style.display = "";
+        lock.textContent = obj.locked ? "Unlock" : "Lock";
+        if (rotL) rotL.style.display = "";
+        if (rotR) rotR.style.display = "";
+        if (del) del.style.display = "";
+      }
     } else {
       document.getElementById("selName").textContent = obj.name;
       const inv = obj.Inv ? (" Inv"+obj.Inv+"+") : "";
       document.getElementById("selMeta").textContent = "M"+obj.M+" T"+obj.T+" Sv"+obj.Sv+"+"+inv+" W "+(obj.wounds??obj.W)+"/"+obj.W;
-      lock.style.display="none";
+      lock.style.display = "none";
+      if (rotL) rotL.style.display = "";
+      if (rotR) rotR.style.display = "";
+      if (del) del.style.display = "";
     }
   }
   refreshTip();
 }
 
 function addPreset(kind){
+  if (!terrainEditable()){ logLine("Terrain locked — Reset practice to change the board"); return; }
   const d = PRESETS[kind];
   const t = { id:"t_"+(nid++), preset:d.preset, category:d.category, x:W/2, y:H/2, w:d.w, h:d.h, rot:0, locked:false };
   S.terrain.push(t); selectObj("t", t); logLine("Placed "+d.label); save(); draw();
 }
 function generate(){
+  if (!terrainEditable()){ logLine("Terrain locked — Reset practice to change the board"); return; }
   const layout = [
     {preset:"ruin",x:16,y:22,rot:12},{preset:"ruin",x:46,y:24,rot:-18},
     {preset:"woods",x:30,y:18,rot:8},{preset:"woods",x:22,y:30,rot:-6},
@@ -845,6 +998,10 @@ function addDrop(key){
 
 document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
 document.getElementById("btnMenu").addEventListener("pointerenter", () => showTip(TIPS.menu));
+document.getElementById("pageTitle").onclick = () => {
+  /* Hard reload so mobile PWAs without a browser chrome can pick up new SW/assets */
+  location.reload();
+};
 function resetPractice(){
   if (!practice) return;
   if (!confirm("Reset the practice table?\nClears terrain, units, turn, and log.")) return;
@@ -862,28 +1019,38 @@ function resetPractice(){
   draw();
   refreshTip();
   refreshGuide();
+  updateTerrainTools();
 }
 document.getElementById("btnReset").onclick = resetPractice;
 if (practice) document.getElementById("btnReset").style.display = "";
 document.getElementById("btnFit").onclick = () => { fit(); draw(); showTip(TIPS.fit); };
 document.getElementById("btnFit").addEventListener("pointerenter", () => showTip(TIPS.fit));
 document.getElementById("btnNext").addEventListener("pointerenter", () => showTip(TIPS.next));
-document.getElementById("btnGen").onclick = generate;
-document.getElementById("btnClearT").onclick = () => { S.terrain=[]; selectObj(null); logLine("Cleared terrain"); save(); draw(); };
+document.getElementById("btnGen").onclick = () => {
+  if (!terrainEditable()){ logLine("Terrain locked — Reset practice to change the board"); return; }
+  generate();
+};
+document.getElementById("btnClearT").onclick = () => {
+  if (!terrainEditable()){ logLine("Terrain locked — Reset practice to change the board"); return; }
+  S.terrain=[]; selectObj(null); logLine("Cleared terrain"); save(); draw();
+};
 document.getElementById("btnClearU").onclick = () => { S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw(); };
 document.getElementById("btnDemo").onclick = demoForces;
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
 document.getElementById("btnRotL").onclick = () => rotSel(-15);
 document.getElementById("btnRotR").onclick = () => rotSel(15);
 document.getElementById("btnLock").onclick = () => {
+  if (!terrainEditable()){ logLine("Terrain locked for battle"); return; }
   if (!selected || selected.kind!=="t") return;
   const t = S.terrain.find(x=>x.id===selected.id); if(!t) return;
   t.locked=!t.locked; selectObj("t",t); logLine((t.locked?"Locked ":"Unlocked ")+t.preset); save(); draw();
 };
 document.getElementById("btnDel").onclick = () => {
   if (!selected) return;
-  if (selected.kind==="t") S.terrain = S.terrain.filter(t=>t.id!==selected.id);
-  else {
+  if (selected.kind==="t"){
+    if (!terrainEditable()){ logLine("Terrain locked for battle"); return; }
+    S.terrain = S.terrain.filter(t=>t.id!==selected.id);
+  } else {
     S.units = S.units.filter(u=>u.id!==selected.id);
     if (attackerId===selected.id) attackerId=null;
     if (targetId===selected.id) targetId=null;
@@ -908,6 +1075,7 @@ function setTool(t){
 function rotSel(d){
   if (!selected) return;
   if (selected.kind==="t"){
+    if (!terrainEditable()) return;
     const t=S.terrain.find(x=>x.id===selected.id); if(!t||t.locked) return;
     t.rot=((t.rot||0)+d+360)%360;
   } else {
@@ -985,41 +1153,74 @@ function resolveAttack(){
   }
   const cov = inCover(tgt, atk);
   const hitMod = cov ? -1 : 0;
+  const hitNeed = Math.max(2, Math.min(7, w.skill - hitMod));
+  const wn = woundNeed(w.S, tgt.T);
+  const armourNeed = Math.max(2, Math.min(7, tgt.Sv - (w.AP||0)));
+  const saveLabel = tgt.Inv
+    ? `Inv ${tgt.Inv}+ or Sv ${armourNeed}+ (AP${w.AP})`
+    : `Sv ${armourNeed}+ (AP${w.AP})`;
   const hits=[], wounds=[], saves=[];
+  const dice = [];
   let hitN=0, woundN=0, unsaved=0, dmg=0;
   for (let i=0;i<w.A;i++){
+    const entry = { hit: null, wound: null, save: null, dmg: 0 };
     const h = d6();
-    const need = Math.max(2, Math.min(7, w.skill - hitMod));
-    const hit = (h===1) ? false : (h===6 || h>=need);
+    const hit = (h===1) ? false : (h===6 || h>=hitNeed);
+    entry.hit = {
+      roll: h,
+      need: hitNeed,
+      ok: hit,
+      modNote: hitMod ? ` (skill ${w.skill}+, cover ${hitMod})` : ` (skill ${w.skill}+)`
+    };
     hits.push(h+(hit?"":"×"));
-    if (!hit) continue;
+    if (!hit){ dice.push(entry); continue; }
     hitN++;
     const wr = d6();
-    const wn = woundNeed(w.S, tgt.T);
     const wounded = wr!==1 && (wr===6 || wr>=wn);
+    entry.wound = { roll: wr, need: wn, ok: wounded };
     wounds.push(wr+(wounded?"":"×"));
-    if (!wounded) continue;
+    if (!wounded){ dice.push(entry); continue; }
     woundN++;
     const sv = d6();
-    let saved = false, how = "Sv";
+    let saved = false, how = "Sv "+armourNeed+"+";
     if (sv === 1) saved = false;
-    else if (tgt.Inv && sv >= tgt.Inv){ saved = true; how = "Inv"; }
+    else if (tgt.Inv && sv >= tgt.Inv){ saved = true; how = "Inv "+tgt.Inv+"+"; }
     else {
-      const armourNeed = Math.max(2, Math.min(7, tgt.Sv - (w.AP||0)));
       saved = sv >= armourNeed;
-      how = "Sv"+armourNeed+"+";
+      how = "Sv "+armourNeed+"+";
     }
+    entry.save = { roll: sv, ok: saved, how };
     saves.push(sv+(saved?(" "+how):" fail"));
-    if (saved) continue;
+    if (saved){ dice.push(entry); continue; }
     unsaved++;
     const deal = Math.min(w.D, tgt.wounds);
     tgt.wounds -= deal;
     dmg += deal;
+    entry.dmg = deal;
+    dice.push(entry);
     if (tgt.wounds <= 0) break;
   }
+  const destroyed = tgt.wounds <= 0;
+  lastRoll = {
+    atkName: atk.name + " (P"+atk.seat+")",
+    tgtName: tgt.name + " (P"+tgt.seat+")",
+    wepName: w.name,
+    kind: pw.kind,
+    attacks: w.A,
+    skill: w.skill,
+    S: w.S, AP: w.AP, D: w.D, T: tgt.T,
+    cover: cov,
+    hitNeed, woundNeed: wn, saveLabel,
+    hitN, woundN, unsaved, dmg,
+    destroyed,
+    tgtW: tgt.W,
+    tgtWoundsLeft: Math.max(0, tgt.wounds),
+    /* Per-die detail — ready for a future “select which dice count” UI */
+    dice
+  };
   let line = atk.name+" → "+tgt.name+" "+w.name+": hit "+hitN+"/"+w.A+" wound "+woundN+" dmg "+dmg;
   if (cov) line += " (cover −1)";
-  if (tgt.wounds <= 0){
+  if (destroyed){
     line += " — destroyed";
     S.units = S.units.filter(u => u.id !== tgt.id);
     targetId = null;
@@ -1027,6 +1228,7 @@ function resolveAttack(){
   logLine(line);
   document.getElementById("dice").textContent =
     "Hits ["+hits.join(" ")+"]  Wounds ["+wounds.join(" ")+"]  Saves ["+saves.join(" ")+"]";
+  renderRollPanel();
   save(); draw(); refreshTip();
 }
 document.getElementById("btnResolve").onclick = resolveAttack;
@@ -1078,7 +1280,7 @@ canvas.addEventListener("pointerdown", e => {
     }
     draw(); return;
   }
-  if (selected && selected.kind==="t"){
+  if (selected && selected.kind==="t" && terrainEditable()){
     const t=S.terrain.find(x=>x.id===selected.id);
     if (t && !t.locked){
       const hs=toScreen(handleAt(t).x, handleAt(t).y);
@@ -1095,7 +1297,7 @@ canvas.addEventListener("pointerdown", e => {
     const ht = hitTerrain(wpt.x,wpt.y);
     if (ht){
       selectObj("t", ht);
-      if (!ht.locked){ mode="move"; drag={kind:"t",id:ht.id,ox:wpt.x-ht.x,oy:wpt.y-ht.y}; }
+      if (terrainEditable() && !ht.locked){ mode="move"; drag={kind:"t",id:ht.id,ox:wpt.x-ht.x,oy:wpt.y-ht.y}; }
       else mode="pan";
     } else {
       selectObj(null); mode="pan";
@@ -1119,6 +1321,7 @@ canvas.addEventListener("pointermove", e => {
     cam.y=drag.cy+(pt.y-drag.sy)/cam.scale; draw();
   } else if (mode==="move" && drag){
     if (drag.kind==="t"){
+      if (!terrainEditable()) return;
       const t=S.terrain.find(x=>x.id===drag.id); if(!t||t.locked) return;
       t.x=Math.max(t.w/2,Math.min(W-t.w/2,wpt.x-drag.ox));
       t.y=Math.max(t.h/2,Math.min(H-t.h/2,wpt.y-drag.oy));
@@ -1130,6 +1333,7 @@ canvas.addEventListener("pointermove", e => {
     }
     draw();
   } else if (mode==="rot" && drag){
+    if (!terrainEditable()) return;
     const t=S.terrain.find(x=>x.id===drag.id); if(!t||t.locked) return;
     t.rot=(Math.atan2(wpt.x-t.x,wpt.y-t.y)*180/Math.PI+360)%360; draw();
   }
@@ -1212,7 +1416,8 @@ function startSync(){
 }
 
 guideOn = !!practice; // practice on, PVP off; user may toggle either way
-renderLog(); renderPhases(); refreshTip(); refreshGuide(); resize();
+rollsOn = !!practice;
+renderLog(); renderPhases(); refreshTip(); refreshGuide(); setRolls(rollsOn); updateTerrainTools(); resize();
 if (!practice) startSync();
 </script>
 </body>
