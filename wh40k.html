@@ -60,16 +60,17 @@ canvas.dragging{cursor:grabbing;}
   padding-left:calc(10px + var(--edge-l));padding-right:calc(10px + var(--edge-r));
   background:transparent;pointer-events:none;max-width:calc(100% - 124px);}
 .dock .row{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
-.selbar,.combat{display:none;align-items:center;gap:8px;flex-wrap:wrap;
+/* In-flow stack: log above dice/combat/selbar — never overlaps on PC or mobile */
+.feed{display:flex;flex-direction:column;gap:6px;align-items:stretch;pointer-events:none;min-width:0;}
+.selbar,.combat{display:none;align-items:center;gap:8px;flex-wrap:wrap;width:100%;
   background:#1b2825f0;border:1px solid var(--brass-dim);border-radius:10px;padding:8px 10px;pointer-events:auto;}
 .selbar.on,.combat.on{display:flex;}
 .selbar .name,.combat .name{font-family:Fraunces,serif;font-weight:600;font-size:14px;}
 .selbar .meta,.combat .meta{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--parchment-dim);}
-.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:1.2em;pointer-events:none;
+.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:0;pointer-events:none;
   text-shadow:0 1px 2px #000a;}
-/* Action log chip — fixed so transparent dock / Fit can’t bury it */
-.log{position:fixed;z-index:6;left:calc(70px + var(--edge-l));bottom:calc(78px + env(safe-area-inset-bottom,0px));
-  max-width:min(380px,48vw);max-height:78px;overflow:hidden;
+.dice:empty{display:none;}
+.log{align-self:flex-start;max-width:min(520px,100%);max-height:4.4em;overflow:hidden;
   font-size:11px;color:var(--parchment);line-height:1.4;pointer-events:none;
   background:#0a0f0ef2;border:1px solid #0008;border-radius:8px;padding:6px 9px;
   box-shadow:0 4px 14px #0008;}
@@ -80,7 +81,6 @@ canvas.dragging{cursor:grabbing;}
 .warnbar.on{display:flex;}
 .warnbar strong{color:#f0a8a8;}
 .warnbar .wclose{margin-left:4px;flex-shrink:0;}
-.combat{margin-top:2px;}
 .hint{font-size:11px;color:var(--parchment-dim);}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);pointer-events:none;
   text-shadow:0 1px 2px #000a;}
@@ -96,6 +96,10 @@ canvas.dragging{cursor:grabbing;}
 .tips.more .long{display:block;}
 .tips .tipbar{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
 .tips .tipbar h3{flex:1;margin:0;}
+.actrow{align-items:center;pointer-events:auto;}
+.actrow #actBtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.actrow .act-kicker{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin-right:2px;}
+.btn.placeholder{opacity:.55;border-style:dashed;}
 .rotate{position:fixed;inset:0;background:var(--ink);display:none;align-items:center;justify-content:center;
   text-align:center;z-index:40;padding:24px;}
 .rotate h2{font-family:Fraunces,serif;font-weight:400;}
@@ -138,7 +142,7 @@ canvas.dragging{cursor:grabbing;}
   .rail{width:56px;}
   .dock{left:56px;right:56px;max-width:calc(100% - 112px);}
   .bar{padding-left:calc(64px + var(--edge-l));padding-right:calc(64px + var(--edge-r));}
-  .log{left:calc(64px + var(--edge-l));bottom:calc(74px + env(safe-area-inset-bottom,0px));max-width:min(340px,52vw);}
+  .log{max-width:100%;}
 }
 </style>
 </head>
@@ -202,25 +206,33 @@ canvas.dragging{cursor:grabbing;}
 </div>
 <canvas id="c"></canvas>
 <div class="dock">
-  <div class="log" id="log"></div>
-  <div class="combat" id="combat">
-    <span class="name" id="atkName">Attacker</span>
-    <span class="meta">→</span>
-    <span class="name" id="tgtName">Target</span>
-    <span class="meta" id="wepMeta"></span>
-    <span class="spacer"></span>
-    <button class="btn sm gold" id="btnResolve">Attack</button>
-    <button class="btn sm" id="btnClearAtk">Clear</button>
+  <div class="feed">
+    <div class="log" id="log"></div>
+    <div class="dice" id="dice"></div>
+    <div class="combat" id="combat">
+      <span class="name" id="atkName">Attacker</span>
+      <span class="meta">→</span>
+      <span class="name" id="tgtName">Target</span>
+      <span class="meta" id="wepMeta"></span>
+      <span class="spacer"></span>
+      <button class="btn sm gold" id="btnResolve">Attack</button>
+      <button class="btn sm" id="btnClearAtk">Clear</button>
+    </div>
+    <div class="selbar" id="selbar">
+      <span class="name" id="selName">Ruin</span>
+      <span class="meta" id="selMeta">Dense</span>
+      <span class="spacer"></span>
+      <button class="btn sm" id="btnRotL">−15°</button>
+      <button class="btn sm" id="btnRotR">+15°</button>
+      <button class="btn sm" id="btnLock">Lock</button>
+      <button class="btn sm danger" id="btnDel">Delete</button>
+    </div>
   </div>
-  <div class="dice" id="dice"></div>
-  <div class="selbar" id="selbar">
-    <span class="name" id="selName">Ruin</span>
-    <span class="meta" id="selMeta">Dense</span>
-    <span class="spacer"></span>
-    <button class="btn sm" id="btnRotL">−15°</button>
-    <button class="btn sm" id="btnRotR">+15°</button>
-    <button class="btn sm" id="btnLock">Lock</button>
-    <button class="btn sm danger" id="btnDel">Delete</button>
+  <div class="row actrow" id="rowActions">
+    <span class="act-kicker" id="actKicker">Optional</span>
+    <div id="actBtns"></div>
+    <button class="btn gold" id="btnAnnounce" style="display:none">Announce</button>
+    <span class="hint" id="actHint"></span>
   </div>
   <div class="row" id="rowTerrain">
     <button class="btn" data-preset="ruin">Ruin</button>
@@ -260,7 +272,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.9.6-coherency";
+const BUILD = "v2.10.1-dock-stack";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -268,13 +280,13 @@ const PHASES = ["command","movement","shooting","charge","fight"];
 const TIPS = {
   command: {
     title:"Command phase",
-    short:"Start of this player’s turn. Mark the round, then move on.",
-    more:"In a full game you would take Battle-shock tests here and spend Command points. This proxy only tracks whose turn it is. Next advances you through the rest of the battle round."
+    short:"Start of this player’s turn. Optional: Battle-shock on damaged models. CP +1 at turn start (placeholder for Stratagems).",
+    more:"At the start of your Command this table refreshes that seat’s unit flags and adds 1 Command Point (building block for Stratagems).\n\nBattle-shock: select a damaged model → Optional → Announce (2D6 vs Leadership). Fail flags the token BS.\n\nStratagems are not spendable yet — tip only."
   },
   movement: {
     title:"Movement phase",
-    short:"Move up to M″ (gold ring = base-edge reach). Multi-model units must stay in coherency — a connected 2″ chain, and no two models more than 9″ apart.",
-    more:"A Normal Move is up to M″. Keep each model’s base edge on or inside its gold ring.\n\nCoherency (real rule for multi-model units):\n• Models that share a unit (green dashed links) must form one group: each model within 2″ base-edge of another so the unit is a single chain — not every model within 2″ of every other model.\n• Also, every model in that unit must be within 9″ of every other model (stops long conga lines).\n• Single models (e.g. the Walker alone) have no coherency partners.\n\nIf a move breaks coherency, a warning appears. Fix the group before you treat the move as legal. Pivoting is free. Ending on enemies is not allowed."
+    short:"Default drag = Normal Move (M″ from base edge). Optional: Advance (M+D6), Fall Back, Remain Stationary. Multi-model units must stay in coherency.",
+    more:"Declare Advance / Fall Back / Remain with Optional → Announce before (or instead of) a Normal Move.\n\nAdvance: roll D6; gold ring becomes M+that from the base edge; usually cannot shoot or charge.\nFall Back: leave 2″ ER; usually cannot shoot or charge.\nRemain Stationary: choose not to move.\n\nCoherency (real rule for multi-model units):\n• Models that share a unit (green dashed links) must form one group: each model within 2″ base-edge of another so the unit is a single chain — not every model within 2″ of every other model.\n• Also, every model in that unit must be within 9″ of every other model (stops long conga lines).\n• Single models (e.g. the Walker alone) have no coherency partners.\n\nIf a move breaks coherency, a warning appears. Don’t end on enemy bases."
   },
   shooting: {
     title:"Shooting phase",
@@ -350,6 +362,70 @@ const TIPS = {
     title:"Dense cover",
     short:"Same as Light on this table: −1 to hit if on it or shot through it.",
     more:"Ruins are Dense. In a full game Dense also tightens visibility more strictly. Here it matches Light for Cover. Lock ruins after you like the layout."
+  }
+};
+
+/* Phase optional actions. placeholder:true = tip only (building block for later). */
+const ACTIONS = {
+  battleShock: {
+    id:"battleShock", phase:"command", label:"Battle-shock", announce:true, roll:"2d6",
+    short:"Damaged models test 2D6 vs Leadership. Fail = Battle-shocked this turn.",
+    more:"Select a damaged model (wounds below starting W), then Announce.\n\nRoll 2D6. If the result is less than Leadership, the test fails — token marked BS. Clears at the start of this seat’s next Command."
+  },
+  cp: {
+    id:"cp", phase:"command", label:"Command points", announce:false, placeholder:true,
+    short:"CP pool is tracked. +1 at the start of your Command. Spending comes later.",
+    more:"Building block: each seat has a CP total. Stratagems will spend from this pool — nothing spends CP in this slice."
+  },
+  stratagem: {
+    id:"stratagem", phase:"command", label:"Stratagems", announce:false, placeholder:true,
+    short:"Not playable yet. The hook is Command points + this button.",
+    more:"Later: pick a Stratagem, pay CP, apply a flag or modifier. Core loop first: Advance / Fall Back / Charge / Battle-shock."
+  },
+  advance: {
+    id:"advance", phase:"movement", label:"Advance", announce:true, roll:"d6",
+    short:"Declare instead of a Normal Move. Roll D6; move up to M+that. Usually cannot shoot or charge.",
+    more:"Select your model, Announce Advance, then drag (gold ring = M + D6 from the base edge).\n\nApplies to the whole group (green links). Don’t mix with a Normal Move already made this turn."
+  },
+  fallBack: {
+    id:"fallBack", phase:"movement", label:"Fall Back", announce:true,
+    short:"Leave Engagement Range. Usually cannot shoot or charge this turn.",
+    more:"If you start in 2″ of an enemy, Announce Fall Back then move out of ER. Applies to the whole group."
+  },
+  remain: {
+    id:"remain", phase:"movement", label:"Remain Stationary", announce:true,
+    short:"Choose not to move. Some weapons later care that you remained stationary.",
+    more:"Announce Remain Stationary instead of dragging. If you move after, you’ll get a warning."
+  },
+  shootInfo: {
+    id:"shootInfo", phase:"shooting", label:"Eligibility", announce:false,
+    short:"Check the selected model: Advanced / Fell Back / already shot / in ER.",
+    more:"Normal shooting needs: not Advanced, not Fell Back, not already shot, target in range and not in 2″ ER.\n\nAttack soft-gates these. Blocked LoS is still honor-system."
+  },
+  allocation: {
+    id:"allocation", phase:"shooting", label:"Allocation", announce:false, placeholder:true,
+    short:"Who takes the hits — not automated yet. Pick the model that should be wounded.",
+    more:"Full rules assign attacks to the closest / legal model. This table: you choose attacker and target tokens by hand."
+  },
+  overwatch: {
+    id:"overwatch", phase:"charge", label:"Overwatch", announce:false, placeholder:true,
+    short:"Shoot at a charging unit — not playable yet. Will spend CP / a Stratagem later.",
+    more:"Building block: when a charge is announced, the target may Overwatch. Needs CP/Stratagem + shooting on charge declaration."
+  },
+  pileIn: {
+    id:"pileIn", phase:"fight", label:"Pile-in", announce:true,
+    short:"Honor-system 3″ move closer to enemies in Engagement Range.",
+    more:"Announce Pile-in, then nudge models up to 3″ toward the closest enemy, staying in coherency if it’s a group."
+  },
+  consolidate: {
+    id:"consolidate", phase:"fight", label:"Consolidate", announce:true,
+    short:"Honor-system 3″ move after fighting, usually toward enemies or onto objectives.",
+    more:"Announce Consolidate after the unit has fought, then nudge up to 3″."
+  },
+  fightsFirst: {
+    id:"fightsFirst", phase:"fight", label:"Fights First", announce:false, placeholder:true,
+    short:"Chargers and some units fight before others — order is not automated yet.",
+    more:"Full sequence: Fights First (including units that charged) → remaining units, alternating. Practice order by hand for now."
   }
 };
 
@@ -435,17 +511,17 @@ const PRESETS = {
 };
 const DROPS = {
   inf: {
-    name:"Infantry", keywords:["INFANTRY"], M:6, T:4, Sv:3, Inv:0, W:2, baseMm:32,
+    name:"Infantry", keywords:["INFANTRY"], M:6, T:4, Sv:3, Inv:0, W:2, Ld:6, baseMm:32,
     ranged:{ name:"Rifle", A:2, skill:3, S:4, AP:0, D:1, rng:24 },
     melee:{ name:"Blade", A:3, skill:3, S:4, AP:0, D:1 }
   },
   cmd: {
-    name:"Commander", keywords:["INFANTRY","CHARACTER"], M:6, T:4, Sv:3, Inv:4, W:5, baseMm:40,
+    name:"Commander", keywords:["INFANTRY","CHARACTER"], M:6, T:4, Sv:3, Inv:4, W:5, Ld:7, baseMm:40,
     ranged:{ name:"Pistol", A:1, skill:2, S:4, AP:-1, D:1, rng:12 },
     melee:{ name:"Power blade", A:5, skill:2, S:5, AP:-2, D:2 }
   },
   wlk: {
-    name:"Walker", keywords:["VEHICLE","WALKER"], M:8, T:10, Sv:3, Inv:0, W:7, baseMm:80,
+    name:"Walker", keywords:["VEHICLE","WALKER"], M:8, T:10, Sv:3, Inv:0, W:7, Ld:7, baseMm:80,
     ranged:{ name:"Cannon", A:3, skill:3, S:8, AP:-1, D:2, rng:36 },
     melee:{ name:"Fist", A:4, skill:3, S:8, AP:-2, D:2 }
   }
@@ -463,6 +539,7 @@ let selected = null;
 let attackerId = null, targetId = null;
 /* Charge phase: 2D6 per model in the same phase. Ring = base edge + that unit’s total. */
 let chargeRolls = {}; // unitId -> { d1, d2, total }
+let selectedAction = null;
 let nid = 1, uidn = 1;
 let tape = null;
 let matchWs = null, pushTimer = null, pushWanted = false;
@@ -486,6 +563,7 @@ function emptyBoard(){
     terrain:[], units:[],
     zones:[{seat:0, depthIn:ZONE},{seat:1, depthIn:ZONE}],
     turn:{ battleRound:1, activeSeat:0, phase:"command", deploymentDone:false },
+    cp:{ "0":1, "1":0 },
     log:[], players:{ "0": practice ? who : "", "1": "" }
   };
 }
@@ -496,8 +574,12 @@ if (practice){
 if (!S.units) S.units = [];
 if (!S.log) S.log = [];
 if (!S.turn) S.turn = { battleRound:1, activeSeat:0, phase:"command", deploymentDone:false };
+if (!S.cp) S.cp = { "0":1, "1":0 };
 (S.terrain||[]).forEach(t => { const n=+String(t.id).slice(2); if(n>=nid) nid=n+1; });
-(S.units||[]).forEach(u => { const n=+String(u.id).slice(2); if(n>=uidn) uidn=n+1; });
+(S.units||[]).forEach(u => {
+  const n=+String(u.id).slice(2); if(n>=uidn) uidn=n+1;
+  ensureFlags(u);
+});
 
 function setWho(){
   const mode = practice ? "Practice" : ("Match " + (matchId||"").slice(0,8));
@@ -563,13 +645,20 @@ function rollCharge(){
     document.getElementById("dice").textContent = "Select an active-player model first, then Roll charge.";
     return;
   }
+  const g = chargeGate(u);
+  if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
+  if (inEngagement(u)){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
   const d1 = d6(), d2 = d6(), total = d1 + d2;
   chargeRolls[u.id] = { d1, d2, total };
+  const f = flagsOf(u);
+  f.charged = true;
+  f.chargeInches = total;
   logLine(u.name + " charge roll " + d1 + "+" + d2 + " = " + total + "″");
   document.getElementById("dice").textContent = "Charge [" + d1 + "] [" + d2 + "] = " + total + "″ from base edge";
   updateChargeRow();
   draw();
   refreshTip();
+  renderActions();
 }
 function terrainEditable(){
   return !(S.turn && S.turn.deploymentDone);
@@ -582,6 +671,181 @@ function canControlUnit(u){
   if (u.seat !== S.turn.activeSeat) return false;
   if (!practice && u.seat !== mySeat) return false;
   return true;
+}
+function defaultFlags(){
+  return {
+    battleShock:false, advanced:false, fellBack:false, remainedStationary:false,
+    moved:false, shot:false, charged:false, fought:false,
+    advanceInches:0, chargeInches:0, fightsFirst:false
+  };
+}
+function ensureFlags(u){
+  if (!u) return;
+  if (!u.flags) u.flags = defaultFlags();
+  const d = defaultFlags();
+  for (const k of Object.keys(d)) if (u.flags[k] === undefined) u.flags[k] = d[k];
+  if (u.Ld == null) u.Ld = 6;
+}
+function flagsOf(u){ ensureFlags(u); return u.flags; }
+function unitGroup(u){
+  if (!u) return [];
+  if (u.groupId) return S.units.filter(x => x.groupId === u.groupId);
+  return [u];
+}
+function selectedUnit(){
+  if (!selected || selected.kind !== "u") return null;
+  return S.units.find(x => x.id === selected.id) || null;
+}
+function beginSeatTurn(seat){
+  if (!S.cp) S.cp = { "0":0, "1":0 };
+  S.cp[seat] = (S.cp[seat]||0) + 1;
+  S.units.forEach(u => {
+    if (u.seat !== seat) return;
+    const f = flagsOf(u);
+    f.battleShock = false;
+    f.advanced = false; f.fellBack = false; f.remainedStationary = false;
+    f.moved = false; f.shot = false; f.charged = false; f.fought = false;
+    f.advanceInches = 0; f.chargeInches = 0;
+  });
+}
+function inEngagement(u){
+  return S.units.some(o => o.seat !== u.seat && edgeDist(u,o) <= 2.01);
+}
+function overlapsEnemy(u){
+  return S.units.some(o => o.id !== u.id && o.seat !== u.seat && edgeDist(u,o) <= 0.05);
+}
+function showWarn(html){
+  const bar = document.getElementById("warnbar");
+  const text = document.getElementById("warnText");
+  if (!bar || !text) return;
+  text.innerHTML = html;
+  bar.classList.add("on");
+}
+function hideWarn(){
+  const bar = document.getElementById("warnbar");
+  if (bar) bar.classList.remove("on");
+}
+function renderActions(){
+  const box = document.getElementById("actBtns");
+  const kicker = document.getElementById("actKicker");
+  const hint = document.getElementById("actHint");
+  const ann = document.getElementById("btnAnnounce");
+  if (!box) return;
+  const phase = S.turn.phase;
+  const list = Object.values(ACTIONS).filter(a => a.phase === phase);
+  if (kicker) kicker.textContent = "Optional · "+phase;
+  box.innerHTML = "";
+  list.forEach(a => {
+    const b = document.createElement("button");
+    b.className = "btn sm" + (a.placeholder ? " placeholder" : "") + (selectedAction===a.id ? " on" : "");
+    b.textContent = a.label;
+    b.title = a.short;
+    b.onclick = () => pickAction(a.id);
+    box.appendChild(b);
+  });
+  const act = selectedAction && ACTIONS[selectedAction];
+  if (act && act.phase === phase && act.announce && !act.placeholder){
+    ann.style.display = "";
+    ann.textContent = act.roll ? ("Announce "+act.label+" ("+act.roll+")") : ("Announce "+act.label);
+  } else {
+    ann.style.display = "none";
+  }
+  const u = selectedUnit();
+  const cp = (S.cp && S.cp[S.turn.activeSeat]) || 0;
+  if (!hint) return;
+  if (phase === "command") hint.textContent = "P"+S.turn.activeSeat+" CP: "+cp+(u ? " · "+u.name : "");
+  else if (u){
+    const f = flagsOf(u);
+    const bits = [];
+    if (f.advanced) bits.push("Adv+"+f.advanceInches+"″");
+    if (f.fellBack) bits.push("FB");
+    if (f.remainedStationary) bits.push("Remain");
+    if (f.moved) bits.push("Moved");
+    if (f.charged || chargeFor(u.id)) bits.push("Chg "+(f.chargeInches || (chargeFor(u.id)||{}).total || "")+"″");
+    if (f.shot) bits.push("Shot");
+    if (f.fought) bits.push("Fought");
+    if (f.battleShock) bits.push("Shocked");
+    hint.textContent = u.name + (bits.length ? " · "+bits.join(" · ") : " · no flags yet");
+  } else hint.textContent = "Select a model, tap an action for rules (More), then Announce if it is a declare.";
+}
+function pickAction(id){
+  const a = ACTIONS[id];
+  if (!a) return;
+  selectedAction = id;
+  showTip({ title:a.label, short:a.short, more:a.more });
+  renderActions();
+}
+function announceAction(){
+  const a = selectedAction && ACTIONS[selectedAction];
+  if (!a || !a.announce || a.placeholder) return;
+  if (a.phase !== S.turn.phase){
+    document.getElementById("dice").textContent = "That action is for the "+a.phase+" phase.";
+    return;
+  }
+  const u = selectedUnit();
+  if (!u){
+    document.getElementById("dice").textContent = "Select a model first, then Announce.";
+    return;
+  }
+  if (!canControlUnit(u)){
+    document.getElementById("dice").textContent = "Active player is P"+S.turn.activeSeat+" — pick their model.";
+    return;
+  }
+  const group = unitGroup(u);
+  const f0 = flagsOf(u);
+  if (a.id === "advance"){
+    if (f0.moved && !f0.advanced){ showWarn("<strong>Advance:</strong> already made a Normal Move — declare Advance instead of moving first."); return; }
+    if (f0.fellBack){ showWarn("<strong>Advance:</strong> this unit already Fell Back."); return; }
+    const d = d6();
+    group.forEach(m => { const f=flagsOf(m); f.advanced=true; f.advanceInches=d; f.moved=true; f.remainedStationary=false; });
+    logLine(u.name+(group.length>1?" unit":"")+" Advances "+d+"″ (M+"+d+" = "+((u.M||6)+d)+"″)");
+    document.getElementById("dice").textContent = "Advance [ "+d+" ] → move up to "+((u.M||6)+d)+"″ from base edge";
+  } else if (a.id === "fallBack"){
+    if (!inEngagement(u) && !group.some(inEngagement)){
+      showWarn("<strong>Fall Back:</strong> this model is not in 2″ Engagement Range.");
+      return;
+    }
+    group.forEach(m => { const f=flagsOf(m); f.fellBack=true; f.moved=true; f.advanced=false; });
+    logLine(u.name+(group.length>1?" unit":"")+" Falls Back");
+    document.getElementById("dice").textContent = "Fell Back — leave ER; usually cannot shoot or charge.";
+  } else if (a.id === "remain"){
+    group.forEach(m => { const f=flagsOf(m); f.remainedStationary=true; f.moved=true; });
+    logLine(u.name+" Remains Stationary");
+    document.getElementById("dice").textContent = "Remained Stationary.";
+  } else if (a.id === "battleShock"){
+    if ((u.wounds??u.W) >= u.W){
+      showWarn("<strong>Battle-shock:</strong> this model is undamaged — tests are for damaged units.");
+      return;
+    }
+    const d1=d6(), d2=d6(), tot=d1+d2, ld=u.Ld||6;
+    const fail = tot < ld;
+    flagsOf(u).battleShock = fail;
+    logLine(u.name+" Battle-shock "+d1+"+"+d2+"="+tot+" vs Ld "+ld+" → "+(fail?"FAILED":"passed"));
+    document.getElementById("dice").textContent = "Battle-shock ["+d1+"] ["+d2+"] = "+tot+" vs Ld "+ld+" — "+(fail?"failed":"passed");
+    if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed (2D6 &lt; Ld). Flagged this turn.");
+    else hideWarn();
+  } else if (a.id === "pileIn"){
+    logLine(u.name+" Pile-in (honor 3″ toward nearest enemy)");
+    document.getElementById("dice").textContent = "Pile-in declared — nudge up to 3″, stay in ER/coherency.";
+  } else if (a.id === "consolidate"){
+    flagsOf(u).fought = true;
+    logLine(u.name+" Consolidate (honor 3″)");
+    document.getElementById("dice").textContent = "Consolidate declared — nudge up to 3″.";
+  }
+  save(); draw(); refreshTip(); renderActions();
+}
+function shootGate(atk){
+  const f = flagsOf(atk);
+  if (f.advanced) return "This unit Advanced — it usually cannot shoot (soft-gate).";
+  if (f.fellBack) return "This unit Fell Back — it usually cannot shoot.";
+  if (f.shot) return "This model already shot this phase.";
+  return null;
+}
+function chargeGate(atk){
+  const f = flagsOf(atk);
+  if (f.advanced) return "This unit Advanced — it cannot charge.";
+  if (f.fellBack) return "This unit Fell Back — it cannot charge.";
+  return null;
 }
 function lockAllTerrain(reason){
   let n = 0;
@@ -622,9 +886,10 @@ function updateTerrainTools(){
 function setPhase(p){
   beginBattleIfNeeded(p);
   S.turn.phase = p;
+  selectedAction = null;
   clearCombatPair();
   logLine("Phase → " + p);
-  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools();
+  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
 }
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
@@ -632,12 +897,14 @@ document.getElementById("btnNext").onclick = () => {
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
     beginBattleIfNeeded("command");
-    S.turn.phase = "command";
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
     else { S.turn.activeSeat = 0; S.turn.battleRound++; }
+    beginSeatTurn(S.turn.activeSeat);
+    S.turn.phase = "command";
+    selectedAction = null;
     clearCombatPair();
-    logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat);
-    save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools();
+    logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat + " · CP "+((S.cp&&S.cp[S.turn.activeSeat])||0));
+    save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
   }
 };
 
@@ -717,6 +984,11 @@ function showTip(pack){
   document.getElementById("btnTipMore").textContent = tipMore ? "Less" : "More";
 }
 function refreshTip(){
+  if (selectedAction && ACTIONS[selectedAction]){
+    const a = ACTIONS[selectedAction];
+    showTip({ title:a.label, short:a.short, more:a.more });
+    return;
+  }
   const k = tipKey();
   if (k==="unitSel"){
     const u = S.units.find(x=>x.id===selected.id);
@@ -1041,8 +1313,10 @@ function draw(){
     } else if (phase === "fight"){
       drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443caa", 1.8);
     } else {
-      /* Movement: same base-edge convention as gun / ER / charge */
-      drawRing(ringAt.x, ringAt.y, rangeReach(selU, selU.M||6), "#c39a4e66", 1.5);
+      /* Movement: Advance expands the gold ring by the D6 */
+      const fMove = flagsOf(selU);
+      const moveIn = fMove.advanced ? ((selU.M||6)+fMove.advanceInches) : (selU.M||6);
+      drawRing(ringAt.x, ringAt.y, rangeReach(selU, moveIn), "#c39a4e66", 1.5);
       drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443c88", 1);
     }
     if (phase === "movement" && moveOrigin && moveOrigin.id === selU.id){
@@ -1176,6 +1450,7 @@ function selectObj(kind, obj){
   }
   refreshTip();
   updateChargeRow();
+  renderActions();
 }
 
 function addPreset(kind){
@@ -1201,9 +1476,9 @@ function dropUnit(key, seat, x, y, groupId){
   const d = DROPS[key];
   const u = {
     id:"u_"+(uidn++), seat, name:d.name, keywords:d.keywords.slice(),
-    M:d.M, T:d.T, Sv:d.Sv, Inv:d.Inv||0, W:d.W, wounds:d.W, baseMm:d.baseMm,
+    M:d.M, T:d.T, Sv:d.Sv, Inv:d.Inv||0, W:d.W, wounds:d.W, Ld:d.Ld||6, baseMm:d.baseMm,
     ranged: Object.assign({}, d.ranged), melee: Object.assign({}, d.melee),
-    x, y, rot:0, groupId: groupId||null, flags:{ battleShock:false }
+    x, y, rot:0, groupId: groupId||null, flags: defaultFlags()
   };
   S.units.push(u); return u;
 }
@@ -1266,7 +1541,8 @@ document.getElementById("btnClearU").onclick = () => { S.units=[]; attackerId=ta
 document.getElementById("btnDemo").onclick = demoForces;
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
 document.getElementById("btnChargeRoll").onclick = rollCharge;
-document.getElementById("btnWarnClose").onclick = hideCoherencyWarn;
+document.getElementById("btnAnnounce").onclick = announceAction;
+document.getElementById("btnWarnClose").onclick = () => { hideCoherencyWarn(); hideWarn(); };
 document.getElementById("btnRotL").onclick = () => rotSel(-15);
 document.getElementById("btnRotR").onclick = () => rotSel(15);
 document.getElementById("btnLock").onclick = () => {
@@ -1366,6 +1642,14 @@ function resolveAttack(){
     document.getElementById("dice").textContent = "Target must be the enemy (not P"+S.turn.activeSeat+").";
     return;
   }
+  if (S.turn.phase === "shooting"){
+    const g = shootGate(atk);
+    if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Shooting:</strong> "+g); return; }
+  }
+  if (S.turn.phase === "charge"){
+    const g = chargeGate(atk);
+    if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
+  }
   const pw = pickWeapon(atk, tgt);
   const w = pw.w;
   if (pw.kind === "ranged"){
@@ -1456,10 +1740,12 @@ function resolveAttack(){
     targetId = null;
   } else line += " ("+tgt.wounds+"/"+tgt.W+" left)";
   logLine(line);
+  if (S.turn.phase === "shooting") flagsOf(atk).shot = true;
+  if (S.turn.phase === "fight") flagsOf(atk).fought = true;
   document.getElementById("dice").textContent =
     "Hits ["+hits.join(" ")+"]  Wounds ["+wounds.join(" ")+"]  Saves ["+saves.join(" ")+"]";
   renderRollPanel();
-  save(); draw(); refreshTip();
+  save(); draw(); refreshTip(); renderActions();
 }
 document.getElementById("btnResolve").onclick = resolveAttack;
 document.getElementById("btnClearAtk").onclick = () => { attackerId=targetId=null; document.getElementById("dice").textContent=""; draw(); refreshTip(); };
@@ -1589,8 +1875,19 @@ function endPtr(e){
       if (u){
         const from = moveOrigin;
         const dist = from ? Math.hypot(u.x-from.x, u.y-from.y) : 0;
+        const f = flagsOf(u);
+        if (f.remainedStationary){
+          showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
+        } else {
+          f.moved = true;
+        }
         logLine("Moved "+u.name+(from ? " "+dist.toFixed(1)+"\"" : ""));
+        if (overlapsEnemy(u)){
+          showWarn("<strong>Overlap:</strong> bases cannot end on an enemy. Nudge "+u.name+" off.");
+          logLine("Overlap warn: "+u.name+" on an enemy base");
+        }
         checkUnitCoherency(u, true);
+        renderActions();
       }
     }
     save();
@@ -1661,7 +1958,7 @@ function startSync(){
 
 guideOn = !!practice; // practice on, PVP off; user may toggle either way
 rollsOn = !!practice;
-renderLog(); renderPhases(); refreshTip(); refreshGuide(); setRolls(rollsOn); updateTerrainTools(); updateChargeRow(); resize();
+renderLog(); renderPhases(); refreshTip(); refreshGuide(); setRolls(rollsOn); updateTerrainTools(); updateChargeRow(); renderActions(); resize();
 if (!practice) startSync();
 </script>
 </body>
