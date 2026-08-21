@@ -56,21 +56,23 @@ button:not(:disabled){cursor:pointer;}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;}
 canvas.dragging{cursor:grabbing;}
 .dock{position:fixed;left:62px;right:62px;bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
-  padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));
+  padding:6px 10px calc(6px + env(safe-area-inset-bottom,0px));
   padding-left:calc(10px + var(--edge-l));padding-right:calc(10px + var(--edge-r));
-  background:linear-gradient(transparent,#0a0f0ef2 28%);pointer-events:none;max-width:calc(100% - 124px);}
+  background:transparent;pointer-events:none;max-width:calc(100% - 124px);}
 .dock .row{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
 .selbar,.combat{display:none;align-items:center;gap:8px;flex-wrap:wrap;
   background:#1b2825f0;border:1px solid var(--brass-dim);border-radius:10px;padding:8px 10px;pointer-events:auto;}
 .selbar.on,.combat.on{display:flex;}
 .selbar .name,.combat .name{font-family:Fraunces,serif;font-weight:600;font-size:14px;}
 .selbar .meta,.combat .meta{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--parchment-dim);}
-.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:1.2em;pointer-events:none;}
-.log{max-height:56px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.35;pointer-events:none;
-  margin-bottom:4px;}
+.dice{font-variant-numeric:tabular-nums;font-size:12px;color:var(--parchment);min-height:1.2em;pointer-events:none;
+  text-shadow:0 1px 2px #000a;}
+.log{max-height:52px;overflow:hidden;font-size:11px;color:var(--parchment-dim);line-height:1.35;pointer-events:none;
+  margin-bottom:2px;text-shadow:0 1px 2px #000c;}
 .combat{margin-top:2px;}
 .hint{font-size:11px;color:var(--parchment-dim);}
-.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);pointer-events:none;}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);pointer-events:none;
+  text-shadow:0 1px 2px #000a;}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
 .tips{position:fixed;top:40px;right:calc(70px + var(--edge-r));z-index:5;width:min(280px,32vw);
   background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
@@ -238,7 +240,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.6-side-rails";
+const BUILD = "v2.8.7-fit-view";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -739,9 +741,18 @@ function toWorld(sx, sy){
   return flipPt(x, y);
 }
 function fit(){
-  const pad = 36;
-  cam.scale = Math.min((canvas.clientWidth-pad*2)/W, (canvas.clientHeight-pad*2-130)/H);
-  cam.x = W/2; cam.y = H/2;
+  /* Use the open map well between side rails; pin the board’s top edge
+     under the thin status bar (not dead-centered with huge empty margins). */
+  const rail = window.matchMedia("(max-width:900px)").matches ? 56 : 62;
+  const topUI = 36;
+  const botUI = 88;
+  const sidePad = 10;
+  const availW = Math.max(120, canvas.clientWidth - rail * 2 - sidePad * 2);
+  const availH = Math.max(120, canvas.clientHeight - topUI - botUI);
+  cam.scale = Math.min(availW / W, availH / H);
+  cam.x = W / 2;
+  const topPad = topUI + 6;
+  cam.y = H + (topPad - canvas.clientHeight / 2) / cam.scale;
 }
 function resize(){
   const dpr = Math.min(window.devicePixelRatio||1, 2);
