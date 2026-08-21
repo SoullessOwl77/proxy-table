@@ -245,7 +245,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.8-log-chip";
+const BUILD = "v2.8.9-own-units-pan";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -358,14 +358,14 @@ const GUIDE = {
   movement: {
     title: "Movement phase",
     do: [
-      "Select a model (Units tool). Gold ring = its Move (M″).",
+      "Select a model belonging to the active player (P#). Gold ring = its Move (M″).",
       "Drag it up to about that distance. Stay in your half early on if learning.",
       "Keep same-color models near each other (coherency reminder lines)."
     ],
     dont: [
+      "Don’t move the other seat’s models — only the active player’s force moves.",
       "Don’t end on top of an enemy model.",
-      "Don’t move through the whole table in one go — honor the M″ ring.",
-      "Don’t start shooting; that is the Shooting phase."
+      "Don’t move through the whole table in one go — honor the M″ ring."
     ],
     next: "When every model you wanted to move has moved (or stayed), Next → Shooting."
   },
@@ -516,6 +516,15 @@ function clearCombatPair(){
 }
 function terrainEditable(){
   return !(S.turn && S.turn.deploymentDone);
+}
+/* Normal 40K: only the active player moves their own models.
+   Practice: activeSeat rotates so you still play both sides, one at a time.
+   PVP: also require the unit to be on your claimed seat. */
+function canControlUnit(u){
+  if (!u) return false;
+  if (u.seat !== S.turn.activeSeat) return false;
+  if (!practice && u.seat !== mySeat) return false;
+  return true;
 }
 function lockAllTerrain(reason){
   let n = 0;
@@ -1330,15 +1339,28 @@ canvas.addEventListener("pointerdown", e => {
   const hu = hitUnit(wpt.x,wpt.y);
   if (hu){
     selectObj("u", hu);
-    mode="move";
-    drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
-    moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
+    if (canControlUnit(hu)){
+      mode="move";
+      drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+      moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
+    } else {
+      /* Enemy / inactive seat — inspect only; drag pans the map */
+      mode="pan";
+      drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
+      moveOrigin = null;
+    }
   } else {
     const ht = hitTerrain(wpt.x,wpt.y);
     if (ht){
       selectObj("t", ht);
-      if (terrainEditable() && !ht.locked){ mode="move"; drag={kind:"t",id:ht.id,ox:wpt.x-ht.x,oy:wpt.y-ht.y}; }
-      else mode="pan";
+      if (terrainEditable() && !ht.locked){
+        mode="move";
+        drag={kind:"t",id:ht.id,ox:wpt.x-ht.x,oy:wpt.y-ht.y};
+      } else {
+        /* Locked terrain is scenery — pan the camera, don’t fight the piece */
+        mode="pan";
+        drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
+      }
     } else {
       selectObj(null); mode="pan";
       drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
@@ -1366,7 +1388,7 @@ canvas.addEventListener("pointermove", e => {
       t.x=Math.max(t.w/2,Math.min(W-t.w/2,wpt.x-drag.ox));
       t.y=Math.max(t.h/2,Math.min(H-t.h/2,wpt.y-drag.oy));
     } else {
-      const u=S.units.find(x=>x.id===drag.id); if(!u) return;
+      const u=S.units.find(x=>x.id===drag.id); if(!u || !canControlUnit(u)) return;
       const r=unitR(u);
       u.x=Math.max(r,Math.min(W-r,wpt.x-drag.ox));
       u.y=Math.max(r,Math.min(H-r,wpt.y-drag.oy));
