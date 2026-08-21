@@ -272,7 +272,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.10.1-dock-stack";
+const BUILD = "v2.10.2-phase-tools";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -883,12 +883,25 @@ function updateTerrainTools(){
     if (del) del.style.display = "none";
   }
 }
+function phaseDefaultTool(){
+  const p = S.turn && S.turn.phase;
+  if (p === "shooting" || p === "fight") return "combat";
+  return "unit";
+}
+/* Soft default only — user can still pick any tool. Measure always clears on phase change. */
+function applyPhaseTool(prevPhase){
+  const p = S.turn && S.turn.phase;
+  if (p === "shooting" || p === "fight") setTool("combat");
+  else if (tool === "measure" || prevPhase === "shooting" || prevPhase === "fight") setTool("unit");
+}
 function setPhase(p){
+  const prev = S.turn.phase;
   beginBattleIfNeeded(p);
   S.turn.phase = p;
   selectedAction = null;
   clearCombatPair();
   logLine("Phase → " + p);
+  applyPhaseTool(prev);
   save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
 }
 document.getElementById("btnNext").onclick = () => {
@@ -896,6 +909,7 @@ document.getElementById("btnNext").onclick = () => {
   const i = PHASES.indexOf(S.turn.phase);
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
+    const prev = S.turn.phase;
     beginBattleIfNeeded("command");
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
     else { S.turn.activeSeat = 0; S.turn.battleRound++; }
@@ -904,6 +918,7 @@ document.getElementById("btnNext").onclick = () => {
     selectedAction = null;
     clearCombatPair();
     logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat + " · CP "+((S.cp&&S.cp[S.turn.activeSeat])||0));
+    applyPhaseTool(prev);
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
   }
 };
@@ -1567,7 +1582,10 @@ document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => addPre
 document.querySelectorAll("[data-drop]").forEach(b => b.onclick = () => addDrop(b.dataset.drop));
 document.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => setTool(b.dataset.tool));
 function setTool(t){
-  tool=t;
+  /* Measure is a temporary toggle: tap again to turn it off. */
+  if (t === "measure" && tool === "measure") t = phaseDefaultTool();
+  if (tool === "measure" && t !== "measure") tape = null;
+  tool = t;
   document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("on", b.dataset.tool===t));
   document.getElementById("rowTerrain").style.display = t==="terrain"?"":"none";
   document.getElementById("rowUnits").style.display = t==="unit"?"":"none";
@@ -1577,6 +1595,7 @@ function setTool(t){
   else document.getElementById("selbar").classList.remove("on");
   renderCombatBar();
   refreshTip();
+  draw();
 }
 function rotSel(d){
   if (!selected) return;
@@ -1793,8 +1812,9 @@ canvas.addEventListener("pointerdown", e => {
       }
       selectObj("u", hu);
       renderCombatBar();
+      draw(); return;
     }
-    draw(); return;
+    /* Empty / terrain under Combat — fall through so the map still pans. */
   }
   if (selected && selected.kind==="t" && terrainEditable()){
     const t=S.terrain.find(x=>x.id===selected.id);
