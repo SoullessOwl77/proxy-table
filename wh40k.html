@@ -245,7 +245,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.8.9-own-units-pan";
+const BUILD = "v2.9.0-phase-rings";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -372,9 +372,9 @@ const GUIDE = {
   shooting: {
     title: "Shooting phase",
     do: [
-      "Switch to Combat. Tap a model belonging to the active player (P# in the bar), then an enemy.",
-      "Check the bar: weapon, range, and Cover. Attack to roll Hit → Wound → Save → Damage.",
-      "Use terrain: targets on or behind Light/Dense get −1 to be hit."
+      "Select a model — blue ring is its gun range; red is 2″ ER (don’t shoot into that).",
+      "Combat tool: tap active-player model, then an enemy inside the blue ring.",
+      "Check Cover on the bar. Attack → Hit → Wound → Save → Damage."
     ],
     dont: [
       "Don’t shoot with the other seat’s models — only the active player attacks.",
@@ -386,12 +386,12 @@ const GUIDE = {
   charge: {
     title: "Charge phase",
     do: [
-      "Pick models that still need to reach combat (usually those that did not Advance).",
-      "Measure the gap to an enemy. In a real game you roll 2D6; here, move into 2″ if you could make that distance.",
-      "End in Engagement Range (red 2″ ring) of the target if the charge succeeds."
+      "Select a model — gold ring is the 12″ max charge; red is 2″ ER you must reach.",
+      "In a real game you roll 2D6 vs the gap; here, move into the red ring if that roll could make it.",
+      "Only charge with models that still need to reach combat (usually those that did not Advance)."
     ],
     dont: [
-      "Don’t charge from more than 12″ away (max charge distance).",
+      "Don’t charge from outside the 12″ ring.",
       "Don’t resolve fights yet — that is the Fight phase.",
       "Don’t leave charged models stranded mid-table with no plan."
     ],
@@ -400,8 +400,8 @@ const GUIDE = {
   fight: {
     title: "Fight phase",
     do: [
-      "Combat tool: tap an active-player model in 2″ of an enemy, then the enemy, then Attack.",
-      "Fight with models that charged or are already in Engagement Range.",
+      "Select a model — red ring is 2″ Engagement Range only.",
+      "Combat tool: tap active-player model in the red ring of an enemy, then the enemy, then Attack.",
       "Watch wounds on the token; destroyed models disappear."
     ],
     dont: [
@@ -615,9 +615,16 @@ function unitTip(u){
     ? ("Invulnerable save "+u.Inv+"+ (ignores AP — use if better than the armour save).")
     : "No invulnerable save.";
   const kw = (u.keywords && u.keywords.length) ? u.keywords.join(", ") : "—";
+  const phase = (S.turn && S.turn.phase) || "command";
+  const rng = (u.ranged && u.ranged.rng) || 24;
+  let ringNote = "Gold ring = Move (M″), red = 2″ Engagement Range.";
+  if (phase === "shooting") ringNote = "Blue ring = gun range ("+rng+"″), red = 2″ ER (no normal shooting into ER).";
+  else if (phase === "charge") ringNote = "Gold ring = max charge (12″); red = 2″ ER you must reach. Actual charge is 2D6 vs distance.";
+  else if (phase === "fight") ringNote = "Red ring = 2″ Engagement Range (melee only).";
+  else if (phase === "movement") ringNote = "Gold ring = Move (M″) from start of drag; red = 2″ ER.";
   return {
     title: u.name,
-    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. Gold ring = Move, red = 2″ ER.",
+    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. "+ringNote,
     more:
       "Move (M): up to "+u.M+"″ this Movement phase.\n"+
       "Toughness (T): "+u.T+" — compared to weapon Strength on the wound roll (equal Strength needs 4+).\n"+
@@ -870,10 +877,23 @@ function draw(){
   S.terrain.forEach(t => drawPiece(t, selected && selected.kind==="t" && selected.id===t.id));
   const selU = selected && selected.kind==="u" ? S.units.find(u=>u.id===selected.id) : null;
   if (selU){
-    const ringAt = (moveOrigin && moveOrigin.id === selU.id) ? moveOrigin : selU;
-    drawRing(ringAt.x, ringAt.y, selU.M||6, "#c39a4e66", 1.5);
-    drawRing(ringAt.x, ringAt.y, 2, "#a8443c88", 1);
-    if (moveOrigin && moveOrigin.id === selU.id){
+    const phase = (S.turn && S.turn.phase) || "command";
+    const ringAt = (phase === "movement" && moveOrigin && moveOrigin.id === selU.id) ? moveOrigin : selU;
+    /* Phase-aware rings — M″ only in Movement */
+    if (phase === "shooting"){
+      const rng = (selU.ranged && selU.ranged.rng) || 24;
+      drawRing(ringAt.x, ringAt.y, rng, "#6b8fbf88", 1.6); // gun range
+      drawRing(ringAt.x, ringAt.y, 2, "#a8443c88", 1);      // ER: no normal shooting
+    } else if (phase === "charge"){
+      drawRing(ringAt.x, ringAt.y, 12, "#c39a4e88", 1.6); // max charge
+      drawRing(ringAt.x, ringAt.y, 2, "#a8443c99", 1.4);  // must reach ER
+    } else if (phase === "fight"){
+      drawRing(ringAt.x, ringAt.y, 2, "#a8443caa", 1.8);  // engagement only
+    } else {
+      drawRing(ringAt.x, ringAt.y, selU.M||6, "#c39a4e66", 1.5);
+      drawRing(ringAt.x, ringAt.y, 2, "#a8443c88", 1);
+    }
+    if (phase === "movement" && moveOrigin && moveOrigin.id === selU.id){
       const a = toScreen(moveOrigin.x, moveOrigin.y), b = toScreen(selU.x, selU.y);
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
       ctx.setLineDash([3,4]); ctx.strokeStyle="#c39a4e88"; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
