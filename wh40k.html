@@ -245,7 +245,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.9.0-phase-rings";
+const BUILD = "v2.9.3-edge-move-ring";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -283,7 +283,7 @@ const TIPS = {
   },
   unit: {
     title:"Units tool",
-    short:"Drop demo forces or single models. Drag to move. Gold ring = M″, red ring = 2″ ER.",
+    short:"Drop demo forces or single models. Drag to move. Gold ring = M″ from base edge; red = 2″ ER.",
     more:"One token is one model. Blue is seat 0, red is seat 1. Green dashed lines are coherency helpers for models that share a group. Coherency is a reminder, not a hard block yet."
   },
   measure: {
@@ -358,14 +358,14 @@ const GUIDE = {
   movement: {
     title: "Movement phase",
     do: [
-      "Select a model belonging to the active player (P#). Gold ring = its Move (M″).",
-      "Drag it up to about that distance. Stay in your half early on if learning.",
+      "Select an active-player model. Gold ring = M″ reach from the base edge (same idea as other rings).",
+      "Drag so the base edge stays on or inside the gold ring when you stop.",
       "Keep same-color models near each other (coherency reminder lines)."
     ],
     dont: [
       "Don’t move the other seat’s models — only the active player’s force moves.",
       "Don’t end on top of an enemy model.",
-      "Don’t move through the whole table in one go — honor the M″ ring."
+      "Don’t ignore the gold ring — full M″ ends with the edge near that circle."
     ],
     next: "When every model you wanted to move has moved (or stayed), Next → Shooting."
   },
@@ -617,16 +617,16 @@ function unitTip(u){
   const kw = (u.keywords && u.keywords.length) ? u.keywords.join(", ") : "—";
   const phase = (S.turn && S.turn.phase) || "command";
   const rng = (u.ranged && u.ranged.rng) || 24;
-  let ringNote = "Gold ring = Move (M″), red = 2″ Engagement Range.";
-  if (phase === "shooting") ringNote = "Blue ring = gun range ("+rng+"″), red = 2″ ER (no normal shooting into ER).";
-  else if (phase === "charge") ringNote = "Gold ring = max charge (12″); red = 2″ ER you must reach. Actual charge is 2D6 vs distance.";
-  else if (phase === "fight") ringNote = "Red ring = 2″ Engagement Range (melee only).";
-  else if (phase === "movement") ringNote = "Gold ring = Move (M″) from start of drag; red = 2″ ER.";
+  let ringNote = "All range rings are from the base edge. Gold = M″ move reach; red = 2″ ER.";
+  if (phase === "shooting") ringNote = "Blue = gun range from base edge; red = 2″ ER (no normal shooting into ER).";
+  else if (phase === "charge") ringNote = "Gold = 12″ max charge from base edge; red = 2″ ER. Real charge is 2D6 vs gap.";
+  else if (phase === "fight") ringNote = "Red = 2″ Engagement Range from base edge (melee only).";
+  else if (phase === "movement") ringNote = "Gold = M″ reach from base edge (don’t let the edge past this ring). Red = 2″ ER from base edge.";
   return {
     title: u.name,
     short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. "+ringNote,
     more:
-      "Move (M): up to "+u.M+"″ this Movement phase.\n"+
+      "Move (M): up to "+u.M+"″. Every ring on this table is measured from the base edge for consistency. Keep the base edge on or inside the gold ring when you finish the move (the center will have traveled about M″).\n"+
       "Toughness (T): "+u.T+" — compared to weapon Strength on the wound roll (equal Strength needs 4+).\n"+
       "Save (Sv): "+u.Sv+"+ armour, made worse by AP (e.g. AP−1 means you need one higher).\n"+
       inv+"\n"+
@@ -799,6 +799,10 @@ function hitTerrain(wx, wy){
   return null;
 }
 function unitR(u){ return (u.baseMm||32)/25.4/2; }
+/* Ranges in 40K are base-edge to base-edge. Rings are drawn from the
+   token center, so add the model’s own base radius to match the tape. */
+function erReach(u){ return unitR(u) + 2; }
+function rangeReach(u, inches){ return unitR(u) + (inches || 0); }
 function hitUnit(wx, wy){
   let best = null, bestD = 1e9;
   for (const u of S.units){
@@ -879,19 +883,21 @@ function draw(){
   if (selU){
     const phase = (S.turn && S.turn.phase) || "command";
     const ringAt = (phase === "movement" && moveOrigin && moveOrigin.id === selU.id) ? moveOrigin : selU;
-    /* Phase-aware rings — M″ only in Movement */
+    /* Phase-aware rings. ER / gun / charge are base-edge measures →
+       radius = base radius + inches so the ring matches the measure tape. */
     if (phase === "shooting"){
       const rng = (selU.ranged && selU.ranged.rng) || 24;
-      drawRing(ringAt.x, ringAt.y, rng, "#6b8fbf88", 1.6); // gun range
-      drawRing(ringAt.x, ringAt.y, 2, "#a8443c88", 1);      // ER: no normal shooting
+      drawRing(ringAt.x, ringAt.y, rangeReach(selU, rng), "#6b8fbf88", 1.6);
+      drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443c88", 1);
     } else if (phase === "charge"){
-      drawRing(ringAt.x, ringAt.y, 12, "#c39a4e88", 1.6); // max charge
-      drawRing(ringAt.x, ringAt.y, 2, "#a8443c99", 1.4);  // must reach ER
+      drawRing(ringAt.x, ringAt.y, rangeReach(selU, 12), "#c39a4e88", 1.6);
+      drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443c99", 1.4);
     } else if (phase === "fight"){
-      drawRing(ringAt.x, ringAt.y, 2, "#a8443caa", 1.8);  // engagement only
+      drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443caa", 1.8);
     } else {
-      drawRing(ringAt.x, ringAt.y, selU.M||6, "#c39a4e66", 1.5);
-      drawRing(ringAt.x, ringAt.y, 2, "#a8443c88", 1);
+      /* Movement: same base-edge convention as gun / ER / charge */
+      drawRing(ringAt.x, ringAt.y, rangeReach(selU, selU.M||6), "#c39a4e66", 1.5);
+      drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443c88", 1);
     }
     if (phase === "movement" && moveOrigin && moveOrigin.id === selU.id){
       const a = toScreen(moveOrigin.x, moveOrigin.y), b = toScreen(selU.x, selU.y);
