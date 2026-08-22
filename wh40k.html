@@ -158,6 +158,7 @@ canvas.dragging{cursor:grabbing;}
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
   <button class="btn sm danger" id="btnReset" title="Clear the practice table and start over" style="display:none">Reset</button>
+  <button class="btn sm" id="btnSetup" title="Return to setup — place terrain and units. Battle phases do not come back here.">Setup</button>
   <div class="rail-label">Tools</div>
   <button class="btn sm on" data-tool="terrain">Terrain</button>
   <button class="btn sm" data-tool="unit">Units</button>
@@ -251,6 +252,14 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn" data-drop="cmd">Commander</button>
     <button class="btn" data-drop="wlk">Walker</button>
     <button class="btn ghost" id="btnClearU">Clear units</button>
+    <button class="btn" id="btnReserve">Reserves</button>
+    <button class="btn" id="btnDeepStrike">Deep Strike</button>
+    <span class="hint" id="reserveSetupHint">Reserves = off the table until Ingress in Movement.</span>
+  </div>
+  <div class="row" id="rowReserves" style="display:none">
+    <span class="act-kicker">Reserves</span>
+    <div id="reserveBtns"></div>
+    <span class="hint" id="reserveLiveHint"></span>
   </div>
   <div class="row" id="rowMeasure" style="display:none">
     <span class="hint">Tap two points for a tape. Selected unit shows M″, 2″ engagement, and coherency.</span>
@@ -274,12 +283,17 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.10.6-fight-warn";
+const BUILD = "v2.12.0-reserves";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
 const PHASES = ["command","movement","shooting","charge","fight"];
 const TIPS = {
+  setup: {
+    title:"Setup",
+    short:"Place terrain and units. Start battle when the board is ready. You do not come back here with Next.",
+    more:"Generate or drop terrain, Demo forces or drop units, and drag anything into place.\n\nStart battle locks terrain and opens Command. Next never returns to Setup — use the Setup button (or Practice Reset) if you need to change the board."
+  },
   command: {
     title:"Command phase",
     short:"Start of this player’s turn. Optional: Battle-shock on damaged models. CP +1 at turn start (placeholder for Stratagems).",
@@ -327,8 +341,8 @@ const TIPS = {
   },
   next: {
     title:"Next",
-    short:"Steps the battle: Command → Movement → Shooting → Charge → Fight, then the other seat’s Command.",
-    more:"Use this when you’ve finished the current phase. After Fight it flips to the other player (P0 ↔ P1) and starts their Command. The R# label is the battle round."
+    short:"In setup: Start battle. After that: Command → Movement → Shooting → Charge → Fight, then the other seat’s Command.",
+    more:"Setup has its own Start battle button (same control). After the battle starts, Next only walks the five phases. It does not return to Setup."
   },
   fit: {
     title:"Fit",
@@ -399,10 +413,15 @@ const ACTIONS = {
     short:"Choose not to move. Some weapons later care that you remained stationary.",
     more:"Announce Remain Stationary instead of dragging. If you move after, you’ll get a warning."
   },
-  shootInfo: {
-    id:"shootInfo", phase:"shooting", label:"Eligibility", announce:false,
-    short:"Check the selected model: Advanced / Fell Back / already shot / in ER.",
-    more:"Normal shooting needs: not Advanced, not Fell Back, not already shot, target in range and not in 2″ ER.\n\nAttack soft-gates these. Blocked LoS is still honor-system."
+  ingress: {
+    id:"ingress", phase:"movement", label:"Ingress", announce:true,
+    short:"Bring a reserved unit onto the table. More than 8″ from enemies. Edge 6″ unless Deep Strike.",
+    more:"Select a unit from the Reserves row, then Announce.\n\nUsually not in battle round 1. Set up more than 8″ from enemies. Without Deep Strike: wholly within 6″ of a board edge, and not in the enemy deployment zone before round 3.\n\nThis is the unit’s Movement for the turn — no Normal Move / Advance after. Drag to the legal spot. Fine points (points caps, Rapid Ingress) come later."
+  },
+  rapidIngress: {
+    id:"rapidIngress", phase:"movement", label:"Rapid Ingress", announce:false, placeholder:true,
+    short:"1 CP — arrive at the end of the opponent’s Movement. Not playable yet.",
+    more:"Later: spend 1 CP at the end of the other seat’s Movement to Ingress one reserved unit on their turn."
   },
   allocation: {
     id:"allocation", phase:"shooting", label:"Allocation", announce:false, placeholder:true,
@@ -435,18 +454,31 @@ const ACTIONS = {
    each do/dont entry may later be { text, when: { keywords:[], role:"" } }.
    getGuideBlock() already passes the unit list for that filtering. */
 const GUIDE = {
+  setup: {
+    title: "Setup",
+    do: [
+      "Generate or place terrain (Terrain tool).",
+      "Drop Demo forces or individual units (Units tool) and drag them into deployment zones.",
+      "Tap Start battle when the board is ready."
+    ],
+    dont: [
+      "Don’t start the battle until both forces and terrain are where you want them.",
+      "Don’t expect Next to bring you back here — use Setup or Reset."
+    ],
+    next: "Start battle → Command. Terrain locks. Unit dragging waits for Movement / Charge / Fight."
+  },
   command: {
     title: "Command phase",
     do: [
       "Note whose turn it is (P0 / P1) and the battle round (R#).",
-      "Setup only: Generate/place terrain and Demo forces (Units tool).",
+      "Optional: Battle-shock on damaged models. CP +1 already applied at turn start.",
       "Plan the turn: who will move, shoot, or charge."
     ],
     dont: [
-      "Don’t move models or shoot yet — that is later phases.",
-      "Don’t count on moving terrain later — the first phase after Command locks it for the battle."
+      "Don’t move models or shoot — Command is not a movement phase.",
+      "Don’t move terrain — it locked when the battle started."
     ],
-    next: "When the board is set, tap Next → Movement (terrain locks for the battle)."
+    next: "When you’re ready, Next → Movement."
   },
   movement: {
     title: "Movement phase",
@@ -564,7 +596,7 @@ function emptyBoard(){
     board:{ wIn:W, hIn:H },
     terrain:[], units:[],
     zones:[{seat:0, depthIn:ZONE},{seat:1, depthIn:ZONE}],
-    turn:{ battleRound:1, activeSeat:0, phase:"command", deploymentDone:false },
+    turn:{ battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false },
     cp:{ "0":1, "1":0 },
     log:[], players:{ "0": practice ? who : "", "1": "" }
   };
@@ -575,7 +607,8 @@ if (practice){
 }
 if (!S.units) S.units = [];
 if (!S.log) S.log = [];
-if (!S.turn) S.turn = { battleRound:1, activeSeat:0, phase:"command", deploymentDone:false };
+if (!S.turn) S.turn = { battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false };
+if (S.turn.deploymentDone === false && S.turn.phase === "command") S.turn.phase = "setup";
 if (!S.cp) S.cp = { "0":1, "1":0 };
 (S.terrain||[]).forEach(t => { const n=+String(t.id).slice(2); if(n>=nid) nid=n+1; });
 (S.units||[]).forEach(u => {
@@ -599,13 +632,25 @@ function renderLog(){
 }
 function renderPhases(){
   const el = document.getElementById("phases");
+  const nextBtn = document.getElementById("btnNext");
+  if (nextBtn){
+    nextBtn.textContent = inSetup() ? "Start battle" : "Next";
+    nextBtn.title = inSetup()
+      ? "Lock terrain and begin Command"
+      : "Advance to the next phase (or the other player’s turn)";
+  }
+  if (inSetup()){
+    el.innerHTML = `<button class="btn on" type="button">setup</button>`
+      + PHASES.map(p => `<button class="btn" disabled title="Start battle first">${p}</button>`).join("")
+      + `<span class="sub">place the board</span>`;
+    return;
+  }
   el.innerHTML = PHASES.map(p => {
     const tip = (TIPS[p] && TIPS[p].short) || p;
     return `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}" title="${tip.replace(/"/g,"&quot;")}">${p}</button>`;
   }).join("") + `<span class="sub" title="Battle round · active player seat">R${S.turn.battleRound} · P${S.turn.activeSeat}</span>`;
   el.querySelectorAll("[data-phase]").forEach(b => {
     b.onclick = () => setPhase(b.dataset.phase);
-    // Preview the phase tip without requiring a long hover (helps on desktop + tablet)
     b.addEventListener("pointerenter", () => { if (TIPS[b.dataset.phase]) showTip(TIPS[b.dataset.phase]); });
   });
 }
@@ -663,23 +708,39 @@ function rollCharge(){
   refreshTip();
   renderActions();
 }
-function terrainEditable(){
+function inSetup(){
   return !(S.turn && S.turn.deploymentDone);
+}
+function terrainEditable(){
+  return inSetup();
 }
 /* Normal 40K: only the active player moves their own models.
    Practice: activeSeat rotates so you still play both sides, one at a time.
    PVP: also require the unit to be on your claimed seat. */
 function canControlUnit(u){
   if (!u) return false;
+  if (inSetup()){
+    if (!practice && u.seat !== mySeat) return false;
+    return true;
+  }
   if (u.seat !== S.turn.activeSeat) return false;
   if (!practice && u.seat !== mySeat) return false;
+  return true;
+}
+function canDragUnit(u){
+  if (!u || u.reserved || !canControlUnit(u)) return false;
+  if (inSetup()) return true;
+  const p = S.turn.phase;
+  if (p !== "movement" && p !== "charge" && p !== "fight") return false;
+  if (p === "movement" && dragLocked(u)) return false;
   return true;
 }
 function defaultFlags(){
   return {
     battleShock:false, advanced:false, fellBack:false, remainedStationary:false,
     moved:false, shot:false, charged:false, fought:false,
-    advanceInches:0, chargeInches:0, fightsFirst:false
+    advanceInches:0, chargeInches:0, fightsFirst:false,
+    ingressed:false, deepStrike:false
   };
 }
 function ensureFlags(u){
@@ -709,11 +770,12 @@ function beginSeatTurn(seat){
     f.advanced = false; f.fellBack = false; f.remainedStationary = false;
     f.moved = false; f.shot = false; f.charged = false; f.fought = false;
     f.advanceInches = 0; f.chargeInches = 0;
+    f.ingressed = false;
     delete u.revert;
   });
 }
 function groupMoveState(u){
-  const bits = { advanced:false, fellBack:false, remain:false, moved:false };
+  const bits = { advanced:false, fellBack:false, remain:false, moved:false, ingressed:false };
   if (!u) return bits;
   unitGroup(u).forEach(m => {
     const f = flagsOf(m);
@@ -721,13 +783,19 @@ function groupMoveState(u){
     if (f.fellBack) bits.fellBack = true;
     if (f.remainedStationary) bits.remain = true;
     if (f.moved) bits.moved = true;
+    if (f.ingressed) bits.ingressed = true;
   });
-  bits.declared = bits.advanced || bits.fellBack || bits.remain || bits.moved;
+  bits.declared = bits.advanced || bits.fellBack || bits.remain || bits.moved || bits.ingressed;
   return bits;
 }
 function dragLocked(u){
   const s = groupMoveState(u);
-  return !!(s.remain || (s.moved && !s.advanced && !s.fellBack));
+  if (s.remain) return true;
+  const f = flagsOf(u);
+  /* Ingress / Advance / Fall Back still need a place drag. */
+  if (f.ingressed || s.advanced || s.fellBack) return false;
+  /* Normal Move locks this model only — squad mates still place. */
+  return !!f.moved;
 }
 function snapshotGroup(u, fromId, fromPos){
   unitGroup(u).forEach(m => {
@@ -752,6 +820,10 @@ function revertMove(){
     const f = flagsOf(m);
     f.advanced = false; f.fellBack = false; f.remainedStationary = false;
     f.moved = false; f.advanceInches = 0;
+    if (f.ingressed){
+      m.reserved = true;
+      f.ingressed = false;
+    }
   });
   logLine(u.name+(unitGroup(u).length>1?" unit":"")+" move reverted");
   document.getElementById("dice").textContent = "Move reverted — declare or drag again.";
@@ -759,10 +831,85 @@ function revertMove(){
   save(); draw(); refreshTip(); renderActions();
 }
 function inEngagement(u){
-  return S.units.some(o => o.seat !== u.seat && edgeDist(u,o) <= 2.01);
+  return S.units.some(o => !o.reserved && o.seat !== u.seat && edgeDist(u,o) <= 2.01);
+}
+function hasDeepStrike(u){
+  if (!u) return false;
+  if (flagsOf(u).deepStrike) return true;
+  return (u.keywords||[]).some(k => String(k).toUpperCase().replace(/-/g," ").includes("DEEP STRIKE"));
+}
+function nearBoardEdge(u){
+  const r = unitR(u);
+  const dEdge = Math.min(u.x, W-u.x, u.y, H-u.y);
+  return dEdge + r <= 6.05;
+}
+function inEnemyDz(u){
+  if (u.seat === 0) return u.y > H - ZONE;
+  return u.y < ZONE;
+}
+function ingressIssues(u){
+  const issues = [];
+  if (!u || u.reserved) return issues;
+  let nearest = 99;
+  S.units.forEach(o => {
+    if (o.reserved || o.seat === u.seat) return;
+    nearest = Math.min(nearest, edgeDist(u, o));
+  });
+  if (nearest <= 8.01) issues.push("more than 8″ from enemies (now "+nearest.toFixed(1)+"″)");
+  if (!hasDeepStrike(u) && !nearBoardEdge(u)) issues.push("wholly within 6″ of a board edge (or mark Deep Strike)");
+  if (!hasDeepStrike(u) && (S.turn.battleRound||1) < 3 && inEnemyDz(u)) issues.push("not in the enemy deployment zone before battle round 3");
+  return issues;
+}
+function reservedUnits(seat){
+  return (S.units||[]).filter(u => u.reserved && (seat==null || u.seat===seat));
+}
+function toggleReserved(u){
+  if (!u || !inSetup()) return;
+  const on = !u.reserved;
+  unitGroup(u).forEach(m => { m.reserved = on; });
+  logLine((on?"Reserves: ":"On table: ")+u.name+(unitGroup(u).length>1?" unit":""));
+  if (on) selectObj("u", u);
+  save(); draw(); refreshTip(); renderActions(); renderReserveRow();
+}
+function toggleDeepStrike(u){
+  if (!u || !inSetup()) return;
+  const on = !hasDeepStrike(u);
+  unitGroup(u).forEach(m => { flagsOf(m).deepStrike = on; });
+  logLine(u.name+(on?" marked Deep Strike":" Deep Strike cleared"));
+  save(); refreshTip(); renderActions();
+}
+function destroyLateReserves(){
+  if ((S.turn.battleRound||1) < 4) return;
+  const gone = [];
+  S.units = S.units.filter(u => {
+    if (!u.reserved) return true;
+    gone.push(u.name+" (P"+u.seat+")");
+    return false;
+  });
+  if (gone.length) logLine("Destroyed — still in Reserves after BR3: "+gone.join(", "));
+}
+function renderReserveRow(){
+  const row = document.getElementById("rowReserves");
+  const box = document.getElementById("reserveBtns");
+  const hint = document.getElementById("reserveLiveHint");
+  if (!row || !box) return;
+  const list = reservedUnits();
+  row.style.display = list.length ? "" : "none";
+  box.innerHTML = "";
+  list.forEach(u => {
+    const b = document.createElement("button");
+    b.className = "btn sm" + (selected && selected.id===u.id ? " on" : "");
+    b.textContent = u.name+" P"+u.seat+(hasDeepStrike(u)?" DS":"");
+    b.onclick = () => { selectObj("u", u); renderReserveRow(); renderActions(); refreshTip(); };
+    box.appendChild(b);
+  });
+  if (hint){
+    if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
+    else hint.textContent = "Movement: select one, Optional → Ingress → Announce.";
+  }
 }
 function overlapsEnemy(u){
-  return S.units.some(o => o.id !== u.id && o.seat !== u.seat && edgeDist(u,o) <= 0.05);
+  return S.units.some(o => !o.reserved && o.id !== u.id && o.seat !== u.seat && edgeDist(u,o) <= 0.05);
 }
 function showWarn(html){
   const bar = document.getElementById("warnbar");
@@ -785,7 +932,7 @@ function renderActions(){
   const phase = S.turn.phase;
   const u = selectedUnit();
   const moveLock = phase === "movement" && u && groupMoveState(u).declared;
-  const MOVE_ACTS = { advance:1, fallBack:1, remain:1 };
+  const MOVE_ACTS = { advance:1, fallBack:1, remain:1, ingress:1 };
   const list = Object.values(ACTIONS).filter(a => a.phase === phase);
   if (kicker) kicker.textContent = "Optional · "+phase;
   box.innerHTML = "";
@@ -794,9 +941,15 @@ function renderActions(){
     b.className = "btn sm" + (a.placeholder ? " placeholder" : "") + (selectedAction===a.id ? " on" : "");
     b.textContent = a.label;
     b.title = a.short;
-    if (MOVE_ACTS[a.id] && moveLock){
+    const reserved = !!(u && (u.reserved || unitGroup(u).some(m => m.reserved)));
+    if (a.id === "ingress"){
+      if (!u || !reserved || !canControlUnit(u) || moveLock){
+        b.disabled = true;
+        b.title = reserved ? "Already declared a move — Revert first." : "Select a reserved unit first.";
+      } else b.onclick = () => pickAction(a.id);
+    } else if (MOVE_ACTS[a.id] && (moveLock || reserved)){
       b.disabled = true;
-      b.title = "Move already declared — Revert to change it.";
+      b.title = reserved ? "That unit is in Reserves — Ingress first." : "Move already declared — Revert to change it.";
     } else {
       b.onclick = () => pickAction(a.id);
     }
@@ -810,12 +963,16 @@ function renderActions(){
     ann.style.display = "none";
   }
   if (rev) rev.style.display = (phase === "movement" && u && canControlUnit(u) && groupMoveState(u).declared) ? "" : "none";
+  renderReserveRow();
   const cp = (S.cp && S.cp[S.turn.activeSeat]) || 0;
   if (!hint) return;
   if (phase === "command") hint.textContent = "P"+S.turn.activeSeat+" CP: "+cp+(u ? " · "+u.name : "");
   else if (u){
     const f = flagsOf(u);
     const bits = [];
+    if (u.reserved) bits.push("Reserves");
+    if (hasDeepStrike(u)) bits.push("DS");
+    if (f.ingressed) bits.push("Ingress");
     if (f.advanced) bits.push("Adv+"+f.advanceInches+"″");
     if (f.fellBack) bits.push("FB");
     if (f.remainedStationary) bits.push("Remain");
@@ -886,6 +1043,39 @@ function announceAction(){
     group.forEach(m => { const f=flagsOf(m); f.remainedStationary=true; f.moved=true; });
     logLine(u.name+" Remains Stationary");
     document.getElementById("dice").textContent = "Remained Stationary.";
+  } else if (a.id === "ingress"){
+    const g = unitGroup(u);
+    if (!u.reserved && !g.some(m => m.reserved)){
+      showWarn("<strong>Ingress:</strong> that unit is already on the table. Put it in Reserves during Setup.");
+      return;
+    }
+    if ((S.turn.battleRound||1) < 2){
+      showWarn("<strong>Ingress:</strong> reserved units usually arrive from battle round 2 onward.");
+      return;
+    }
+    if (st.declared){
+      showWarn("<strong>Ingress:</strong> this unit already chose a move. Revert first.");
+      return;
+    }
+    const ds = hasDeepStrike(u);
+    const x0 = W/2;
+    const y0 = ds ? H/2 : (u.seat===0 ? 3 : H-3);
+    g.forEach((m, i) => {
+      m.reserved = false;
+      const f = flagsOf(m);
+      f.ingressed = true;
+      f.moved = true;
+      f.advanced = false; f.fellBack = false; f.remainedStationary = false;
+      m.x = Math.max(unitR(m), Math.min(W-unitR(m), x0 + (i - (g.length-1)/2)*1.6));
+      m.y = Math.max(unitR(m), Math.min(H-unitR(m), y0));
+    });
+    snapshotGroup(u);
+    const note = ds ? "Deep Strike — anywhere more than 8″ from enemies." : "Within 6″ of a board edge, more than 8″ from enemies.";
+    logLine(u.name+(g.length>1?" unit":"")+" Ingresses"+(ds?" (Deep Strike)":""));
+    document.getElementById("dice").textContent = "Ingress — drag to a legal spot. "+note;
+    const bad = ingressIssues(u);
+    if (bad.length) showWarn("<strong>Ingress:</strong> "+bad.join("; ")+".");
+    else hideWarn();
   } else if (a.id === "battleShock"){
     if ((u.wounds??u.W) >= u.W){
       showWarn("<strong>Battle-shock:</strong> this model is undamaged — tests are for damaged units.");
@@ -914,7 +1104,14 @@ function shootGate(atk){
   if (f.advanced) return "This unit Advanced — it usually cannot shoot (soft-gate).";
   if (f.fellBack) return "This unit Fell Back — it usually cannot shoot.";
   if (f.shot) return "This model already shot this phase.";
+  if (inEngagement(atk)) return "This model is in 2″ Engagement Range — use Fight, or a close-quarters weapon (not in this slice).";
   return null;
+}
+function warnShootEligibility(u){
+  if (!u || S.turn.phase !== "shooting") return;
+  if (u.seat !== S.turn.activeSeat) return;
+  const g = shootGate(u);
+  if (g) showWarn("<strong>Shooting:</strong> "+g);
 }
 function chargeGate(atk){
   const f = flagsOf(atk);
@@ -933,17 +1130,35 @@ function lockAllTerrain(reason){
   } else if (n) logLine("Locked "+n+" terrain piece(s)");
   updateTerrainTools();
 }
-function beginBattleIfNeeded(nextPhase){
-  /* Leaving Command for the first time ends setup (matches real 40K: scenery stays put). */
-  if (S.turn.deploymentDone) return;
-  if (nextPhase === "command") return;
+function startBattle(){
+  if (!inSetup()) return;
   lockAllTerrain("Setup done — terrain locked for battle");
+  S.turn.phase = "command";
+  S.turn.activeSeat = S.turn.activeSeat || 0;
+  selectedAction = null;
+  clearCombatPair();
+  logLine("Battle started · Command · P"+S.turn.activeSeat);
+  setTool("unit");
+}
+function enterSetup(){
+  S.turn.deploymentDone = false;
+  S.turn.phase = "setup";
+  (S.terrain||[]).forEach(t => { t.locked = false; });
+  selectedAction = null;
+  clearCombatPair();
+  logLine("Returned to setup — terrain unlocked");
+  setTool("terrain");
 }
 function updateTerrainTools(){
   const live = !terrainEditable();
   const hint = document.getElementById("terrainLiveHint");
   if (hint) hint.style.display = live ? "" : "none";
   document.querySelectorAll("#rowTerrain [data-preset], #btnGen, #btnClearT").forEach(b => {
+    b.disabled = live;
+    b.style.opacity = live ? "0.45" : "";
+  });
+  document.querySelectorAll("#rowUnits [data-drop], #btnDemo, #btnClearU").forEach(b => {
+    if (!b) return;
     b.disabled = live;
     b.style.opacity = live ? "0.45" : "";
   });
@@ -960,6 +1175,7 @@ function updateTerrainTools(){
 }
 function phaseDefaultTool(){
   const p = S.turn && S.turn.phase;
+  if (inSetup() || p === "setup") return "terrain";
   if (p === "shooting" || p === "fight") return "combat";
   return "unit";
 }
@@ -970,8 +1186,13 @@ function applyPhaseTool(prevPhase){
   else if (tool === "measure" || prevPhase === "shooting" || prevPhase === "fight") setTool("unit");
 }
 function setPhase(p){
+  if (p === "setup"){
+    enterSetup();
+    save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+    return;
+  }
+  if (inSetup()) return;
   const prev = S.turn.phase;
-  beginBattleIfNeeded(p);
   S.turn.phase = p;
   selectedAction = null;
   clearCombatPair();
@@ -981,13 +1202,17 @@ function setPhase(p){
 }
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
+  if (inSetup()){
+    startBattle();
+    save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+    return;
+  }
   const i = PHASES.indexOf(S.turn.phase);
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
     const prev = S.turn.phase;
-    beginBattleIfNeeded("command");
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
-    else { S.turn.activeSeat = 0; S.turn.battleRound++; }
+    else { S.turn.activeSeat = 0; S.turn.battleRound++; destroyLateReserves(); }
     beginSeatTurn(S.turn.activeSeat);
     S.turn.phase = "command";
     selectedAction = null;
@@ -1258,7 +1483,7 @@ function rangeReach(u, inches){ return unitR(u) + (inches || 0); }
    (2) Span: every model within 9″ edge of every other model. */
 function groupMembers(groupId){
   if (!groupId) return [];
-  return S.units.filter(u => u.groupId === groupId);
+  return S.units.filter(u => u.groupId === groupId && !u.reserved);
 }
 function coherencyCheck(groupId){
   const members = groupMembers(groupId);
@@ -1322,6 +1547,7 @@ function checkUnitCoherency(u, announce){
 function hitUnit(wx, wy){
   let best = null, bestD = 1e9;
   for (const u of S.units){
+    if (u.reserved) continue;
     const d = Math.hypot(wx-u.x, wy-u.y);
     if (d <= unitR(u)+0.15 && d < bestD){ best = u; bestD = d; }
   }
@@ -1448,7 +1674,7 @@ function draw(){
       ctx.strokeStyle="#c39a4ecc"; ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
     }
   }
-  S.units.forEach(u => drawUnit(u));
+  S.units.forEach(u => { if (!u.reserved) drawUnit(u); });
   if (tape && tape.a){
     const a = toScreen(tape.a.x, tape.a.y);
     ctx.beginPath(); ctx.arc(a.x,a.y,5,0,Math.PI*2); ctx.fillStyle="#c39a4e"; ctx.fill();
@@ -1518,6 +1744,7 @@ function drawUnit(u){
 
 function selectObj(kind, obj){
   selected = obj ? { kind, id: obj.id } : null;
+  if (kind === "u" && obj) warnShootEligibility(obj);
   const bar = document.getElementById("selbar");
   const lock = document.getElementById("btnLock");
   const rotL = document.getElementById("btnRotL");
@@ -1582,11 +1809,12 @@ function dropUnit(key, seat, x, y, groupId){
     id:"u_"+(uidn++), seat, name:d.name, keywords:d.keywords.slice(),
     M:d.M, T:d.T, Sv:d.Sv, Inv:d.Inv||0, W:d.W, wounds:d.W, Ld:d.Ld||6, baseMm:d.baseMm,
     ranged: Object.assign({}, d.ranged), melee: Object.assign({}, d.melee),
-    x, y, rot:0, groupId: groupId||null, flags: defaultFlags()
+    x, y, rot:0, groupId: groupId||null, reserved:false, flags: defaultFlags()
   };
   S.units.push(u); return u;
 }
 function demoForces(){
+  if (!inSetup()){ logLine("Demo forces — return to Setup first"); return; }
   S.units = [];
   const g0="g0", g1="g1";
   for (let i=0;i<5;i++) dropUnit("inf", 0, 18+i*1.6, 6, g0);
@@ -1598,6 +1826,7 @@ function demoForces(){
   selectObj(null); logLine("Demo forces deployed"); save(); draw();
 }
 function addDrop(key){
+  if (!inSetup()){ logLine("Place units in Setup"); return; }
   const y = mySeat===0 ? 6 : H-6;
   const u = dropUnit(key, mySeat, W/2, y, key==="inf"?"solo"+uidn:null);
   selectObj("u", u); logLine("Placed "+u.name); save(); draw();
@@ -1629,6 +1858,15 @@ function resetPractice(){
   updateTerrainTools();
 }
 document.getElementById("btnReset").onclick = resetPractice;
+document.getElementById("btnSetup").onclick = () => {
+  if (!practice){
+    document.getElementById("dice").textContent = "Setup return is practice-only.";
+    return;
+  }
+  enterSetup();
+  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+  showTip(TIPS.setup);
+};
 if (practice) document.getElementById("btnReset").style.display = "";
 document.getElementById("btnFit").onclick = () => { fit(); draw(); showTip(TIPS.fit); };
 document.getElementById("btnFit").addEventListener("pointerenter", () => showTip(TIPS.fit));
@@ -1643,6 +1881,16 @@ document.getElementById("btnClearT").onclick = () => {
 };
 document.getElementById("btnClearU").onclick = () => { S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw(); };
 document.getElementById("btnDemo").onclick = demoForces;
+document.getElementById("btnReserve").onclick = () => {
+  const u = selectedUnit();
+  if (!u){ document.getElementById("dice").textContent = "Select a unit, then Reserves."; return; }
+  toggleReserved(u);
+};
+document.getElementById("btnDeepStrike").onclick = () => {
+  const u = selectedUnit();
+  if (!u){ document.getElementById("dice").textContent = "Select a unit, then Deep Strike."; return; }
+  toggleDeepStrike(u);
+};
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
 document.getElementById("btnChargeRoll").onclick = rollCharge;
 document.getElementById("btnAnnounce").onclick = announceAction;
@@ -1917,20 +2165,21 @@ canvas.addEventListener("pointerdown", e => {
   const hu = hitUnit(wpt.x,wpt.y);
   if (hu){
     selectObj("u", hu);
-    if (canControlUnit(hu)){
-      if (dragLocked(hu)){
-        mode="pan";
-        drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
-        moveOrigin = null;
-        const f = flagsOf(hu);
-        if (f.remainedStationary) showWarn("<strong>Remain Stationary:</strong> this unit will not move. Revert to take it back.");
-        else showWarn("<strong>Move committed:</strong> Revert to place this unit again.");
-      } else {
-        mode="move";
-        drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
-        moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
-      }
+    if (canDragUnit(hu)){
+      mode="move";
+      drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+      moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
+    } else if (canControlUnit(hu) && S.turn.phase === "movement" && dragLocked(hu)){
+      mode="pan";
+      drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
+      moveOrigin = null;
+      const f = flagsOf(hu);
+      if (f.remainedStationary) showWarn("<strong>Remain Stationary:</strong> this unit will not move. Revert to take it back.");
+      else showWarn("<strong>Move committed:</strong> Revert to place this unit again.");
     } else {
+      if (canControlUnit(hu) && !inSetup() && S.turn.phase !== "charge" && S.turn.phase !== "fight" && S.turn.phase !== "movement"){
+        showWarn("<strong>No move:</strong> models only drag in Movement, Charge, or Fight (or Setup).");
+      }
       /* Enemy / inactive seat — inspect only; drag pans the map */
       mode="pan";
       drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
@@ -1975,7 +2224,7 @@ canvas.addEventListener("pointermove", e => {
       t.x=Math.max(t.w/2,Math.min(W-t.w/2,wpt.x-drag.ox));
       t.y=Math.max(t.h/2,Math.min(H-t.h/2,wpt.y-drag.oy));
     } else {
-      const u=S.units.find(x=>x.id===drag.id); if(!u || !canControlUnit(u) || dragLocked(u)) return;
+      const u=S.units.find(x=>x.id===drag.id); if(!u || !canDragUnit(u)) return;
       const r=unitR(u);
       u.x=Math.max(r,Math.min(W-r,wpt.x-drag.ox));
       u.y=Math.max(r,Math.min(H-r,wpt.y-drag.oy));
@@ -2002,7 +2251,7 @@ function endPtr(e){
             showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
           } else {
             snapshotGroup(u, u.id, from);
-            unitGroup(u).forEach(m => { flagsOf(m).moved = true; });
+            flagsOf(u).moved = true;
           }
           logLine("Moved "+u.name+" "+dist.toFixed(1)+"\"");
           if (overlapsEnemy(u)){
@@ -2010,6 +2259,10 @@ function endPtr(e){
             logLine("Overlap warn: "+u.name+" on an enemy base");
           }
           checkUnitCoherency(u, true);
+          if (flagsOf(u).ingressed){
+            const bad = ingressIssues(u);
+            if (bad.length) showWarn("<strong>Ingress:</strong> "+bad.join("; ")+".");
+          }
           renderActions();
           save();
         }
