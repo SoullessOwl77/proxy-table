@@ -286,7 +286,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.4-army-name";
+const BUILD = "v2.13.5-names-turn";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -637,9 +637,19 @@ function bumpIds(){
 }
 bumpIds();
 
+function seatName(seat){
+  const n = S && S.players && (S.players[String(seat)] || S.players[seat]);
+  if (n) return n;
+  if (who && seat === mySeat) return who;
+  return seat === 0 ? "Player 1" : "Player 2";
+}
+function canDriveTurn(){
+  if (practice || inSetup()) return true;
+  return (S.turn && S.turn.activeSeat === mySeat);
+}
 function setWho(){
   const mode = practice ? "Practice" : ("Match " + (matchId||"").slice(0,8));
-  document.getElementById("whoSub").textContent = (who? who+" · ":"") + mode + " · seat "+mySeat+" · "+BUILD;
+  document.getElementById("whoSub").textContent = (who? who+" · ":"") + mode + " · "+BUILD;
 }
 setWho();
 
@@ -660,7 +670,7 @@ function renderPhases(){
       nextBtn.title = "Advance to the next phase (or the other player’s turn)";
     } else if (!practice && S.ready && S.ready[String(mySeat)] && !(S.ready[mySeat===0?"1":"0"])){
       nextBtn.textContent = "Waiting…";
-      nextBtn.title = "Waiting for the other player to press Start battle";
+      nextBtn.title = "Waiting for " + seatName(mySeat===0?1:0) + " to press Start battle";
     } else {
       nextBtn.textContent = "Start battle";
       nextBtn.title = "Both players ready + units on the table, then lock terrain";
@@ -672,10 +682,11 @@ function renderPhases(){
       + `<span class="sub">place the board</span>`;
     return;
   }
+  const mine = canDriveTurn();
   el.innerHTML = PHASES.map(p => {
     const tip = (TIPS[p] && TIPS[p].short) || p;
-    return `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}" title="${tip.replace(/"/g,"&quot;")}">${p}</button>`;
-  }).join("") + `<span class="sub" title="Battle round · active player seat">R${S.turn.battleRound} · P${S.turn.activeSeat}</span>`;
+    return `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}" ${mine?"":"disabled"} title="${mine?tip.replace(/"/g,"&quot;"):(seatName(S.turn.activeSeat)+"'s turn")}">${p}</button>`;
+  }).join("") + `<span class="sub" title="Battle round · whose turn">${"R"+S.turn.battleRound+" · "+seatName(S.turn.activeSeat)}</span>`;
   el.querySelectorAll("[data-phase]").forEach(b => {
     b.onclick = () => setPhase(b.dataset.phase);
     b.addEventListener("pointerenter", () => { if (TIPS[b.dataset.phase]) showTip(TIPS[b.dataset.phase]); });
@@ -844,7 +855,7 @@ function revertMove(){
     return;
   }
   if (!canControlUnit(u)){
-    document.getElementById("dice").textContent = "Active player is P"+S.turn.activeSeat+" — pick their model.";
+    document.getElementById("dice").textContent = seatName(S.turn.activeSeat) + "'s turn — pick their model.";
     return;
   }
   unitGroup(u).forEach(m => {
@@ -1037,7 +1048,7 @@ function announceAction(){
     return;
   }
   if (!canControlUnit(u)){
-    document.getElementById("dice").textContent = "Active player is P"+S.turn.activeSeat+" — pick their model.";
+    document.getElementById("dice").textContent = seatName(S.turn.activeSeat) + "'s turn — pick their model.";
     return;
   }
   const group = unitGroup(u);
@@ -1216,7 +1227,7 @@ function startBattle(){
     f.advanceInches = 0; f.chargeInches = 0; f.ingressed = false;
     delete u.revert;
   });
-  logLine("Battle started · Command · P"+S.turn.activeSeat);
+  logLine("Battle started · Command · " + seatName(S.turn.activeSeat) + "'s turn");
   setTool("unit");
 }
 function enterSetup(){
@@ -1265,6 +1276,10 @@ function applyPhaseTool(prevPhase){
   else if (tool === "measure" || prevPhase === "shooting" || prevPhase === "fight") setTool("unit");
 }
 function setPhase(p){
+  if (!canDriveTurn()){
+    showWarn("<strong>Turn:</strong> " + seatName(S.turn.activeSeat) + "'s turn.");
+    return;
+  }
   if (p === "setup"){
     enterSetup();
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
@@ -1286,6 +1301,10 @@ document.getElementById("btnNext").onclick = () => {
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
     return;
   }
+  if (!canDriveTurn()){
+    showWarn("<strong>Turn:</strong> wait for " + seatName(S.turn.activeSeat) + " to finish.");
+    return;
+  }
   const i = PHASES.indexOf(S.turn.phase);
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
@@ -1296,7 +1315,7 @@ document.getElementById("btnNext").onclick = () => {
     S.turn.phase = "command";
     selectedAction = null;
     clearCombatPair();
-    logLine("Battle round " + S.turn.battleRound + " · player " + S.turn.activeSeat + " · CP "+((S.cp&&S.cp[S.turn.activeSeat])||0));
+    logLine("Battle round " + S.turn.battleRound + " · " + seatName(S.turn.activeSeat) + "'s turn · CP "+((S.cp&&S.cp[S.turn.activeSeat])||0));
     applyPhaseTool(prev);
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
   }
@@ -1915,7 +1934,7 @@ function demoForces(){
     for (let i=0;i<5;i++) dropUnit("inf", mySeat, 18+i*1.6, yInf, g);
     dropUnit("cmd", mySeat, 22, yCmd, g);
     dropUnit("wlk", mySeat, 40, yWlk, "w"+mySeat);
-    selectObj(null); logLine("Demo forces — your seat P"+mySeat); save(); draw();
+    selectObj(null); logLine("Demo forces — " + seatName(mySeat)); save(); draw();
     return;
   }
   S.units = [];
@@ -1941,16 +1960,14 @@ document.getElementById("pageTitle").onclick = () => {
   /* Hard reload so mobile PWAs without a browser chrome can pick up new SW/assets */
   location.reload();
 };
-function requestMatchReset(){
-  if (!S.resetAsk) S.resetAsk = { "0":false, "1":false };
-  S.resetAsk[String(mySeat)] = true;
-  const other = mySeat === 0 ? 1 : 0;
-  if (!S.resetAsk[String(other)]){
-    logLine((who || ("P"+mySeat)) + " wants to reset to setup — opponent must press Reset too");
-    showWarn("<strong>Reset:</strong> waiting for the other player to press Reset. Keeps units; returns to setup.");
-    save(); renderPhases();
-    return;
-  }
+function orVotes(a, b){
+  a = a || {}; b = b || {};
+  return {
+    "0": !!(a["0"] || a[0]) || !!(b["0"] || b[0]),
+    "1": !!(a["1"] || a[1]) || !!(b["1"] || b[1])
+  };
+}
+function applyResetToSetup(){
   S.resetAsk = { "0":false, "1":false };
   S.ready = { "0":false, "1":false };
   enterSetup();
@@ -1962,6 +1979,17 @@ function requestMatchReset(){
     delete u.revert;
   });
   logLine("Both players reset to setup");
+}
+function requestMatchReset(){
+  if (!S.resetAsk) S.resetAsk = { "0":false, "1":false };
+  S.resetAsk[String(mySeat)] = true;
+  if (!(S.resetAsk["0"] && S.resetAsk["1"])){
+    logLine(seatName(mySeat) + " wants to reset to setup — " + seatName(mySeat===0?1:0) + " must press Reset too");
+    showWarn("<strong>Reset:</strong> waiting for " + seatName(mySeat===0?1:0) + ". Keeps units; returns to setup.");
+    save(); renderPhases();
+    return;
+  }
+  applyResetToSetup();
   save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
 }
 function resetPractice(){
@@ -2130,7 +2158,7 @@ function resolveAttack(){
   const tgt = S.units.find(u=>u.id===targetId);
   if (!atk || !tgt){ document.getElementById("dice").textContent = "Pick attacker then target."; return; }
   if (atk.seat !== S.turn.activeSeat){
-    document.getElementById("dice").textContent = "Active player is P"+S.turn.activeSeat+" — attacker must be their model.";
+    document.getElementById("dice").textContent = seatName(S.turn.activeSeat) + "'s turn — attacker must be their model.";
     return;
   }
   if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return; }
@@ -2449,22 +2477,28 @@ function applyRemote(board){
   if (!board || board.game!=="wh40k") return;
   if ((board.rev||0) <= (S.rev||0)) return;
   if (mode==="move" || mode==="rot"){ pendingRemote = board; return; }
+  const prevReady = S.ready;
+  const prevReset = S.resetAsk;
   S = board;
   if (!S.units) S.units=[];
   if (!S.terrain) S.terrain=[];
   if (!S.log) S.log=[];
   if (!S.chargeRolls) S.chargeRolls={};
   if (!S.players) S.players={ "0":"", "1":"" };
-  if (!S.ready) S.ready={ "0":false, "1":false };
-  if (!S.resetAsk) S.resetAsk={ "0":false, "1":false };
+  S.ready = orVotes(prevReady, S.ready);
+  S.resetAsk = orVotes(prevReset, S.resetAsk);
   bumpIds();
+  if (!inSetup() && S.resetAsk["0"] && S.resetAsk["1"]){
+    applyResetToSetup();
+    save();
+  }
   if (inSetup() && !practice){
     const other = mySeat===0 ? 1 : 0;
     if (S.ready[String(other)] && !S.ready[String(mySeat)]){
-      showWarn("<strong>Ready:</strong> the other player pressed Start battle. Press it when your units are down.");
+      showWarn("<strong>Ready:</strong> " + seatName(other) + " pressed Start battle. Press it when your units are down.");
     }
     if (S.resetAsk[String(other)] && !S.resetAsk[String(mySeat)]){
-      showWarn("<strong>Reset:</strong> the other player wants to return to setup. Press Reset to confirm.");
+      showWarn("<strong>Reset:</strong> " + seatName(other) + " wants to return to setup. Press Reset to confirm.");
     }
   }
   if (selected && selected.kind==="u" && !S.units.some(u => u.id===selected.id)) selected=null;
