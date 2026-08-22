@@ -169,10 +169,16 @@ export default {
         const matchId = uid();
         const game = row.game === "wh40k" ? "wh40k" : "mtg";
         try {
-          await db.prepare("INSERT INTO matches (id, game) VALUES (?,?)").bind(matchId, game).run();
+          await db.prepare("INSERT INTO matches (id, status, game, updated_at) VALUES (?,?,?,datetime('now'))")
+            .bind(matchId, "active", game).run();
         } catch (_) {
-          await db.prepare("INSERT INTO matches (id) VALUES (?)").bind(matchId).run();
+          try {
+            await db.prepare("INSERT INTO matches (id, game) VALUES (?,?)").bind(matchId, game).run();
+          } catch (__) {
+            await db.prepare("INSERT INTO matches (id) VALUES (?)").bind(matchId).run();
+          }
         }
+        try { await db.prepare("UPDATE matches SET status='active', updated_at=datetime('now') WHERE id=?").bind(matchId).run(); } catch (_) {}
         await db.prepare("INSERT INTO match_players (match_id, username, seat) VALUES (?,?,0)").bind(matchId, row.from_user).run();
         await db.prepare("INSERT INTO match_players (match_id, username, seat) VALUES (?,?,1)").bind(matchId, you).run();
         await db.prepare("UPDATE challenges SET status='accepted', match_id=? WHERE code=?").bind(matchId, c).run();
@@ -218,7 +224,8 @@ export default {
       if (p === "/api/matches" && req.method === "GET") {
         const user = norm(url.searchParams.get("username") || "");
         if (!user) return err("username required");
-        let results;
+        const whereActive = `(m.status IS NULL OR m.status = '' OR m.status = 'active')`;
+        let results = [];
         try {
           const q = await db.prepare(`
           SELECT m.id, m.status, m.updated_at, m.game,
@@ -227,22 +234,37 @@ export default {
                  (SELECT deck_name FROM match_players WHERE match_id=m.id AND username != ?) AS opponent_deck
           FROM matches m
           JOIN match_players mp ON mp.match_id = m.id AND mp.username = ?
-          WHERE m.status = 'active'
+          WHERE ${whereActive}
           ORDER BY m.updated_at DESC
         `).bind(user, user, user).all();
-          results = q.results;
+          results = q.results || [];
         } catch (_) {
-          const q = await db.prepare(`
-          SELECT m.id, m.status, m.updated_at,
-                 mp.deck_name AS my_deck,
-                 (SELECT username FROM match_players WHERE match_id=m.id AND username != ?) AS opponent,
-                 (SELECT deck_name FROM match_players WHERE match_id=m.id AND username != ?) AS opponent_deck
-          FROM matches m
-          JOIN match_players mp ON mp.match_id = m.id AND mp.username = ?
-          WHERE m.status = 'active'
-          ORDER BY m.updated_at DESC
-        `).bind(user, user, user).all();
-          results = q.results;
+          try {
+            const q = await db.prepare(`
+            SELECT m.id, m.status, m.updated_at,
+                   mp.deck_name AS my_deck,
+                   (SELECT username FROM match_players WHERE match_id=m.id AND username != ?) AS opponent,
+                   (SELECT deck_name FROM match_players WHERE match_id=m.id AND username != ?) AS opponent_deck
+            FROM matches m
+            JOIN match_players mp ON mp.match_id = m.id AND mp.username = ?
+            WHERE ${whereActive}
+            ORDER BY m.updated_at DESC
+          `).bind(user, user, user).all();
+            results = q.results || [];
+          } catch (__) {
+            try {
+              const q = await db.prepare(`
+              SELECT m.id, m.status, m.updated_at,
+                     mp.deck_name AS my_deck,
+                     (SELECT username FROM match_players WHERE match_id=m.id AND username != ?) AS opponent,
+                     (SELECT deck_name FROM match_players WHERE match_id=m.id AND username != ?) AS opponent_deck
+              FROM matches m
+              JOIN match_players mp ON mp.match_id = m.id AND mp.username = ?
+              ORDER BY m.updated_at DESC
+            `).bind(user, user, user).all();
+              results = q.results || [];
+            } catch (___) { results = []; }
+          }
         }
         return json({ matches: results });
       }

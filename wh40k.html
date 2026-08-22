@@ -286,7 +286,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.2-seats";
+const BUILD = "v2.13.3-match-keep";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -2554,6 +2554,10 @@ async function bindSeatFromServer(){
 }
 if (!practice){
   bindSeatFromServer().then(() => startSync());
+  window.addEventListener("pagehide", () => { try { pushState(); } catch (_) {} });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") { try { pushState(); } catch (_) {} }
+  });
 }
 </script>
 </body>

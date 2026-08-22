@@ -779,7 +779,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.4-seat-fix";
+const BUILD = "v2.7.5-match-keep";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1159,11 +1159,46 @@ $("#bkAdd").onclick = async () => {
 /* ============================================================
    MATCHES + CHALLENGES
    ============================================================ */
+function matchMemKey(){ return "pt_open_matches_" + (currentUser || ""); }
+function rememberedMatches(){
+  try { return JSON.parse(localStorage.getItem(matchMemKey()) || "[]"); } catch (_) { return []; }
+}
+function rememberMatch(id, game, opponent){
+  if (!id || !currentUser) return;
+  const list = rememberedMatches().filter(m => m.id !== id);
+  list.unshift({ id, game: game === "wh40k" ? "wh40k" : "mtg", opponent: opponent || "", updated_at: new Date().toISOString().replace("Z","") });
+  try { localStorage.setItem(matchMemKey(), JSON.stringify(list.slice(0, 20))); } catch (_) {}
+}
+function forgetMatch(id){
+  try { localStorage.setItem(matchMemKey(), JSON.stringify(rememberedMatches().filter(m => m.id !== id))); } catch (_) {}
+}
 async function loadMatches(){
+  let list = [];
   try{
     const d = await api("/api/matches?username=" + encodeURIComponent(currentUser));
-    renderMatches((d && d.matches) || []);
-  } catch(e){ /* offline: leave whatever was already shown */ }
+    list = (d && d.matches) || [];
+  } catch(e){ list = []; }
+  const have = new Set(list.map(m => m.id));
+  for (const m of rememberedMatches()){
+    if (have.has(m.id)) continue;
+    try {
+      const d = await api("/api/match/" + encodeURIComponent(m.id));
+      if (d && d.match && d.match.id){
+        const opp = ((d.match.players || []).find(p => p.username !== currentUser) || {}).username || m.opponent || "";
+        list.push({
+          id: d.match.id,
+          status: d.match.status || "active",
+          updated_at: d.match.updated_at,
+          game: d.match.game || m.game,
+          opponent: opp
+        });
+        have.add(d.match.id);
+      } else forgetMatch(m.id);
+    } catch (e) {
+      if (e && e.status === 404) forgetMatch(m.id);
+    }
+  }
+  renderMatches(list);
 }
 function relTime(iso){
   const s = (Date.now() - new Date(iso+"Z").getTime()) / 1000;
@@ -1202,6 +1237,7 @@ function renderMatches(matches){
   };
 }
 function rejoinMatch(matchId, game){
+  rememberMatch(matchId, game);
   if (game === "wh40k") {
     location.href = "./wh40k.html?match=" + encodeURIComponent(matchId);
     return;
@@ -1234,6 +1270,7 @@ async function abandonMatch(matchId){
   } catch (e) {
     // still leave locally even if HTTP fails
   }
+  forgetMatch(matchId);
   leaveMatchLocal("Match abandoned.");
 }
 function leaveMatchLocal(msg){

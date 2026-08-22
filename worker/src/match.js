@@ -63,31 +63,43 @@ export class Match {
 
   async persistLive() {
     try {
-      await this.state.storage.put({
-        players: this.players,
-        matchId: this.matchId,
-        ended: !!this.ended,
-        game: this.game,
-        shared40k: this.shared40k,
-        boards: this.boards
-      });
+      await this.state.storage.put("players", this.players);
+      await this.state.storage.put("matchId", this.matchId);
+      await this.state.storage.put("ended", !!this.ended);
+      await this.state.storage.put("game", this.game);
+      if (this.shared40k) await this.state.storage.put("shared40k", this.shared40k);
+      if (this.boards && Object.keys(this.boards).length) await this.state.storage.put("boards", this.boards);
     } catch (e) { console.error("persistLive", e); }
   }
 
-  async persistD1(username, payload) {
+  slimPayload(payload) {
+    if (!payload || typeof payload !== "object") return payload;
+    if (payload.game === "wh40k" && Array.isArray(payload.log) && payload.log.length > 40) {
+      return Object.assign({}, payload, { log: payload.log.slice(-40) });
+    }
+    return payload;
+  }
+
+  async persistD1(username, payload, force) {
     if (!this.matchId || !payload) return;
     const now = Date.now();
-    if (this._lastD1 && now - this._lastD1 < 2500) return;
+    if (!force && this._lastD1 && now - this._lastD1 < 2500) return;
     this._lastD1 = now;
+    const body = JSON.stringify(this.slimPayload(payload));
     try {
       await this.env.DB.prepare(
-        `INSERT INTO match_state (match_id, username, payload, updated_at)
-         VALUES (?,?,?,datetime('now'))
-         ON CONFLICT(match_id, username) DO UPDATE SET
-           payload=excluded.payload, updated_at=datetime('now')`
-      ).bind(this.matchId, username, JSON.stringify(payload)).run();
-      await this.env.DB.prepare("UPDATE matches SET updated_at=datetime('now') WHERE id=?").bind(this.matchId).run();
-    } catch (e) { console.error("persistD1", e); }
+        `INSERT OR REPLACE INTO match_state (match_id, username, payload, updated_at)
+         VALUES (?,?,?,datetime('now'))`
+      ).bind(this.matchId, username, body).run();
+      await this.env.DB.prepare("UPDATE matches SET status='active', updated_at=datetime('now') WHERE id=?").bind(this.matchId).run();
+    } catch (e) {
+      try {
+        await this.env.DB.prepare(
+          `INSERT INTO match_state (match_id, username, payload, updated_at)
+           VALUES (?,?,?,datetime('now'))`
+        ).bind(this.matchId, username, body).run();
+      } catch (e2) { console.error("persistD1", e2); }
+    }
   }
 
   async loadD1Boards(matchId) {
@@ -148,6 +160,9 @@ export class Match {
       await this.loadD1Boards(matchId);
     }
     await this.persistLive();
+    try {
+      await this.env.DB.prepare("UPDATE matches SET status='active', updated_at=datetime('now') WHERE id=?").bind(this.matchId).run();
+    } catch (_) {}
   }
 
   seatOf(username) {
@@ -193,6 +208,8 @@ export class Match {
       server.addEventListener("message", (evt) => this.onMessage(username, evt.data));
       server.addEventListener("close", () => {
         if (this.sessions.get(username) === server) this.sessions.delete(username);
+        if (this.game === "wh40k" && this.shared40k) this.persistD1("_shared", this.shared40k, true);
+        else if (this.boards[username]) this.persistD1(username, this.boards[username], true);
       });
       server.addEventListener("error", () => {
         if (this.sessions.get(username) === server) this.sessions.delete(username);
