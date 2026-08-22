@@ -286,7 +286,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.1-pvp-ready";
+const BUILD = "v2.13.2-seats";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -2492,12 +2492,20 @@ function setSync(ok){
   el.textContent = ok ? "synced" : "offline";
   el.className = "sync "+(ok?"live":"bad");
 }
-function claimSeat(snap){
-  if (snap && typeof snap.seat === "number") mySeat = snap.seat;
+function nameAt(names, seat){
+  if (!names) return "";
+  return names[String(seat)] || names[seat] || "";
+}
+function claimSeat(snap, allowNumericSeat){
   const names = (snap && snap.players) ? snap.players : (S.players || {});
-  if (names["0"] || names[0]) S.players["0"] = names["0"] || names[0];
-  if (names["1"] || names[1]) S.players["1"] = names["1"] || names[1];
-  if (who) S.players[String(mySeat)] = who;
+  if (nameAt(names, 0)) S.players["0"] = nameAt(names, 0);
+  if (nameAt(names, 1)) S.players["1"] = nameAt(names, 1);
+  if (who){
+    if (nameAt(S.players, 0) === who) mySeat = 0;
+    else if (nameAt(S.players, 1) === who) mySeat = 1;
+    else if (allowNumericSeat && snap && typeof snap.seat === "number") mySeat = snap.seat === 1 ? 1 : 0;
+    if (nameAt(S.players, mySeat) !== who) S.players[String(mySeat)] = who;
+  }
   setWho();
 }
 function startSync(){
@@ -2512,15 +2520,15 @@ function startSync(){
     let msg; try{ msg=JSON.parse(ev.data); }catch(_){ return; }
     if (!msg||!msg.type) return;
     if (msg.type==="snapshot"){
-      claimSeat(msg);
       if (msg.you && msg.you.game==="wh40k") applyRemote(msg.you);
       else if (msg.opponent && msg.opponent.game==="wh40k") applyRemote(msg.opponent);
+      claimSeat(msg, true);
       setSync(true);
       if (S.rev > 0) pushState();
     }
     if (msg.type==="opponent" && msg.opponent && msg.opponent.game==="wh40k"){
-      if (msg.players) claimSeat(msg);
       applyRemote(msg.opponent);
+      claimSeat(msg, false);
     }
     if (msg.type==="abandoned"){
       setSync(false);
@@ -2532,7 +2540,21 @@ function startSync(){
 guideOn = !!practice; // practice on, PVP off; user may toggle either way
 rollsOn = !!practice;
 renderLog(); renderPhases(); refreshTip(); refreshGuide(); setRolls(rollsOn); updateTerrainTools(); updateChargeRow(); renderActions(); resize();
-if (!practice) startSync();
+async function bindSeatFromServer(){
+  if (practice || !who || !matchId) return;
+  try{
+    const d = await fetch(API_BASE + "/api/match/" + encodeURIComponent(matchId)).then(r => r.json());
+    const list = (d && d.match && d.match.players) || [];
+    const names = { "0":"", "1":"" };
+    list.forEach(p => {
+      if (p && (p.seat === 0 || p.seat === 1)) names[String(p.seat)] = p.username || "";
+    });
+    claimSeat({ players: names, seat: names["1"] === who ? 1 : 0 }, true);
+  }catch(_){}
+}
+if (!practice){
+  bindSeatFromServer().then(() => startSync());
+}
 </script>
 </body>
 </html>

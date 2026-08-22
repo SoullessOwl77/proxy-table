@@ -285,17 +285,18 @@ export class Match {
           const prevRev = (this.shared40k && this.shared40k.rev) || 0;
           const nextRev = next.rev || 0;
           if (nextRev >= prevRev) {
-            if (!next.players) next.players = this.playerMap();
+            next.players = this.playerMap();
             this.shared40k = next;
             await this.persistLive();
             this.persistD1("_shared", next);
             const line = (next.log && next.log.length) ? next.log[next.log.length - 1] : null;
             if (line && line.line) this.note(line.line);
+            const other = this.other(username);
             this.broadcast(username, {
               type: "opponent",
               opponent: next,
               game: "wh40k",
-              seat: this.seatOf(username),
+              seat: other ? this.seatOf(other) : 1,
               players: this.playerMap()
             });
           }
