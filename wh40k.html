@@ -39,6 +39,7 @@ button:not(:disabled){cursor:pointer;}
 .btn.sm{padding:5px 8px;font-size:11px;}
 .btn.on{background:var(--brass);color:#191207;font-weight:700;}
 .btn.danger{border-color:var(--blood);color:var(--blood);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
 .sync.live{color:var(--good);} .sync.bad{color:var(--blood);}
 .spacer{flex:1;}
 /* Side rails — open the center map */
@@ -232,6 +233,7 @@ canvas.dragging{cursor:grabbing;}
     <span class="act-kicker" id="actKicker">Optional</span>
     <div id="actBtns"></div>
     <button class="btn gold" id="btnAnnounce" style="display:none">Announce</button>
+    <button class="btn sm" id="btnRevert" style="display:none" title="Put this unit back and unlock its Movement choices">Revert move</button>
     <span class="hint" id="actHint"></span>
   </div>
   <div class="row" id="rowTerrain">
@@ -272,7 +274,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.10.4-advance-dice";
+const BUILD = "v2.10.6-fight-warn";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -707,7 +709,54 @@ function beginSeatTurn(seat){
     f.advanced = false; f.fellBack = false; f.remainedStationary = false;
     f.moved = false; f.shot = false; f.charged = false; f.fought = false;
     f.advanceInches = 0; f.chargeInches = 0;
+    delete u.revert;
   });
+}
+function groupMoveState(u){
+  const bits = { advanced:false, fellBack:false, remain:false, moved:false };
+  if (!u) return bits;
+  unitGroup(u).forEach(m => {
+    const f = flagsOf(m);
+    if (f.advanced) bits.advanced = true;
+    if (f.fellBack) bits.fellBack = true;
+    if (f.remainedStationary) bits.remain = true;
+    if (f.moved) bits.moved = true;
+  });
+  bits.declared = bits.advanced || bits.fellBack || bits.remain || bits.moved;
+  return bits;
+}
+function dragLocked(u){
+  const s = groupMoveState(u);
+  return !!(s.remain || (s.moved && !s.advanced && !s.fellBack));
+}
+function snapshotGroup(u, fromId, fromPos){
+  unitGroup(u).forEach(m => {
+    if (m.revert) return;
+    if (fromId && m.id === fromId && fromPos) m.revert = { x:fromPos.x, y:fromPos.y };
+    else m.revert = { x:m.x, y:m.y };
+  });
+}
+function revertMove(){
+  const u = selectedUnit();
+  if (!u){
+    document.getElementById("dice").textContent = "Select a model first, then Revert.";
+    return;
+  }
+  if (!canControlUnit(u)){
+    document.getElementById("dice").textContent = "Active player is P"+S.turn.activeSeat+" — pick their model.";
+    return;
+  }
+  unitGroup(u).forEach(m => {
+    if (m.revert){ m.x = m.revert.x; m.y = m.revert.y; }
+    delete m.revert;
+    const f = flagsOf(m);
+    f.advanced = false; f.fellBack = false; f.remainedStationary = false;
+    f.moved = false; f.advanceInches = 0;
+  });
+  logLine(u.name+(unitGroup(u).length>1?" unit":"")+" move reverted");
+  document.getElementById("dice").textContent = "Move reverted — declare or drag again.";
+  hideWarn();
+  save(); draw(); refreshTip(); renderActions();
 }
 function inEngagement(u){
   return S.units.some(o => o.seat !== u.seat && edgeDist(u,o) <= 2.01);
@@ -731,8 +780,12 @@ function renderActions(){
   const kicker = document.getElementById("actKicker");
   const hint = document.getElementById("actHint");
   const ann = document.getElementById("btnAnnounce");
+  const rev = document.getElementById("btnRevert");
   if (!box) return;
   const phase = S.turn.phase;
+  const u = selectedUnit();
+  const moveLock = phase === "movement" && u && groupMoveState(u).declared;
+  const MOVE_ACTS = { advance:1, fallBack:1, remain:1 };
   const list = Object.values(ACTIONS).filter(a => a.phase === phase);
   if (kicker) kicker.textContent = "Optional · "+phase;
   box.innerHTML = "";
@@ -741,17 +794,22 @@ function renderActions(){
     b.className = "btn sm" + (a.placeholder ? " placeholder" : "") + (selectedAction===a.id ? " on" : "");
     b.textContent = a.label;
     b.title = a.short;
-    b.onclick = () => pickAction(a.id);
+    if (MOVE_ACTS[a.id] && moveLock){
+      b.disabled = true;
+      b.title = "Move already declared — Revert to change it.";
+    } else {
+      b.onclick = () => pickAction(a.id);
+    }
     box.appendChild(b);
   });
   const act = selectedAction && ACTIONS[selectedAction];
-  if (act && act.phase === phase && act.announce && !act.placeholder){
+  if (act && act.phase === phase && act.announce && !act.placeholder && !(MOVE_ACTS[act.id] && moveLock)){
     ann.style.display = "";
     ann.textContent = act.roll ? ("Announce "+act.label+" ("+act.roll+")") : ("Announce "+act.label);
   } else {
     ann.style.display = "none";
   }
-  const u = selectedUnit();
+  if (rev) rev.style.display = (phase === "movement" && u && canControlUnit(u) && groupMoveState(u).declared) ? "" : "none";
   const cp = (S.cp && S.cp[S.turn.activeSeat]) || 0;
   if (!hint) return;
   if (phase === "command") hint.textContent = "P"+S.turn.activeSeat+" CP: "+cp+(u ? " · "+u.name : "");
@@ -793,17 +851,13 @@ function announceAction(){
     return;
   }
   const group = unitGroup(u);
-  const f0 = flagsOf(u);
+  const st = groupMoveState(u);
   if (a.id === "advance"){
-    if (group.some(m => flagsOf(m).advanced)){
-      showWarn("<strong>Advance:</strong> this unit already Advanced this phase.");
+    if (st.declared){
+      showWarn("<strong>Advance:</strong> this unit already chose a move. Revert first.");
       return;
     }
-    if (group.some(m => flagsOf(m).moved && !flagsOf(m).advanced)){
-      showWarn("<strong>Advance:</strong> already made a Normal Move — declare Advance instead of moving first.");
-      return;
-    }
-    if (group.some(m => flagsOf(m).fellBack)){ showWarn("<strong>Advance:</strong> this unit already Fell Back."); return; }
+    snapshotGroup(u);
     const d = d6();
     group.forEach(m => { const f=flagsOf(m); f.advanced=true; f.advanceInches=d; f.moved=true; f.remainedStationary=false; });
     const cap = (u.M||6)+d;
@@ -811,14 +865,24 @@ function announceAction(){
     document.getElementById("dice").textContent = "Advance [ "+d+" ] → move up to "+cap+"″ from base edge";
     setSimpleRoll("Advance", u.name, [d], "M"+(u.M||6)+" + "+d+" = "+cap+"″ from base edge");
   } else if (a.id === "fallBack"){
+    if (st.declared){
+      showWarn("<strong>Fall Back:</strong> this unit already chose a move. Revert first.");
+      return;
+    }
     if (!inEngagement(u) && !group.some(inEngagement)){
       showWarn("<strong>Fall Back:</strong> this model is not in 2″ Engagement Range.");
       return;
     }
+    snapshotGroup(u);
     group.forEach(m => { const f=flagsOf(m); f.fellBack=true; f.moved=true; f.advanced=false; });
     logLine(u.name+(group.length>1?" unit":"")+" Falls Back");
     document.getElementById("dice").textContent = "Fell Back — leave ER; usually cannot shoot or charge.";
   } else if (a.id === "remain"){
+    if (st.declared){
+      showWarn("<strong>Remain Stationary:</strong> this unit already chose a move. Revert first.");
+      return;
+    }
+    snapshotGroup(u);
     group.forEach(m => { const f=flagsOf(m); f.remainedStationary=true; f.moved=true; });
     logLine(u.name+" Remains Stationary");
     document.getElementById("dice").textContent = "Remained Stationary.";
@@ -1582,6 +1646,7 @@ document.getElementById("btnDemo").onclick = demoForces;
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
 document.getElementById("btnChargeRoll").onclick = rollCharge;
 document.getElementById("btnAnnounce").onclick = announceAction;
+document.getElementById("btnRevert").onclick = revertMove;
 document.getElementById("btnWarnClose").onclick = () => { hideCoherencyWarn(); hideWarn(); };
 document.getElementById("btnRotL").onclick = () => rotSel(-15);
 document.getElementById("btnRotR").onclick = () => rotSel(15);
@@ -1707,6 +1772,7 @@ function resolveAttack(){
     }
   } else if (!pw.er){
     document.getElementById("dice").textContent = "Not in 2\" Engagement Range.";
+    showWarn("<strong>Fight:</strong> not in 2″ Engagement Range.");
     return;
   }
   const cov = inCover(tgt, atk);
@@ -1852,9 +1918,18 @@ canvas.addEventListener("pointerdown", e => {
   if (hu){
     selectObj("u", hu);
     if (canControlUnit(hu)){
-      mode="move";
-      drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
-      moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
+      if (dragLocked(hu)){
+        mode="pan";
+        drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
+        moveOrigin = null;
+        const f = flagsOf(hu);
+        if (f.remainedStationary) showWarn("<strong>Remain Stationary:</strong> this unit will not move. Revert to take it back.");
+        else showWarn("<strong>Move committed:</strong> Revert to place this unit again.");
+      } else {
+        mode="move";
+        drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+        moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
+      }
     } else {
       /* Enemy / inactive seat — inspect only; drag pans the map */
       mode="pan";
@@ -1900,7 +1975,7 @@ canvas.addEventListener("pointermove", e => {
       t.x=Math.max(t.w/2,Math.min(W-t.w/2,wpt.x-drag.ox));
       t.y=Math.max(t.h/2,Math.min(H-t.h/2,wpt.y-drag.oy));
     } else {
-      const u=S.units.find(x=>x.id===drag.id); if(!u || !canControlUnit(u)) return;
+      const u=S.units.find(x=>x.id===drag.id); if(!u || !canControlUnit(u) || dragLocked(u)) return;
       const r=unitR(u);
       u.x=Math.max(r,Math.min(W-r,wpt.x-drag.ox));
       u.y=Math.max(r,Math.min(H-r,wpt.y-drag.oy));
@@ -1926,7 +2001,8 @@ function endPtr(e){
           if (f.remainedStationary){
             showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
           } else {
-            f.moved = true;
+            snapshotGroup(u, u.id, from);
+            unitGroup(u).forEach(m => { flagsOf(m).moved = true; });
           }
           logLine("Moved "+u.name+" "+dist.toFixed(1)+"\"");
           if (overlapsEnemy(u)){
