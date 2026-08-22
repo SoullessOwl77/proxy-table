@@ -272,7 +272,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.10.3-tap-move";
+const BUILD = "v2.10.4-advance-dice";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -655,6 +655,7 @@ function rollCharge(){
   f.chargeInches = total;
   logLine(u.name + " charge roll " + d1 + "+" + d2 + " = " + total + "″");
   document.getElementById("dice").textContent = "Charge [" + d1 + "] [" + d2 + "] = " + total + "″ from base edge";
+  setSimpleRoll("Charge", u.name, [d1, d2], d1+"+"+d2+" = "+total+"″ from base edge");
   updateChargeRow();
   draw();
   refreshTip();
@@ -794,12 +795,21 @@ function announceAction(){
   const group = unitGroup(u);
   const f0 = flagsOf(u);
   if (a.id === "advance"){
-    if (f0.moved && !f0.advanced){ showWarn("<strong>Advance:</strong> already made a Normal Move — declare Advance instead of moving first."); return; }
-    if (f0.fellBack){ showWarn("<strong>Advance:</strong> this unit already Fell Back."); return; }
+    if (group.some(m => flagsOf(m).advanced)){
+      showWarn("<strong>Advance:</strong> this unit already Advanced this phase.");
+      return;
+    }
+    if (group.some(m => flagsOf(m).moved && !flagsOf(m).advanced)){
+      showWarn("<strong>Advance:</strong> already made a Normal Move — declare Advance instead of moving first.");
+      return;
+    }
+    if (group.some(m => flagsOf(m).fellBack)){ showWarn("<strong>Advance:</strong> this unit already Fell Back."); return; }
     const d = d6();
     group.forEach(m => { const f=flagsOf(m); f.advanced=true; f.advanceInches=d; f.moved=true; f.remainedStationary=false; });
-    logLine(u.name+(group.length>1?" unit":"")+" Advances "+d+"″ (M+"+d+" = "+((u.M||6)+d)+"″)");
-    document.getElementById("dice").textContent = "Advance [ "+d+" ] → move up to "+((u.M||6)+d)+"″ from base edge";
+    const cap = (u.M||6)+d;
+    logLine(u.name+(group.length>1?" unit":"")+" Advances "+d+"″ (M+"+d+" = "+cap+"″)");
+    document.getElementById("dice").textContent = "Advance [ "+d+" ] → move up to "+cap+"″ from base edge";
+    setSimpleRoll("Advance", u.name, [d], "M"+(u.M||6)+" + "+d+" = "+cap+"″ from base edge");
   } else if (a.id === "fallBack"){
     if (!inEngagement(u) && !group.some(inEngagement)){
       showWarn("<strong>Fall Back:</strong> this model is not in 2″ Engagement Range.");
@@ -822,6 +832,7 @@ function announceAction(){
     flagsOf(u).battleShock = fail;
     logLine(u.name+" Battle-shock "+d1+"+"+d2+"="+tot+" vs Ld "+ld+" → "+(fail?"FAILED":"passed"));
     document.getElementById("dice").textContent = "Battle-shock ["+d1+"] ["+d2+"] = "+tot+" vs Ld "+ld+" — "+(fail?"failed":"passed");
+    setSimpleRoll("Battle-shock", u.name, [d1, d2], tot+" vs Ld "+ld+" — "+(fail?"failed":"passed"));
     if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed (2D6 &lt; Ld). Flagged this turn.");
     else hideWarn();
   } else if (a.id === "pileIn"){
@@ -1060,6 +1071,10 @@ function setRolls(on){
   btn.classList.toggle("gold", rollsOn);
   if (rollsOn) renderRollPanel();
 }
+function setSimpleRoll(title, name, rolls, note){
+  lastRoll = { kind:"simple", title, name, rolls, note };
+  renderRollPanel();
+}
 function renderRollPanel(){
   const body = document.getElementById("rollBody");
   if (!lastRoll){
@@ -1069,6 +1084,16 @@ function renderRollPanel(){
   }
   body.className = "";
   const R = lastRoll;
+  if (R.kind === "simple"){
+    let html = `<div class="summary"><strong>${R.title}</strong> · ${R.name}<br>${R.note || ""}</div>
+      <div class="step"><h4>Roll</h4><div>`;
+    (R.rolls || []).forEach(n => {
+      html += `<span class="die ok">${n}</span>`;
+    });
+    html += `</div></div>`;
+    body.innerHTML = html;
+    return;
+  }
   const skillLabel = R.kind === "ranged" ? "BS" : "WS";
   let html = `<div class="summary"><strong>${R.atkName}</strong> → <strong>${R.tgtName}</strong><br>
     ${R.wepName} · A${R.attacks} · ${skillLabel} ${R.skill}+ · S${R.S} AP${R.AP} D${R.D}
