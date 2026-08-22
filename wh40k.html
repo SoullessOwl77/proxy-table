@@ -15,7 +15,7 @@
   --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
   --edge-l:env(safe-area-inset-left,0px);
   --edge-r:env(safe-area-inset-right,0px);
-  --rail-l:62px;
+  --rail-l:88px;
   --rail-r:92px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -50,7 +50,8 @@ button:not(:disabled){cursor:pointer;}
   padding:8px 6px;padding-top:calc(8px + env(safe-area-inset-top,0px));
   padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));
   width:var(--rail-l);background:#1b2825f0;border:none;backdrop-filter:blur(8px);overflow-y:auto;overflow-x:hidden;}
-.rail.left{left:0;padding-left:calc(6px + var(--edge-l));border-right:1px solid #0008;}
+.rail.left{left:0;width:calc(var(--rail-l) + var(--edge-l));
+  padding-left:calc(8px + var(--edge-l));padding-right:7px;border-right:1px solid #0008;}
 .rail.right{right:0;width:calc(var(--rail-r) + var(--edge-r));
   padding-left:7px;padding-right:calc(8px + var(--edge-r));border-left:1px solid #0008;}
 .rail .btn{width:100%;padding:8px 5px;font-size:10px;line-height:1.2;text-align:center;
@@ -61,7 +62,7 @@ button:not(:disabled){cursor:pointer;}
 .rail .rail-gap{flex:1;min-height:6px;}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;}
 canvas.dragging{cursor:grabbing;}
-.dock{position:fixed;left:var(--rail-l);right:calc(var(--rail-r) + var(--edge-r));bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
+.dock{position:fixed;left:calc(var(--rail-l) + var(--edge-l));right:calc(var(--rail-r) + var(--edge-r));bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
   padding:6px 10px calc(6px + env(safe-area-inset-bottom,0px));
   background:transparent;pointer-events:none;max-width:none;}
 .dock .row{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
@@ -109,7 +110,7 @@ canvas.dragging{cursor:grabbing;}
   text-align:center;z-index:40;padding:24px;}
 .rotate h2{font-family:Fraunces,serif;font-weight:400;}
 @media (orientation:portrait) and (max-width:860px){.rotate{display:flex;}}
-.guide{position:fixed;top:40px;left:calc(70px + var(--edge-l));z-index:5;width:min(300px,34vw);
+.guide{position:fixed;top:40px;left:calc(var(--rail-l) + var(--edge-l) + 8px);z-index:5;width:min(300px,34vw);
   background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
   max-height:calc(100vh - 160px);overflow:auto;box-shadow:0 8px 24px #0008;display:none;}
 .guide.on{display:block;}
@@ -141,7 +142,7 @@ canvas.dragging{cursor:grabbing;}
 .rollpanel .math{color:var(--parchment-dim);font-size:11px;margin-top:2px;}
 .rollpanel .empty{color:var(--parchment-dim);font-style:italic;}
 @media (max-width:900px){
-  :root{ --rail-l:56px; --rail-r:80px; }
+  :root{ --rail-l:76px; --rail-r:80px; }
   .tips{width:min(240px,36vw);font-size:12px;}
   .guide{width:min(250px,38vw);font-size:12px;}
   .rollpanel{width:min(260px,40vw);font-size:11px;}
@@ -159,7 +160,7 @@ canvas.dragging{cursor:grabbing;}
   <button class="btn sm" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
-  <button class="btn sm danger" id="btnReset" title="Clear the practice table and start over" style="display:none">Reset</button>
+  <button class="btn sm danger" id="btnReset" title="Reset">Reset</button>
   <button class="btn sm" id="btnSetup" title="Return to setup — place terrain and units. Battle phases do not come back here.">Setup</button>
   <div class="rail-label">Tools</div>
   <button class="btn sm on" data-tool="terrain">Terrain</button>
@@ -285,7 +286,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.0-pvp";
+const BUILD = "v2.13.1-pvp-ready";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -604,7 +605,9 @@ function emptyBoard(){
     turn:{ battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false },
     cp:{ "0":1, "1":0 },
     log:[], players:{ "0": practice ? who : "", "1": "" },
-    chargeRolls:{}
+    chargeRolls:{},
+    ready:{ "0":false, "1":false },
+    resetAsk:{ "0":false, "1":false }
   };
 }
 let S = emptyBoard();
@@ -618,6 +621,8 @@ if (S.turn.deploymentDone === false && S.turn.phase === "command") S.turn.phase 
 if (!S.cp) S.cp = { "0":1, "1":0 };
 if (!S.chargeRolls) S.chargeRolls = {};
 if (!S.players) S.players = { "0": practice ? who : "", "1": "" };
+if (!S.ready) S.ready = { "0":false, "1":false };
+if (!S.resetAsk) S.resetAsk = { "0":false, "1":false };
 function bumpIds(){
   nid = 1; uidn = 1;
   (S.terrain||[]).forEach(t => {
@@ -650,10 +655,16 @@ function renderPhases(){
   const el = document.getElementById("phases");
   const nextBtn = document.getElementById("btnNext");
   if (nextBtn){
-    nextBtn.textContent = inSetup() ? "Start battle" : "Next";
-    nextBtn.title = inSetup()
-      ? "Lock terrain and begin Command"
-      : "Advance to the next phase (or the other player’s turn)";
+    if (!inSetup()){
+      nextBtn.textContent = "Next";
+      nextBtn.title = "Advance to the next phase (or the other player’s turn)";
+    } else if (!practice && S.ready && S.ready[String(mySeat)] && !(S.ready[mySeat===0?"1":"0"])){
+      nextBtn.textContent = "Waiting…";
+      nextBtn.title = "Waiting for the other player to press Start battle";
+    } else {
+      nextBtn.textContent = "Start battle";
+      nextBtn.title = "Both players ready + units on the table, then lock terrain";
+    }
   }
   if (inSetup()){
     el.innerHTML = `<button class="btn on" type="button">setup</button>`
@@ -1152,12 +1163,49 @@ function lockAllTerrain(reason){
   } else if (n) logLine("Locked "+n+" terrain piece(s)");
   updateTerrainTools();
 }
+function seatUnitsOnTable(seat){
+  return (S.units||[]).filter(u => u.seat === seat && !u.reserved);
+}
+function requestStartBattle(){
+  if (!inSetup()) return false;
+  const mine = seatUnitsOnTable(mySeat);
+  const otherSeat = mySeat === 0 ? 1 : 0;
+  const theirs = seatUnitsOnTable(otherSeat);
+  if (!mine.length){
+    showWarn("<strong>Start battle:</strong> deploy at least one of your units first.");
+    return false;
+  }
+  if (practice){
+    if (!theirs.length){
+      showWarn("<strong>Start battle:</strong> place units for both seats first (Demo forces, or drop each side).");
+      return false;
+    }
+    startBattle();
+    return true;
+  }
+  if (!theirs.length){
+    showWarn("<strong>Start battle:</strong> wait until your opponent has at least one unit on the table.");
+    return false;
+  }
+  if (!S.ready) S.ready = { "0":false, "1":false };
+  S.ready[String(mySeat)] = true;
+  if (!S.ready[String(otherSeat)]){
+    logLine((who || ("P"+mySeat)) + " is ready — waiting for the other player to press Start battle");
+    showWarn("<strong>Ready.</strong> Waiting for the other player to press Start battle.");
+    return true;
+  }
+  startBattle();
+  S.ready = { "0":false, "1":false };
+  return true;
+}
 function startBattle(){
   if (!inSetup()) return;
   lockAllTerrain("Setup done — terrain locked for battle");
   S.turn.phase = "command";
   S.turn.activeSeat = S.turn.activeSeat || 0;
   if (who) S.players[String(mySeat)] = who;
+  S.ready = { "0":false, "1":false };
+  S.resetAsk = { "0":false, "1":false };
   selectedAction = null;
   clearCombatPair();
   /* Setup placement is not a Movement-phase move. */
@@ -1234,7 +1282,7 @@ function setPhase(p){
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
   if (inSetup()){
-    startBattle();
+    requestStartBattle();
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
     return;
   }
@@ -1469,7 +1517,7 @@ function toWorld(sx, sy){
 function fit(){
   /* Use the open map well between side rails; pin the board’s top edge
      under the thin status bar (not dead-centered with huge empty margins). */
-  const railL = window.matchMedia("(max-width:900px)").matches ? 56 : 62;
+  const railL = window.matchMedia("(max-width:900px)").matches ? 76 : 88;
   const railR = window.matchMedia("(max-width:900px)").matches ? 80 : 92;
   const topUI = 36;
   const botUI = 88;
@@ -1893,8 +1941,30 @@ document.getElementById("pageTitle").onclick = () => {
   /* Hard reload so mobile PWAs without a browser chrome can pick up new SW/assets */
   location.reload();
 };
+function requestMatchReset(){
+  if (!S.resetAsk) S.resetAsk = { "0":false, "1":false };
+  S.resetAsk[String(mySeat)] = true;
+  const other = mySeat === 0 ? 1 : 0;
+  if (!S.resetAsk[String(other)]){
+    logLine((who || ("P"+mySeat)) + " wants to reset to setup — opponent must press Reset too");
+    showWarn("<strong>Reset:</strong> waiting for the other player to press Reset. Keeps units; returns to setup.");
+    save(); renderPhases();
+    return;
+  }
+  S.resetAsk = { "0":false, "1":false };
+  S.ready = { "0":false, "1":false };
+  enterSetup();
+  (S.units||[]).forEach(u => {
+    const f = flagsOf(u);
+    f.advanced = false; f.fellBack = false; f.remainedStationary = false;
+    f.moved = false; f.shot = false; f.charged = false; f.fought = false;
+    f.advanceInches = 0; f.chargeInches = 0; f.ingressed = false;
+    delete u.revert;
+  });
+  logLine("Both players reset to setup");
+  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+}
 function resetPractice(){
-  if (!practice) return;
   if (!confirm("Reset the practice table?\nClears terrain, units, turn, and log.")) return;
   S = emptyBoard();
   selected = null;
@@ -1912,7 +1982,7 @@ function resetPractice(){
   refreshGuide();
   updateTerrainTools();
 }
-document.getElementById("btnReset").onclick = resetPractice;
+document.getElementById("btnReset").onclick = () => practice ? resetPractice() : requestMatchReset();
 document.getElementById("btnSetup").onclick = () => {
   if (!practice){
     document.getElementById("dice").textContent = "Setup return is practice-only.";
@@ -1922,8 +1992,11 @@ document.getElementById("btnSetup").onclick = () => {
   save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
   showTip(TIPS.setup);
 };
-if (practice) document.getElementById("btnReset").style.display = "";
-else {
+document.getElementById("btnReset").style.display = "";
+document.getElementById("btnReset").title = practice
+  ? "Clear the practice table and start over"
+  : "Both players press Reset to return to setup (units stay)";
+if (!practice){
   const su = document.getElementById("btnSetup");
   if (su) su.style.display = "none";
 }
@@ -2382,7 +2455,18 @@ function applyRemote(board){
   if (!S.log) S.log=[];
   if (!S.chargeRolls) S.chargeRolls={};
   if (!S.players) S.players={ "0":"", "1":"" };
+  if (!S.ready) S.ready={ "0":false, "1":false };
+  if (!S.resetAsk) S.resetAsk={ "0":false, "1":false };
   bumpIds();
+  if (inSetup() && !practice){
+    const other = mySeat===0 ? 1 : 0;
+    if (S.ready[String(other)] && !S.ready[String(mySeat)]){
+      showWarn("<strong>Ready:</strong> the other player pressed Start battle. Press it when your units are down.");
+    }
+    if (S.resetAsk[String(other)] && !S.resetAsk[String(mySeat)]){
+      showWarn("<strong>Reset:</strong> the other player wants to return to setup. Press Reset to confirm.");
+    }
+  }
   if (selected && selected.kind==="u" && !S.units.some(u => u.id===selected.id)) selected=null;
   if (selected && selected.kind==="t" && !S.terrain.some(t => t.id===selected.id)) selected=null;
   if (attackerId && !S.units.some(u => u.id===attackerId)) attackerId=null;

@@ -55,15 +55,76 @@ export class Match {
     if (this.activity.length > 30) this.activity = this.activity.slice(-30);
   }
 
+  storageVal(stored, key) {
+    if (!stored) return undefined;
+    if (typeof stored.get === "function") return stored.get(key);
+    return stored[key];
+  }
+
+  async persistLive() {
+    try {
+      await this.state.storage.put({
+        players: this.players,
+        matchId: this.matchId,
+        ended: !!this.ended,
+        game: this.game,
+        shared40k: this.shared40k,
+        boards: this.boards
+      });
+    } catch (e) { console.error("persistLive", e); }
+  }
+
+  async persistD1(username, payload) {
+    if (!this.matchId || !payload) return;
+    const now = Date.now();
+    if (this._lastD1 && now - this._lastD1 < 2500) return;
+    this._lastD1 = now;
+    try {
+      await this.env.DB.prepare(
+        `INSERT INTO match_state (match_id, username, payload, updated_at)
+         VALUES (?,?,?,datetime('now'))
+         ON CONFLICT(match_id, username) DO UPDATE SET
+           payload=excluded.payload, updated_at=datetime('now')`
+      ).bind(this.matchId, username, JSON.stringify(payload)).run();
+      await this.env.DB.prepare("UPDATE matches SET updated_at=datetime('now') WHERE id=?").bind(this.matchId).run();
+    } catch (e) { console.error("persistD1", e); }
+  }
+
+  async loadD1Boards(matchId) {
+    try {
+      const { results } = await this.env.DB.prepare(
+        "SELECT username, payload FROM match_state WHERE match_id=?"
+      ).bind(matchId).all();
+      for (const r of results || []) {
+        let payload;
+        try { payload = JSON.parse(r.payload); } catch (_) { continue; }
+        if (payload && payload.game === "wh40k") {
+          if (!this.shared40k || (payload.rev || 0) >= (this.shared40k.rev || 0)) this.shared40k = payload;
+        } else if (r.username && payload) {
+          this.boards[r.username] = payload;
+        }
+      }
+    } catch (e) { console.error("loadD1Boards", e); }
+  }
+
   async ensureLoaded(matchId) {
-    if (this.players.length > 0 && this.game) return;
-    const stored = await this.state.storage.get(["players", "matchId", "ended", "shared40k", "game"]);
-    if (stored.players && stored.players.length === 2) {
-      this.players = stored.players;
-      this.matchId = stored.matchId;
-      this.ended = !!stored.ended;
-      if (stored.shared40k) this.shared40k = stored.shared40k;
-      if (stored.game) this.game = stored.game;
+    if (this.players.length > 0 && this.game && (this.game !== "wh40k" ? Object.keys(this.boards).length : this.shared40k)) {
+      return;
+    }
+    const stored = await this.state.storage.get(["players", "matchId", "ended", "shared40k", "game", "boards"]);
+    const players = this.storageVal(stored, "players");
+    const sid = this.storageVal(stored, "matchId");
+    const ended = this.storageVal(stored, "ended");
+    const shared40k = this.storageVal(stored, "shared40k");
+    const game = this.storageVal(stored, "game");
+    const boards = this.storageVal(stored, "boards");
+    if (players && players.length === 2) {
+      this.players = players;
+      this.matchId = sid || matchId;
+      this.ended = !!ended;
+      if (shared40k) this.shared40k = shared40k;
+      if (game) this.game = game;
+      if (boards && typeof boards === "object") this.boards = Object.assign({}, this.boards, boards);
     }
     if (!matchId) matchId = this.matchId;
     if (!matchId) throw new Error("matchId required");
@@ -83,13 +144,10 @@ export class Match {
         this.game = this.shared40k ? "wh40k" : "mtg";
       }
     }
-    await this.state.storage.put({
-      players: this.players,
-      matchId,
-      ended: !!this.ended,
-      game: this.game,
-      shared40k: this.shared40k
-    });
+    if ((this.game === "wh40k" && !this.shared40k) || (this.game !== "wh40k" && !Object.keys(this.boards).length)) {
+      await this.loadD1Boards(matchId);
+    }
+    await this.persistLive();
   }
 
   seatOf(username) {
@@ -229,7 +287,8 @@ export class Match {
           if (nextRev >= prevRev) {
             if (!next.players) next.players = this.playerMap();
             this.shared40k = next;
-            try { await this.state.storage.put({ shared40k: next, game: "wh40k" }); } catch (_) {}
+            await this.persistLive();
+            this.persistD1("_shared", next);
             const line = (next.log && next.log.length) ? next.log[next.log.length - 1] : null;
             if (line && line.line) this.note(line.line);
             this.broadcast(username, {
@@ -243,6 +302,8 @@ export class Match {
           break;
         }
         this.boards[username] = next;
+        await this.persistLive();
+        this.persistD1(username, next);
         if (prev) {
           if (typeof next.life === "number" && next.life !== prev.life) {
             this.note(`${username} life ${prev.life} → ${next.life}`);

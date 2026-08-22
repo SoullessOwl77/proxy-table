@@ -779,7 +779,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.2-40k-pvp";
+const BUILD = "v2.7.3-match-persist";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1160,8 +1160,10 @@ $("#bkAdd").onclick = async () => {
    MATCHES + CHALLENGES
    ============================================================ */
 async function loadMatches(){
-  try{ const d = await api("/api/matches?username=" + encodeURIComponent(currentUser)); renderMatches(d.matches); }
-  catch(e){ /* offline: leave whatever was already shown */ }
+  try{
+    const d = await api("/api/matches?username=" + encodeURIComponent(currentUser));
+    renderMatches((d && d.matches) || []);
+  } catch(e){ /* offline: leave whatever was already shown */ }
 }
 function relTime(iso){
   const s = (Date.now() - new Date(iso+"Z").getTime()) / 1000;
@@ -1172,7 +1174,7 @@ function relTime(iso){
 }
 function renderMatches(matches){
   const el = $("#matchList");
-  if (!matches.length){ el.innerHTML = `<p class="hint">No matches yet — start one from a game below.</p>`; return; }
+  if (!matches || !matches.length){ el.innerHTML = `<p class="hint">No matches yet — start one from a game below.</p>`; return; }
   el.innerHTML = matches.map(m => {
     const opp = m.opponent || "waiting";
     const game = m.game === "wh40k" ? "wh40k" : "mtg";
