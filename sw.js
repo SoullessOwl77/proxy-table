@@ -1,11 +1,11 @@
 /* Proxy Table service worker — app shell + card art caching, plus
    push notifications for challenges and nudges. */
 
-const SHELL = "pt-shell-v8";
+const SHELL = "pt-shell-v9";
 const ART = "pt-art-v1";
 const ART_LIMIT = 900;
 
-const SHELL_FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
+const SHELL_FILES = ["./", "./index.html", "./wh40k.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
@@ -73,7 +73,8 @@ self.addEventListener("notificationclick", e => {
   const d = e.notification.data || {};
   let url = "./index.html";
   if (d.type === "match" && d.matchId) {
-    url = `./index.html?match=${encodeURIComponent(d.matchId)}`;
+    const g = d.game === "wh40k" ? "&game=wh40k" : (d.game ? "&game=" + encodeURIComponent(d.game) : "");
+    url = `./index.html?match=${encodeURIComponent(d.matchId)}${g}`;
   } else if (d.type === "challenge" && d.code) {
     url = `./index.html?code=${encodeURIComponent(d.code)}`;
   }

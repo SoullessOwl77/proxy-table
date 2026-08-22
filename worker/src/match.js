@@ -1,7 +1,11 @@
 /* Match Durable Object — one instance per active match.
    Holds both seats' live state in memory and speaks WebSockets.
    On confirmed end it writes a lightweight result row and deletes
-   the heavy match data from D1. */
+   the heavy match data from D1.
+
+   MTG: per-username boards (private hand/library).
+   40K: one shared BoardState (last-write-wins by rev), persisted so
+   rejoin / title-tap / DO hibernation restore the table. */
 
 import { sendPush } from "./webpush.js";
 
@@ -10,8 +14,10 @@ export class Match {
     this.state = state;
     this.env = env;
     this.sessions = new Map(); // username -> WebSocket
-    this.boards = {};          // username -> full private state (in-memory only)
-    this.players = [];         // [username0, username1]
+    this.boards = {};          // username -> full private state (MTG, in-memory)
+    this.shared40k = null;     // shared BoardState for game==="wh40k"
+    this.game = null;          // "mtg" | "wh40k"
+    this.players = [];         // [username0, username1] seat order
     this.matchId = null;
     this.ended = false;
     this.activity = [];        // recent human-readable lines for catch-up
@@ -50,30 +56,54 @@ export class Match {
   }
 
   async ensureLoaded(matchId) {
-    if (this.players.length > 0) return;
-    // Try durable storage first (survives hibernation)
-    const stored = await this.state.storage.get(["players", "matchId", "ended"]);
+    if (this.players.length > 0 && this.game) return;
+    const stored = await this.state.storage.get(["players", "matchId", "ended", "shared40k", "game"]);
     if (stored.players && stored.players.length === 2) {
       this.players = stored.players;
       this.matchId = stored.matchId;
       this.ended = !!stored.ended;
-      return;
+      if (stored.shared40k) this.shared40k = stored.shared40k;
+      if (stored.game) this.game = stored.game;
     }
-    // Cold start — load from D1
+    if (!matchId) matchId = this.matchId;
     if (!matchId) throw new Error("matchId required");
     this.matchId = matchId;
-    const { results } = await this.env.DB.prepare(
-      "SELECT username, seat FROM match_players WHERE match_id = ? ORDER BY seat"
-    ).bind(matchId).all();
-    if (!results || results.length < 2) throw new Error("match not found or incomplete");
-    this.players = results.map(r => r.username);
-    await this.state.storage.put({ players: this.players, matchId, ended: false });
+    if (!this.players.length) {
+      const { results } = await this.env.DB.prepare(
+        "SELECT username, seat FROM match_players WHERE match_id = ? ORDER BY seat"
+      ).bind(matchId).all();
+      if (!results || results.length < 2) throw new Error("match not found or incomplete");
+      this.players = results.map(r => r.username);
+    }
+    if (!this.game) {
+      try {
+        const row = await this.env.DB.prepare("SELECT game FROM matches WHERE id = ?").bind(matchId).first();
+        this.game = (row && row.game) === "wh40k" ? "wh40k" : "mtg";
+      } catch (_) {
+        this.game = this.shared40k ? "wh40k" : "mtg";
+      }
+    }
+    await this.state.storage.put({
+      players: this.players,
+      matchId,
+      ended: !!this.ended,
+      game: this.game,
+      shared40k: this.shared40k
+    });
+  }
+
+  seatOf(username) {
+    const i = this.players.indexOf(username);
+    return i < 0 ? 0 : i;
+  }
+
+  playerMap() {
+    return { "0": this.players[0] || "", "1": this.players[1] || "" };
   }
 
   async fetch(request) {
     const url = new URL(request.url);
 
-    // WebSocket upgrade
     if (request.headers.get("Upgrade") === "websocket") {
       const username = (url.searchParams.get("username") || "").trim();
       if (!username) return new Response("username required", { status: 400 });
@@ -96,7 +126,6 @@ export class Match {
       const [client, server] = Object.values(pair);
       server.accept();
 
-      // Drop any previous socket for this user (re-connect / second tab)
       const prev = this.sessions.get(username);
       if (prev) {
         try { prev.close(1000, "replaced"); } catch (_) {}
@@ -111,13 +140,17 @@ export class Match {
         if (this.sessions.get(username) === server) this.sessions.delete(username);
       });
 
-      // Send current snapshot + recent activity for catch-up
+      const forty = this.game === "wh40k";
+      const board = forty ? this.shared40k : (this.boards[username] || null);
       this.sendTo(username, {
         type: "snapshot",
-        you: this.boards[username] || null,
-        opponent: this.publicView(this.other(username)),
+        you: forty ? board : (this.boards[username] || null),
+        opponent: forty ? board : this.publicView(this.other(username)),
         opponentName: this.other(username),
-        activity: this.activity.slice(-15)
+        activity: this.activity.slice(-15),
+        seat: this.seatOf(username),
+        players: this.playerMap(),
+        game: this.game || "mtg"
       });
 
       return new Response(null, { status: 101, webSocket: client });
@@ -133,6 +166,7 @@ export class Match {
   /* Strip private info so the opponent only sees public zones.
      40K is a shared table — send the full BoardState. */
   publicView(username) {
+    if (this.game === "wh40k") return this.shared40k;
     const s = this.boards[username];
     if (!s) return null;
     if (s.game === "wh40k") return s;
@@ -188,8 +222,27 @@ export class Match {
       case "state": {
         const prev = this.boards[username];
         const next = msg.payload || {};
+        if (next.game === "wh40k" || this.game === "wh40k") {
+          this.game = "wh40k";
+          const prevRev = (this.shared40k && this.shared40k.rev) || 0;
+          const nextRev = next.rev || 0;
+          if (nextRev >= prevRev) {
+            if (!next.players) next.players = this.playerMap();
+            this.shared40k = next;
+            try { await this.state.storage.put({ shared40k: next, game: "wh40k" }); } catch (_) {}
+            const line = (next.log && next.log.length) ? next.log[next.log.length - 1] : null;
+            if (line && line.line) this.note(line.line);
+            this.broadcast(username, {
+              type: "opponent",
+              opponent: next,
+              game: "wh40k",
+              seat: this.seatOf(username),
+              players: this.playerMap()
+            });
+          }
+          break;
+        }
         this.boards[username] = next;
-        // Log meaningful public changes for catch-up
         if (prev) {
           if (typeof next.life === "number" && next.life !== prev.life) {
             this.note(`${username} life ${prev.life} → ${next.life}`);
@@ -216,12 +269,11 @@ export class Match {
           this.note(`${username} nudged`);
           const other = this.other(username);
           if (other) {
-            // Fire-and-forget push so it still arrives if their app is backgrounded
             this.pushTo(other, {
               title: username,
               body: (p && p.message) || "Your move.",
               tag: "nudge-" + (this.matchId || ""),
-              data: { type: "match", matchId: this.matchId }
+              data: { type: "match", matchId: this.matchId, game: this.game || "mtg" }
             });
           }
         }
@@ -240,14 +292,12 @@ export class Match {
       }
 
       case "end": {
-        // Confirmed win/loss from one of the clients — ends the match
         if (!msg.winner || !msg.loser) return;
         await this.finish(msg.winner, msg.loser, msg.winnerDeck || "Unknown", msg.loserDeck || "Unknown", msg.format || "freeform");
         break;
       }
 
       case "result": {
-        // Record a win/loss without ending the match (before a mutual New Game)
         if (!msg.winner || !msg.loser) return;
         try {
           const id = crypto.randomUUID();
@@ -274,7 +324,6 @@ export class Match {
       }
 
       case "abandon": {
-        // One player walked away — notify the other, wipe match, no result row
         this.ended = true;
         await this.state.storage.put("ended", true);
         this.broadcast(username, { type: "abandoned", by: username });
@@ -309,7 +358,6 @@ export class Match {
         VALUES (?, ?, ?, ?, ?, ?)
       `).bind(id, winner, winnerDeck, loser, loserDeck, format).run();
 
-      // Wipe the heavy live data
       if (this.matchId) {
         await this.env.DB.prepare("DELETE FROM match_events WHERE match_id = ?").bind(this.matchId).run();
         await this.env.DB.prepare("DELETE FROM match_state  WHERE match_id = ?").bind(this.matchId).run();
@@ -320,11 +368,9 @@ export class Match {
       console.error("finish error", e);
     }
 
-    // Tell both clients the match is over
     const result = { type: "ended", winner, loser, winnerDeck, loserDeck };
     for (const u of this.players) this.sendTo(u, result);
 
-    // Close sockets after a short delay so the message can land
     setTimeout(() => {
       for (const ws of this.sessions.values()) {
         try { ws.close(1000, "match ended"); } catch (_) {}

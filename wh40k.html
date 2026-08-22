@@ -285,7 +285,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.12.3-rail-right";
+const BUILD = "v2.13.0-pvp";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -569,16 +569,19 @@ const params = new URLSearchParams(location.search);
 const matchId = params.get("match");
 const who = (localStorage.getItem("pt_user") || "").trim();
 const practice = !matchId;
+if (matchId && !who){
+  location.href = "./index.html?match=" + encodeURIComponent(matchId) + "&game=wh40k";
+}
 let mySeat = 0;
 let tool = "terrain";
 let selected = null;
 let attackerId = null, targetId = null;
-/* Charge phase: 2D6 per model in the same phase. Ring = base edge + that unit’s total. */
-let chargeRolls = {}; // unitId -> { d1, d2, total }
+/* Charge phase: 2D6 per model. Lives on S.chargeRolls so PVP syncs the ring. */
 let selectedAction = null;
 let nid = 1, uidn = 1;
 let tape = null;
 let matchWs = null, pushTimer = null, pushWanted = false;
+let pendingRemote = null;
 let tipMore = false;
 /* Practice: guide on. PVP: guide off. User can toggle either way this session. */
 let guideOn = false;
@@ -600,7 +603,8 @@ function emptyBoard(){
     zones:[{seat:0, depthIn:ZONE},{seat:1, depthIn:ZONE}],
     turn:{ battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false },
     cp:{ "0":1, "1":0 },
-    log:[], players:{ "0": practice ? who : "", "1": "" }
+    log:[], players:{ "0": practice ? who : "", "1": "" },
+    chargeRolls:{}
   };
 }
 let S = emptyBoard();
@@ -612,11 +616,21 @@ if (!S.log) S.log = [];
 if (!S.turn) S.turn = { battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false };
 if (S.turn.deploymentDone === false && S.turn.phase === "command") S.turn.phase = "setup";
 if (!S.cp) S.cp = { "0":1, "1":0 };
-(S.terrain||[]).forEach(t => { const n=+String(t.id).slice(2); if(n>=nid) nid=n+1; });
-(S.units||[]).forEach(u => {
-  const n=+String(u.id).slice(2); if(n>=uidn) uidn=n+1;
-  ensureFlags(u);
-});
+if (!S.chargeRolls) S.chargeRolls = {};
+if (!S.players) S.players = { "0": practice ? who : "", "1": "" };
+function bumpIds(){
+  nid = 1; uidn = 1;
+  (S.terrain||[]).forEach(t => {
+    const nums = String(t.id).split("_").map(Number).filter(n => n===n);
+    for (const n of nums) if (n>=nid) nid=n+1;
+  });
+  (S.units||[]).forEach(u => {
+    ensureFlags(u);
+    const nums = String(u.id).split("_").map(Number).filter(n => n===n);
+    for (const n of nums) if (n>=uidn) uidn=n+1;
+  });
+}
+bumpIds();
 
 function setWho(){
   const mode = practice ? "Practice" : ("Match " + (matchId||"").slice(0,8));
@@ -659,13 +673,13 @@ function renderPhases(){
 function clearCombatPair(){
   attackerId = null;
   targetId = null;
-  chargeRolls = {};
+  if (S) S.chargeRolls = {};
   const dice = document.getElementById("dice");
   if (dice) dice.textContent = "";
   updateChargeRow();
 }
 function chargeFor(unitId){
-  return unitId && chargeRolls[unitId] ? chargeRolls[unitId] : null;
+  return unitId && S.chargeRolls && S.chargeRolls[unitId] ? S.chargeRolls[unitId] : null;
 }
 function updateChargeRow(){
   const row = document.getElementById("rowCharge");
@@ -702,7 +716,8 @@ function rollCharge(){
   if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
   if (inEngagement(u)){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
   const d1 = d6(), d2 = d6(), total = d1 + d2;
-  chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y };
+  if (!S.chargeRolls) S.chargeRolls = {};
+  S.chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y };
   const f = flagsOf(u);
   f.charged = true;
   f.chargeInches = total;
@@ -1142,6 +1157,7 @@ function startBattle(){
   lockAllTerrain("Setup done — terrain locked for battle");
   S.turn.phase = "command";
   S.turn.activeSeat = S.turn.activeSeat || 0;
+  if (who) S.players[String(mySeat)] = who;
   selectedAction = null;
   clearCombatPair();
   /* Setup placement is not a Movement-phase move. */
@@ -1239,7 +1255,7 @@ document.getElementById("btnNext").onclick = () => {
 };
 
 function save(){
-  S.rev = (S.rev||0)+1;
+  S.rev = Math.max((S.rev||0)+1, Date.now());
   if (practice){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(_){ } }
   else pushState();
   renderPhases(); renderLog();
@@ -1814,7 +1830,7 @@ function selectObj(kind, obj){
 function addPreset(kind){
   if (!terrainEditable()){ logLine("Terrain locked — Reset practice to change the board"); return; }
   const d = PRESETS[kind];
-  const t = { id:"t_"+(nid++), preset:d.preset, category:d.category, x:W/2, y:H/2, w:d.w, h:d.h, rot:0, locked:false };
+  const t = { id:"t_"+(nid++)+"_s"+mySeat, preset:d.preset, category:d.category, x:W/2, y:H/2, w:d.w, h:d.h, rot:0, locked:false };
   S.terrain.push(t); selectObj("t", t); logLine("Placed "+d.label); save(); draw();
 }
 function generate(){
@@ -1826,14 +1842,14 @@ function generate(){
   ];
   S.terrain = layout.map(p => {
     const d=PRESETS[p.preset];
-    return { id:"t_"+(nid++), preset:d.preset, category:d.category, x:p.x, y:p.y, w:d.w, h:d.h, rot:p.rot, locked:false };
+    return { id:"t_"+(nid++)+"_s"+mySeat, preset:d.preset, category:d.category, x:p.x, y:p.y, w:d.w, h:d.h, rot:p.rot, locked:false };
   });
   selectObj(null); logLine("Generated terrain"); save(); draw();
 }
 function dropUnit(key, seat, x, y, groupId){
   const d = DROPS[key];
   const u = {
-    id:"u_"+(uidn++), seat, name:d.name, keywords:d.keywords.slice(),
+    id:"u_"+(uidn++)+"_s"+seat, seat, name:d.name, keywords:d.keywords.slice(),
     M:d.M, T:d.T, Sv:d.Sv, Inv:d.Inv||0, W:d.W, wounds:d.W, Ld:d.Ld||6, baseMm:d.baseMm,
     ranged: Object.assign({}, d.ranged), melee: Object.assign({}, d.melee),
     x, y, rot:0, groupId: groupId||null, reserved:false, flags: defaultFlags()
@@ -1842,6 +1858,18 @@ function dropUnit(key, seat, x, y, groupId){
 }
 function demoForces(){
   if (!inSetup()){ logLine("Demo forces — return to Setup first"); return; }
+  if (!practice){
+    S.units = (S.units||[]).filter(u => u.seat !== mySeat);
+    const g = "g"+mySeat;
+    const yInf = mySeat===0 ? 6 : 38;
+    const yCmd = mySeat===0 ? 8.5 : 35.5;
+    const yWlk = mySeat===0 ? 7 : 37;
+    for (let i=0;i<5;i++) dropUnit("inf", mySeat, 18+i*1.6, yInf, g);
+    dropUnit("cmd", mySeat, 22, yCmd, g);
+    dropUnit("wlk", mySeat, 40, yWlk, "w"+mySeat);
+    selectObj(null); logLine("Demo forces — your seat P"+mySeat); save(); draw();
+    return;
+  }
   S.units = [];
   const g0="g0", g1="g1";
   for (let i=0;i<5;i++) dropUnit("inf", 0, 18+i*1.6, 6, g0);
@@ -1895,6 +1923,10 @@ document.getElementById("btnSetup").onclick = () => {
   showTip(TIPS.setup);
 };
 if (practice) document.getElementById("btnReset").style.display = "";
+else {
+  const su = document.getElementById("btnSetup");
+  if (su) su.style.display = "none";
+}
 document.getElementById("btnFit").onclick = () => { fit(); draw(); showTip(TIPS.fit); };
 document.getElementById("btnFit").addEventListener("pointerenter", () => showTip(TIPS.fit));
 document.getElementById("btnNext").addEventListener("pointerenter", () => showTip(TIPS.next));
@@ -1906,7 +1938,14 @@ document.getElementById("btnClearT").onclick = () => {
   if (!terrainEditable()){ logLine("Terrain locked — Reset practice to change the board"); return; }
   S.terrain=[]; selectObj(null); logLine("Cleared terrain"); save(); draw();
 };
-document.getElementById("btnClearU").onclick = () => { S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw(); };
+document.getElementById("btnClearU").onclick = () => {
+  if (!practice){
+    S.units = (S.units||[]).filter(u => u.seat !== mySeat);
+    attackerId=targetId=null; selectObj(null); logLine("Cleared your units"); save(); draw();
+    return;
+  }
+  S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw();
+};
 document.getElementById("btnDemo").onclick = demoForces;
 document.getElementById("btnReserve").onclick = () => {
   const u = selectedUnit();
@@ -2318,7 +2357,9 @@ function endPtr(e){
       save();
     }
   }
-  if (!ptrs.size){ mode=null; drag=null; moveOrigin=null; canvas.classList.remove("dragging"); draw(); }
+  if (!ptrs.size){ mode=null; drag=null; moveOrigin=null; canvas.classList.remove("dragging"); draw();
+    if (pendingRemote){ const b=pendingRemote; pendingRemote=null; applyRemote(b); }
+  }
   else if (ptrs.size===1){ const p=[...ptrs.values()][0]; mode="pan"; drag={cx:cam.x,cy:cam.y,sx:p.x,sy:p.y}; moveOrigin=null; }
 }
 canvas.addEventListener("pointerup", endPtr);
@@ -2334,12 +2375,24 @@ window.addEventListener("resize", resize);
 function applyRemote(board){
   if (!board || board.game!=="wh40k") return;
   if ((board.rev||0) <= (S.rev||0)) return;
+  if (mode==="move" || mode==="rot"){ pendingRemote = board; return; }
   S = board;
   if (!S.units) S.units=[];
+  if (!S.terrain) S.terrain=[];
+  if (!S.log) S.log=[];
+  if (!S.chargeRolls) S.chargeRolls={};
+  if (!S.players) S.players={ "0":"", "1":"" };
+  bumpIds();
+  if (selected && selected.kind==="u" && !S.units.some(u => u.id===selected.id)) selected=null;
+  if (selected && selected.kind==="t" && !S.terrain.some(t => t.id===selected.id)) selected=null;
+  if (attackerId && !S.units.some(u => u.id===attackerId)) attackerId=null;
+  if (targetId && !S.units.some(u => u.id===targetId)) targetId=null;
   renderLog(); renderPhases(); draw(); refreshTip(); refreshGuide();
+  updateTerrainTools(); updateChargeRow(); renderActions();
 }
 function pushState(){
   if (practice || !matchWs || matchWs.readyState!==1) return;
+  if (!(S.rev > 0)) return;
   pushWanted = true;
   if (pushTimer) return;
   pushTimer = setTimeout(() => {
@@ -2355,11 +2408,12 @@ function setSync(ok){
   el.textContent = ok ? "synced" : "offline";
   el.className = "sync "+(ok?"live":"bad");
 }
-function claimSeat(){
-  if (S.players["0"]===who) mySeat=0;
-  else if (S.players["1"]===who) mySeat=1;
-  else if (!S.players["0"]){ S.players["0"]=who; mySeat=0; save(); }
-  else { S.players["1"]=who; mySeat=1; save(); }
+function claimSeat(snap){
+  if (snap && typeof snap.seat === "number") mySeat = snap.seat;
+  const names = (snap && snap.players) ? snap.players : (S.players || {});
+  if (names["0"] || names[0]) S.players["0"] = names["0"] || names[0];
+  if (names["1"] || names[1]) S.players["1"] = names["1"] || names[1];
+  if (who) S.players[String(mySeat)] = who;
   setWho();
 }
 function startSync(){
@@ -2367,18 +2421,27 @@ function startSync(){
   const url = API_BASE.replace(/^http/,"ws") + "/api/match/"+encodeURIComponent(matchId)+"/ws?username="+encodeURIComponent(who);
   const ws = new WebSocket(url);
   matchWs = ws;
-  ws.onopen = () => { setSync(true); pushState(); };
+  ws.onopen = () => { setSync(true); };
   ws.onclose = () => { setSync(false); setTimeout(startSync, 1500); };
   ws.onerror = () => setSync(false);
   ws.onmessage = ev => {
     let msg; try{ msg=JSON.parse(ev.data); }catch(_){ return; }
     if (!msg||!msg.type) return;
     if (msg.type==="snapshot"){
+      claimSeat(msg);
       if (msg.you && msg.you.game==="wh40k") applyRemote(msg.you);
       else if (msg.opponent && msg.opponent.game==="wh40k") applyRemote(msg.opponent);
-      claimSeat(); setSync(true);
+      setSync(true);
+      if (S.rev > 0) pushState();
     }
-    if (msg.type==="opponent" && msg.opponent && msg.opponent.game==="wh40k") applyRemote(msg.opponent);
+    if (msg.type==="opponent" && msg.opponent && msg.opponent.game==="wh40k"){
+      if (msg.players) claimSeat(msg);
+      applyRemote(msg.opponent);
+    }
+    if (msg.type==="abandoned"){
+      setSync(false);
+      document.getElementById("dice").textContent = "Match abandoned.";
+    }
   };
 }
 

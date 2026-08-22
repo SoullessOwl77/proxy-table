@@ -137,7 +137,7 @@ export default {
           const subs = await db.prepare("SELECT * FROM push_subs WHERE username=?").bind(to).all();
           const vapid = { publicKey: env.VAPID_PUBLIC_KEY, d: env.VAPID_PRIVATE_D, x: env.VAPID_PUBLIC_X, y: env.VAPID_PUBLIC_Y, subject: env.VAPID_SUBJECT };
           for (const s of subs.results) {
-            ctx.waitUntil(notify(db, s, { title: `${from} challenged you`, body: "Tap to accept or decline.", tag: "challenge", data: { type: "challenge", code: c } }, vapid));
+            ctx.waitUntil(notify(db, s, { title: `${from} challenged you`, body: "Tap to accept or decline.", tag: "challenge", data: { type: "challenge", code: c, game } }, vapid));
           }
         }
         return json({ ok: true, code: c, expires_at: expires });
@@ -180,9 +180,9 @@ export default {
         const subs = await db.prepare("SELECT * FROM push_subs WHERE username=?").bind(row.from_user).all();
         const vapid = { publicKey: env.VAPID_PUBLIC_KEY, d: env.VAPID_PRIVATE_D, x: env.VAPID_PUBLIC_X, y: env.VAPID_PUBLIC_Y, subject: env.VAPID_SUBJECT };
         for (const s of subs.results) {
-          ctx.waitUntil(notify(db, s, { title: `${you} accepted your challenge`, body: "Your match is ready.", tag: "accept", data: { type: "match", matchId } }, vapid));
+          ctx.waitUntil(notify(db, s, { title: `${you} accepted your challenge`, body: "Your match is ready.", tag: "accept", data: { type: "match", matchId, game } }, vapid));
         }
-        return json({ ok: true, matchId });
+        return json({ ok: true, matchId, game });
       }
 
       if (p.match(/^\/api\/challenge\/[^/]+\/decline$/) && req.method === "POST") {
@@ -192,6 +192,29 @@ export default {
       }
 
       /* ---------------- matches list (still HTTP) ---------------- */
+      if (p.match(/^\/api\/match\/[^/]+$/) && req.method === "GET") {
+        const matchId = p.split("/")[3];
+        let m = null;
+        try {
+          m = await db.prepare("SELECT id, status, game, updated_at FROM matches WHERE id=?").bind(matchId).first();
+        } catch (_) {
+          m = await db.prepare("SELECT id, status, updated_at FROM matches WHERE id=?").bind(matchId).first();
+        }
+        if (!m) return err("no match", 404);
+        const { results } = await db.prepare(
+          "SELECT username, seat FROM match_players WHERE match_id=? ORDER BY seat"
+        ).bind(matchId).all();
+        return json({
+          match: {
+            id: m.id,
+            status: m.status,
+            game: m.game === "wh40k" ? "wh40k" : "mtg",
+            updated_at: m.updated_at,
+            players: results || []
+          }
+        });
+      }
+
       if (p === "/api/matches" && req.method === "GET") {
         const user = norm(url.searchParams.get("username") || "");
         if (!user) return err("username required");

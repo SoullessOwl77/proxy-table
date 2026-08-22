@@ -779,7 +779,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.1-title-refresh";
+const BUILD = "v2.7.2-40k-pvp";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1174,18 +1174,21 @@ function renderMatches(matches){
   const el = $("#matchList");
   if (!matches.length){ el.innerHTML = `<p class="hint">No matches yet — start one from a game below.</p>`; return; }
   el.innerHTML = matches.map(m => {
-    const myDeck = m.my_deck || "no deck yet";
     const opp = m.opponent || "waiting";
+    const game = m.game === "wh40k" ? "wh40k" : "mtg";
+    const gameLabel = game === "wh40k" ? "40K" : "MTG";
+    const myDeck = m.my_deck || "no deck yet";
     const oppDeck = m.opponent_deck || "no deck yet";
-    const label = `${esc(myDeck)} vs ${esc(opp)}: ${esc(oppDeck)}`;
-    const game = m.game === "wh40k" ? "40K" : "MTG";
+    const label = game === "wh40k"
+      ? `${esc(currentUser || "you")} vs ${esc(opp)}`
+      : `${esc(myDeck)} vs ${esc(opp)}: ${esc(oppDeck)}`;
     return `
     <div class="matchrow">
       <div style="flex:1;min-width:0;">
         <div class="who" style="font-size:14px;line-height:1.25;word-break:break-word;">${label}</div>
-        <div class="when"><span class="gametag">${game}</span>${relTime(m.updated_at)}</div>
+        <div class="when"><span class="gametag">${gameLabel}</span>${relTime(m.updated_at)}</div>
       </div>
-      <button class="btn gold sm" data-rejoin="${m.id}" data-game="${m.game||"mtg"}">Rejoin</button>
+      <button class="btn gold sm" data-rejoin="${m.id}" data-game="${game}">Rejoin</button>
       <button class="btn sm" data-abandon="${m.id}">Abandon</button>
     </div>`;
   }).join("");
@@ -1203,6 +1206,16 @@ function rejoinMatch(matchId, game){
   }
   currentMatch = matchId; G = null; G2 = null; twoSided = false; opp = null;
   goTable();
+}
+async function rejoinMatchSmart(matchId, game){
+  if (game === "wh40k") return rejoinMatch(matchId, "wh40k");
+  if (game === "mtg") return rejoinMatch(matchId, "mtg");
+  try {
+    const d = await api("/api/match/" + encodeURIComponent(matchId));
+    return rejoinMatch(matchId, (d.match && d.match.game) || "mtg");
+  } catch (_) {
+    return rejoinMatch(matchId, "mtg");
+  }
 }
 async function abandonMatch(matchId){
   if (!matchId) return;
@@ -1275,7 +1288,7 @@ $("#chJoin").onclick = async () => {
   $("#chJoin").disabled = true; $("#chCodeStatus").textContent = "Joining…";
   try{
     const r = await api(`/api/challenge/${code}/accept`, {method:"POST", body: JSON.stringify({username:currentUser})});
-    close("#challengeModal"); rejoinMatch(r.matchId, challengeGame); loadMatches();
+    close("#challengeModal"); rejoinMatch(r.matchId, r.game || challengeGame); loadMatches();
   }catch(e){ $("#chCodeStatus").textContent = e.data && e.data.error ? e.data.error : "Couldn't join that table."; }
   $("#chJoin").disabled = false;
 };
@@ -3345,7 +3358,7 @@ if ("serviceWorker" in navigator) {
   else show("#loginScreen");
 
   if (currentUser && params.get("match")) {
-    rejoinMatch(params.get("match"), params.get("game"));
+    await rejoinMatchSmart(params.get("match"), params.get("game"));
   } else if (currentUser && params.get("code")) {
     // Came from a challenge notification — open the join flow with the code filled in
     switchTab("tabCode");
