@@ -286,7 +286,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.3-match-keep";
+const BUILD = "v2.13.4-army-name";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -2550,6 +2550,14 @@ async function bindSeatFromServer(){
       if (p && (p.seat === 0 || p.seat === 1)) names[String(p.seat)] = p.username || "";
     });
     claimSeat({ players: names, seat: names["1"] === who ? 1 : 0 }, true);
+    let army = "";
+    try { army = (localStorage.getItem("pt_40k_army") || "").trim(); } catch (_) {}
+    if (!army) army = who + "'s army";
+    fetch(API_BASE + "/api/match/" + encodeURIComponent(matchId) + "/deck", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: who, deckName: army })
+    }).catch(() => {});
   }catch(_){}
 }
 if (!practice){

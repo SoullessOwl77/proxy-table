@@ -779,7 +779,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.5-match-keep";
+const BUILD = "v2.7.6-match-names";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1163,10 +1163,18 @@ function matchMemKey(){ return "pt_open_matches_" + (currentUser || ""); }
 function rememberedMatches(){
   try { return JSON.parse(localStorage.getItem(matchMemKey()) || "[]"); } catch (_) { return []; }
 }
-function rememberMatch(id, game, opponent){
+function rememberMatch(id, game, extra){
   if (!id || !currentUser) return;
   const list = rememberedMatches().filter(m => m.id !== id);
-  list.unshift({ id, game: game === "wh40k" ? "wh40k" : "mtg", opponent: opponent || "", updated_at: new Date().toISOString().replace("Z","") });
+  const prev = rememberedMatches().find(m => m.id === id) || {};
+  list.unshift({
+    id,
+    game: game === "wh40k" ? "wh40k" : (prev.game || "mtg"),
+    opponent: (extra && extra.opponent) || prev.opponent || "",
+    my_deck: (extra && extra.my_deck) || prev.my_deck || "",
+    opponent_deck: (extra && extra.opponent_deck) || prev.opponent_deck || "",
+    updated_at: new Date().toISOString().replace("Z","")
+  });
   try { localStorage.setItem(matchMemKey(), JSON.stringify(list.slice(0, 20))); } catch (_) {}
 }
 function forgetMatch(id){
@@ -1177,6 +1185,11 @@ async function loadMatches(){
   try{
     const d = await api("/api/matches?username=" + encodeURIComponent(currentUser));
     list = (d && d.matches) || [];
+    list.forEach(m => rememberMatch(m.id, m.game, {
+      opponent: m.opponent,
+      my_deck: m.my_deck,
+      opponent_deck: m.opponent_deck
+    }));
   } catch(e){ list = []; }
   const have = new Set(list.map(m => m.id));
   for (const m of rememberedMatches()){
@@ -1184,13 +1197,17 @@ async function loadMatches(){
     try {
       const d = await api("/api/match/" + encodeURIComponent(m.id));
       if (d && d.match && d.match.id){
-        const opp = ((d.match.players || []).find(p => p.username !== currentUser) || {}).username || m.opponent || "";
+        const players = d.match.players || [];
+        const me = players.find(p => p.username === currentUser) || {};
+        const them = players.find(p => p.username !== currentUser) || {};
         list.push({
           id: d.match.id,
           status: d.match.status || "active",
           updated_at: d.match.updated_at,
           game: d.match.game || m.game,
-          opponent: opp
+          opponent: them.username || m.opponent || "",
+          my_deck: me.deck_name || m.my_deck || "",
+          opponent_deck: them.deck_name || m.opponent_deck || ""
         });
         have.add(d.match.id);
       } else forgetMatch(m.id);
@@ -1214,11 +1231,9 @@ function renderMatches(matches){
     const opp = m.opponent || "waiting";
     const game = m.game === "wh40k" ? "wh40k" : "mtg";
     const gameLabel = game === "wh40k" ? "40K" : "MTG";
-    const myDeck = m.my_deck || "no deck yet";
-    const oppDeck = m.opponent_deck || "no deck yet";
-    const label = game === "wh40k"
-      ? `${esc(currentUser || "you")} vs ${esc(opp)}`
-      : `${esc(myDeck)} vs ${esc(opp)}: ${esc(oppDeck)}`;
+    const myDeck = m.my_deck || (game === "wh40k" ? ((currentUser || "you") + "'s army") : "no deck yet");
+    const oppDeck = m.opponent_deck || (game === "wh40k" ? ((opp === "waiting" ? "waiting" : opp + "'s army")) : "no deck yet");
+    const label = `${esc(myDeck)} vs ${esc(opp)}: ${esc(oppDeck)}`;
     return `
     <div class="matchrow">
       <div style="flex:1;min-width:0;">

@@ -207,9 +207,18 @@ export default {
           m = await db.prepare("SELECT id, status, updated_at FROM matches WHERE id=?").bind(matchId).first();
         }
         if (!m) return err("no match", 404);
-        const { results } = await db.prepare(
-          "SELECT username, seat FROM match_players WHERE match_id=? ORDER BY seat"
-        ).bind(matchId).all();
+        let results = [];
+        try {
+          const q = await db.prepare(
+            "SELECT username, seat, deck_name, deck_id FROM match_players WHERE match_id=? ORDER BY seat"
+          ).bind(matchId).all();
+          results = q.results || [];
+        } catch (_) {
+          const q = await db.prepare(
+            "SELECT username, seat FROM match_players WHERE match_id=? ORDER BY seat"
+          ).bind(matchId).all();
+          results = q.results || [];
+        }
         return json({
           match: {
             id: m.id,
