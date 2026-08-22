@@ -15,6 +15,8 @@
   --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
   --edge-l:env(safe-area-inset-left,0px);
   --edge-r:env(safe-area-inset-right,0px);
+  --rail-l:62px;
+  --rail-r:92px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--ink);color:var(--parchment);
@@ -23,14 +25,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;padding:0;}
 button:not(:disabled){cursor:pointer;}
 /* Thin top status — title only; chrome lives in side rails */
 .bar{position:fixed;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:center;gap:10px;
-  padding:6px 72px;padding-left:calc(72px + var(--edge-l));padding-right:calc(72px + var(--edge-r));
+  padding:6px 72px;padding-left:calc(var(--rail-l) + 10px + var(--edge-l));padding-right:calc(var(--rail-r) + var(--edge-r) + 10px);
   background:#1b2825cc;border-bottom:1px solid #0006;backdrop-filter:blur(8px);pointer-events:none;}
 .bar h1{font-family:Fraunces,serif;font-weight:900;font-size:15px;margin:0;pointer-events:auto;}
 .bar .sub{font-size:10px;color:var(--parchment-dim);letter-spacing:.1em;text-transform:uppercase;pointer-events:none;}
 .bar .sync{pointer-events:none;}
-.phases{display:flex;flex-direction:column;gap:4px;width:100%;}
-.phases .btn{padding:6px 4px;font-size:9px;letter-spacing:.05em;text-transform:uppercase;width:100%;}
-.phases .sub{font-size:9px;text-align:center;padding:2px 0;}
+.phases{display:flex;flex-direction:column;gap:4px;width:100%;min-width:0;}
+.phases .btn{padding:6px 5px;font-size:10px;letter-spacing:.03em;text-transform:uppercase;width:100%;
+  white-space:normal;line-height:1.2;overflow-wrap:break-word;}
+.phases .sub{font-size:9px;text-align:center;padding:2px 0;white-space:normal;}
 .btn{background:var(--felt-3);border:1px solid #0006;border-radius:6px;padding:7px 10px;
   font-size:12px;font-weight:500;letter-spacing:.03em;}
 .btn:active{background:var(--brass-dim);}
@@ -46,20 +49,21 @@ button:not(:disabled){cursor:pointer;}
 .rail{position:fixed;top:0;bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
   padding:8px 6px;padding-top:calc(8px + env(safe-area-inset-top,0px));
   padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));
-  width:62px;background:#1b2825f0;border:none;backdrop-filter:blur(8px);overflow-y:auto;overflow-x:hidden;}
+  width:var(--rail-l);background:#1b2825f0;border:none;backdrop-filter:blur(8px);overflow-y:auto;overflow-x:hidden;}
 .rail.left{left:0;padding-left:calc(6px + var(--edge-l));border-right:1px solid #0008;}
-.rail.right{right:0;padding-right:calc(6px + var(--edge-r));border-left:1px solid #0008;}
-.rail .btn{width:100%;padding:8px 4px;font-size:10px;line-height:1.15;text-align:center;}
-.rail .btn.sm{padding:7px 4px;font-size:10px;}
+.rail.right{right:0;width:calc(var(--rail-r) + var(--edge-r));
+  padding-left:7px;padding-right:calc(8px + var(--edge-r));border-left:1px solid #0008;}
+.rail .btn{width:100%;padding:8px 5px;font-size:10px;line-height:1.2;text-align:center;
+  white-space:normal;overflow-wrap:break-word;}
+.rail .btn.sm{padding:7px 5px;font-size:10px;}
 .rail .rail-label{font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--parchment-dim);
   text-align:center;margin:4px 0 2px;}
 .rail .rail-gap{flex:1;min-height:6px;}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;}
 canvas.dragging{cursor:grabbing;}
-.dock{position:fixed;left:62px;right:62px;bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
+.dock{position:fixed;left:var(--rail-l);right:calc(var(--rail-r) + var(--edge-r));bottom:0;z-index:4;display:flex;flex-direction:column;gap:6px;
   padding:6px 10px calc(6px + env(safe-area-inset-bottom,0px));
-  padding-left:calc(10px + var(--edge-l));padding-right:calc(10px + var(--edge-r));
-  background:transparent;pointer-events:none;max-width:calc(100% - 124px);}
+  background:transparent;pointer-events:none;max-width:none;}
 .dock .row{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto;align-items:center;}
 /* In-flow stack: log above dice/combat/selbar — never overlaps on PC or mobile */
 .feed{display:flex;flex-direction:column;gap:6px;align-items:stretch;pointer-events:none;min-width:0;}
@@ -86,7 +90,7 @@ canvas.dragging{cursor:grabbing;}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);pointer-events:none;
   text-shadow:0 1px 2px #000a;}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px;}
-.tips{position:fixed;top:40px;right:calc(70px + var(--edge-r));z-index:5;width:min(280px,32vw);
+.tips{position:fixed;top:40px;right:calc(var(--rail-r) + var(--edge-r) + 8px);z-index:5;width:min(280px,32vw);
   background:#1b2825f4;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
   max-height:calc(100vh - 160px);overflow:auto;box-shadow:0 8px 24px #0008;}
 .tips.collapsed{width:auto;padding:6px 8px;}
@@ -118,7 +122,7 @@ canvas.dragging{cursor:grabbing;}
 .guide .do li,.guide .dont li{margin-bottom:3px;}
 .guide .nextwhen{font-size:12px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:4px;}
 .guide .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
-.rollpanel{position:fixed;bottom:calc(120px + env(safe-area-inset-bottom,0px));right:calc(70px + var(--edge-r));z-index:5;
+.rollpanel{position:fixed;bottom:calc(120px + env(safe-area-inset-bottom,0px));right:calc(var(--rail-r) + var(--edge-r) + 8px);z-index:5;
   width:min(320px,36vw);max-height:min(40vh,320px);overflow:auto;
   background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
   box-shadow:0 8px 24px #0008;display:none;font-size:12px;line-height:1.4;}
@@ -137,12 +141,10 @@ canvas.dragging{cursor:grabbing;}
 .rollpanel .math{color:var(--parchment-dim);font-size:11px;margin-top:2px;}
 .rollpanel .empty{color:var(--parchment-dim);font-style:italic;}
 @media (max-width:900px){
+  :root{ --rail-l:56px; --rail-r:80px; }
   .tips{width:min(240px,36vw);font-size:12px;}
   .guide{width:min(250px,38vw);font-size:12px;}
   .rollpanel{width:min(260px,40vw);font-size:11px;}
-  .rail{width:56px;}
-  .dock{left:56px;right:56px;max-width:calc(100% - 112px);}
-  .bar{padding-left:calc(64px + var(--edge-l));padding-right:calc(64px + var(--edge-r));}
   .log{max-width:100%;}
 }
 </style>
@@ -283,7 +285,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.12.0-reserves";
+const BUILD = "v2.12.3-rail-right";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -692,11 +694,15 @@ function rollCharge(){
     document.getElementById("dice").textContent = "Select an active-player model first, then Roll charge.";
     return;
   }
+  if (chargeFor(u.id)){
+    showWarn("<strong>Charge:</strong> this model already rolled this phase.");
+    return;
+  }
   const g = chargeGate(u);
   if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
   if (inEngagement(u)){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
   const d1 = d6(), d2 = d6(), total = d1 + d2;
-  chargeRolls[u.id] = { d1, d2, total };
+  chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y };
   const f = flagsOf(u);
   f.charged = true;
   f.chargeInches = total;
@@ -733,6 +739,7 @@ function canDragUnit(u){
   const p = S.turn.phase;
   if (p !== "movement" && p !== "charge" && p !== "fight") return false;
   if (p === "movement" && dragLocked(u)) return false;
+  if (p === "charge" && !chargeFor(u.id)) return false;
   return true;
 }
 function defaultFlags(){
@@ -1137,6 +1144,14 @@ function startBattle(){
   S.turn.activeSeat = S.turn.activeSeat || 0;
   selectedAction = null;
   clearCombatPair();
+  /* Setup placement is not a Movement-phase move. */
+  (S.units||[]).forEach(u => {
+    const f = flagsOf(u);
+    f.advanced = false; f.fellBack = false; f.remainedStationary = false;
+    f.moved = false; f.shot = false; f.charged = false; f.fought = false;
+    f.advanceInches = 0; f.chargeInches = 0; f.ingressed = false;
+    delete u.revert;
+  });
   logLine("Battle started · Command · P"+S.turn.activeSeat);
   setTool("unit");
 }
@@ -1438,11 +1453,12 @@ function toWorld(sx, sy){
 function fit(){
   /* Use the open map well between side rails; pin the board’s top edge
      under the thin status bar (not dead-centered with huge empty margins). */
-  const rail = window.matchMedia("(max-width:900px)").matches ? 56 : 62;
+  const railL = window.matchMedia("(max-width:900px)").matches ? 56 : 62;
+  const railR = window.matchMedia("(max-width:900px)").matches ? 80 : 92;
   const topUI = 36;
   const botUI = 88;
   const sidePad = 10;
-  const availW = Math.max(120, canvas.clientWidth - rail * 2 - sidePad * 2);
+  const availW = Math.max(120, canvas.clientWidth - railL - railR - sidePad * 2);
   const availH = Math.max(120, canvas.clientHeight - topUI - botUI);
   cam.scale = Math.min(availW / W, availH / H);
   cam.x = W / 2;
@@ -1632,14 +1648,17 @@ function draw(){
       drawRing(ringAt.x, ringAt.y, rangeReach(selU, rng), "#6b8fbf88", 1.6);
       drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443c88", 1);
     } else if (phase === "charge"){
-      const rolled = chargeFor(selU.id) ? chargeFor(selU.id).total : null;
-      if (rolled != null){
-        drawRing(ringAt.x, ringAt.y, rangeReach(selU, rolled), "#c39a4eaa", 1.8);
+      const cr = chargeFor(selU.id);
+      if (cr){
+        const cx = cr.x != null ? cr.x : selU.x;
+        const cy = cr.y != null ? cr.y : selU.y;
+        drawRing(cx, cy, rangeReach(selU, cr.total), "#c39a4eaa", 1.8);
       } else {
-        /* Faint max (2D6 = 12″) until they roll */
-        drawRing(ringAt.x, ringAt.y, rangeReach(selU, 12), "#c39a4e44", 1.2);
+        /* Faint max (2D6 = 12″) until they roll — from current spot */
+        drawRing(selU.x, selU.y, rangeReach(selU, 12), "#c39a4e44", 1.2);
       }
-      drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443c99", 1.4);
+      /* ER follows the model so you can see when you reach 2″. */
+      drawRing(selU.x, selU.y, erReach(selU), "#a8443c99", 1.4);
     } else if (phase === "fight"){
       drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443caa", 1.8);
     } else {
@@ -1653,6 +1672,14 @@ function draw(){
       const a = toScreen(moveOrigin.x, moveOrigin.y), b = toScreen(selU.x, selU.y);
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
       ctx.setLineDash([3,4]); ctx.strokeStyle="#c39a4e88"; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
+    }
+    if (phase === "charge"){
+      const cr = chargeFor(selU.id);
+      if (cr && cr.x != null){
+        const a = toScreen(cr.x, cr.y), b = toScreen(selU.x, selU.y);
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+        ctx.setLineDash([3,4]); ctx.strokeStyle="#c39a4e88"; ctx.lineWidth=1.2; ctx.stroke(); ctx.setLineDash([]);
+      }
     }
     if (selU.groupId){
       const mates = groupMembers(selU.groupId);
@@ -2169,6 +2196,11 @@ canvas.addEventListener("pointerdown", e => {
       mode="move";
       drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
       moveOrigin = { x: hu.x, y: hu.y, id: hu.id };
+    } else if (canControlUnit(hu) && S.turn.phase === "charge" && !chargeFor(hu.id)){
+      mode="pan";
+      drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
+      moveOrigin = null;
+      showWarn("<strong>Charge:</strong> roll 2D6 first, then move up to that many inches.");
     } else if (canControlUnit(hu) && S.turn.phase === "movement" && dragLocked(hu)){
       mode="pan";
       drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
@@ -2246,14 +2278,18 @@ function endPtr(e){
         const dist = from ? Math.hypot(u.x-from.x, u.y-from.y) : 0;
         /* Tap-to-select is not a move. Only count a real drag. */
         if (dist > 0.2){
-          const f = flagsOf(u);
-          if (f.remainedStationary){
-            showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
+          if (inSetup()){
+            logLine("Placed "+u.name);
           } else {
-            snapshotGroup(u, u.id, from);
-            flagsOf(u).moved = true;
+            const f = flagsOf(u);
+            if (f.remainedStationary){
+              showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
+            } else {
+              snapshotGroup(u, u.id, from);
+              flagsOf(u).moved = true;
+            }
+            logLine("Moved "+u.name+" "+dist.toFixed(1)+"\"");
           }
-          logLine("Moved "+u.name+" "+dist.toFixed(1)+"\"");
           if (overlapsEnemy(u)){
             showWarn("<strong>Overlap:</strong> bases cannot end on an enemy. Nudge "+u.name+" off.");
             logLine("Overlap warn: "+u.name+" on an enemy base");
@@ -2262,6 +2298,17 @@ function endPtr(e){
           if (flagsOf(u).ingressed){
             const bad = ingressIssues(u);
             if (bad.length) showWarn("<strong>Ingress:</strong> "+bad.join("; ")+".");
+          }
+          if (S.turn.phase === "charge"){
+            const cr = chargeFor(u.id);
+            if (cr && cr.x != null){
+              const travelled = Math.hypot(u.x-cr.x, u.y-cr.y);
+              if (travelled > cr.total + 0.15){
+                showWarn("<strong>Charge:</strong> moved "+travelled.toFixed(1)+"″ — roll was "+cr.total+"″. End inside the gold ring.");
+              } else if (!inEngagement(u)){
+                showWarn("<strong>Charge:</strong> must end within 2″ Engagement Range of an enemy.");
+              }
+            }
           }
           renderActions();
           save();
