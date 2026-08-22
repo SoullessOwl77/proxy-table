@@ -28,6 +28,8 @@ async function ensureGameCols(db) {
   if (gameColsReady) return;
   try { await db.prepare("ALTER TABLE matches ADD COLUMN game TEXT DEFAULT 'mtg'").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE challenges ADD COLUMN game TEXT DEFAULT 'mtg'").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE match_players ADD COLUMN deck_name TEXT").run(); } catch (_) {}
+  try { await db.prepare("ALTER TABLE match_players ADD COLUMN deck_id TEXT").run(); } catch (_) {}
   gameColsReady = true;
 }
 
@@ -288,10 +290,18 @@ export default {
           "SELECT username FROM match_players WHERE match_id = ? AND username = ?"
         ).bind(matchId, me).first();
         if (!player) return err("not a player in this match", 403);
-        await db.prepare(
-          "UPDATE match_players SET deck_id = ?, deck_name = ? WHERE match_id = ? AND username = ?"
-        ).bind(b.deckId || null, b.deckName || null, matchId, me).run();
-        await db.prepare("UPDATE matches SET updated_at = datetime('now') WHERE id = ?").bind(matchId).run();
+        try {
+          await db.prepare(
+            "UPDATE match_players SET deck_id = ?, deck_name = ? WHERE match_id = ? AND username = ?"
+          ).bind(b.deckId || null, b.deckName || null, matchId, me).run();
+        } catch (_) {
+          try { await db.prepare("ALTER TABLE match_players ADD COLUMN deck_name TEXT").run(); } catch (__) {}
+          try { await db.prepare("ALTER TABLE match_players ADD COLUMN deck_id TEXT").run(); } catch (__) {}
+          await db.prepare(
+            "UPDATE match_players SET deck_id = ?, deck_name = ? WHERE match_id = ? AND username = ?"
+          ).bind(b.deckId || null, b.deckName || null, matchId, me).run();
+        }
+        try { await db.prepare("UPDATE matches SET updated_at=datetime('now') WHERE id=?").bind(matchId).run(); } catch (_) {}
         return json({ ok: true });
       }
 

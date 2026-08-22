@@ -779,7 +779,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.6-match-names";
+const BUILD = "v2.7.7-deck-line";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1165,8 +1165,8 @@ function rememberedMatches(){
 }
 function rememberMatch(id, game, extra){
   if (!id || !currentUser) return;
-  const list = rememberedMatches().filter(m => m.id !== id);
   const prev = rememberedMatches().find(m => m.id === id) || {};
+  const list = rememberedMatches().filter(m => m.id !== id);
   list.unshift({
     id,
     game: game === "wh40k" ? "wh40k" : (prev.game || "mtg"),
@@ -1185,6 +1185,15 @@ async function loadMatches(){
   try{
     const d = await api("/api/matches?username=" + encodeURIComponent(currentUser));
     list = (d && d.matches) || [];
+    const mem = rememberedMatches();
+    list = list.map(m => {
+      const r = mem.find(x => x.id === m.id) || {};
+      return Object.assign({}, m, {
+        opponent: m.opponent || r.opponent || "",
+        my_deck: m.my_deck || r.my_deck || "",
+        opponent_deck: m.opponent_deck || r.opponent_deck || ""
+      });
+    });
     list.forEach(m => rememberMatch(m.id, m.game, {
       opponent: m.opponent,
       my_deck: m.my_deck,
@@ -1440,7 +1449,16 @@ $("#ngStart").onclick = () => {
   }
 };
 
+function recordMatchDeck(deckId, deckName){
+  if (!currentMatch || !currentUser || !deckName) return;
+  rememberMatch(currentMatch, "mtg", { my_deck: deckName });
+  api(`/api/match/${currentMatch}/deck`, {
+    method: "POST",
+    body: JSON.stringify({ username: currentUser, deckId: deckId || null, deckName })
+  }).catch(()=>{});
+}
 function beginDealIn(d, life, iGoFirst){
+  recordMatchDeck(d && d.id, d && d.name);
   localPendingDeal = { d, life, iGoFirst };
   postEvent("deal_in", {
     iGoFirst, deckName: d.name, deckId: d.id, life, format: d.format
@@ -1527,12 +1545,7 @@ function startGame(deck, life, iGoFirst){
   renderAll(); pushState();
   const firstNote = G.active ? "You go first." : "Opponent goes first.";
   toast(`${deck.name} — ${fmt(deck.format).label}. ${firstNote}`);
-  if (currentMatch) {
-    api(`/api/match/${currentMatch}/deck`, {
-      method: "POST",
-      body: JSON.stringify({ username: currentUser, deckId: deck.id, deckName: deck.name })
-    }).catch(()=>{});
-  }
+  recordMatchDeck(deck && deck.id, deck && deck.name);
 }
 
 /* ============================================================
@@ -2702,6 +2715,8 @@ function startSync() {
       if (msg.you && !G) G = msg.you;
       oppName = msg.opponentName;
       if (msg.opponent) opp = msg.opponent;
+      if (G && G.deckName) recordMatchDeck(G.deckId, G.deckName);
+      if (opp && opp.deckName) rememberMatch(currentMatch, "mtg", { opponent: oppName || opp.name, opponent_deck: opp.deckName });
       renderAll();
       setSyncStatus(true, oppName);
       if (!G && !dealPrompted) {
