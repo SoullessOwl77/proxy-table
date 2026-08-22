@@ -272,7 +272,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.10.2-phase-tools";
+const BUILD = "v2.10.3-tap-move";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -1895,22 +1895,27 @@ function endPtr(e){
       if (u){
         const from = moveOrigin;
         const dist = from ? Math.hypot(u.x-from.x, u.y-from.y) : 0;
-        const f = flagsOf(u);
-        if (f.remainedStationary){
-          showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
-        } else {
-          f.moved = true;
+        /* Tap-to-select is not a move. Only count a real drag. */
+        if (dist > 0.2){
+          const f = flagsOf(u);
+          if (f.remainedStationary){
+            showWarn("<strong>Remain Stationary:</strong> this unit declared it would not move.");
+          } else {
+            f.moved = true;
+          }
+          logLine("Moved "+u.name+" "+dist.toFixed(1)+"\"");
+          if (overlapsEnemy(u)){
+            showWarn("<strong>Overlap:</strong> bases cannot end on an enemy. Nudge "+u.name+" off.");
+            logLine("Overlap warn: "+u.name+" on an enemy base");
+          }
+          checkUnitCoherency(u, true);
+          renderActions();
+          save();
         }
-        logLine("Moved "+u.name+(from ? " "+dist.toFixed(1)+"\"" : ""));
-        if (overlapsEnemy(u)){
-          showWarn("<strong>Overlap:</strong> bases cannot end on an enemy. Nudge "+u.name+" off.");
-          logLine("Overlap warn: "+u.name+" on an enemy base");
-        }
-        checkUnitCoherency(u, true);
-        renderActions();
       }
+    } else {
+      save();
     }
-    save();
   }
   if (!ptrs.size){ mode=null; drag=null; moveOrigin=null; canvas.classList.remove("dragging"); draw(); }
   else if (ptrs.size===1){ const p=[...ptrs.values()][0]; mode="pan"; drag={cx:cam.x,cy:cam.y,sx:p.x,sy:p.y}; moveOrigin=null; }
