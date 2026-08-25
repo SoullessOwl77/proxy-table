@@ -330,7 +330,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.15.2-drop-once";
+const BUILD = "v2.15.3-synapse-swallow";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -613,6 +613,34 @@ const DROPS = DATASHEETS;
 function sheetOf(key){ return window.PTSheets.sheetOf(key); }
 function firstWeapon(sheet, kind){ return window.PTSheets.firstWeapon(sheet, kind); }
 function abilitiesOf(u){ return window.PTSheets.abilitiesOf(u); }
+function unitHasKw(u, kw){
+  const want = String(kw || "").toUpperCase();
+  const hit = k => String(k).toUpperCase() === want;
+  return !!(u && ((u.keywords || []).some(hit) || (u.factionKeywords || []).some(hit)));
+}
+function isTyranid(u){ return unitHasKw(u, "TYRANIDS"); }
+function isSynapseNode(u){ return !!(u && !u.reserved && unitHasKw(u, "SYNAPSE")); }
+function inSynapseRange(u){
+  if (!u || u.reserved || !isTyranid(u)) return false;
+  if (isSynapseNode(u)) return true;
+  return (S.units || []).some(o => o.seat === u.seat && isSynapseNode(o) && edgeDist(u, o) <= 6.01);
+}
+function rollExpr(D){
+  if (typeof D === "number" && D === D) return D;
+  const s = String(D == null ? "1" : D).replace(/\s/g, "");
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  const m = s.match(/^(\d*)D(\d+)([+-]\d+)?$/i);
+  if (!m) return 1;
+  const n = parseInt(m[1] || "1", 10), faces = parseInt(m[2], 10), add = parseInt(m[3] || "0", 10);
+  let t = add;
+  for (let i = 0; i < n; i++) t += (faces === 6) ? d6() : (1 + Math.floor(Math.random() * faces));
+  return Math.max(0, t);
+}
+function swallowPrey(u){
+  return unitHasKw(u, "INFANTRY") || unitHasKw(u, "MOUNTED") || unitHasKw(u, "BEASTS") || unitHasKw(u, "BEAST");
+}
+function isGapingMaw(w){ return !!(w && /gaping maw/i.test(w.name || "")); }
+function wepTag(w, tag){ return window.PTSheets && window.PTSheets.wepHasTag ? window.PTSheets.wepHasTag(w, tag) : false; }
 function fnpOf(u){
   const n = window.PTSheets.fnpOf(u);
   if (n) return n;
@@ -1187,13 +1215,16 @@ function announceAction(){
       showWarn("<strong>Battle-shock:</strong> this model is undamaged — tests are for damaged units.");
       return;
     }
-    const d1=d6(), d2=d6(), tot=d1+d2, ld=u.Ld||6;
+    const syn = inSynapseRange(u);
+    const d1=d6(), d2=d6(), d3 = syn ? d6() : 0;
+    const tot = d1+d2+(syn?d3:0), ld=u.Ld||6;
     const fail = tot < ld;
     flagsOf(u).battleShock = fail;
-    logLine(u.name+" Battle-shock "+d1+"+"+d2+"="+tot+" vs Ld "+ld+" → "+(fail?"FAILED":"passed"));
-    document.getElementById("dice").textContent = "Battle-shock ["+d1+"] ["+d2+"] = "+tot+" vs Ld "+ld+" — "+(fail?"failed":"passed");
-    setSimpleRoll("Battle-shock", u.name, [d1, d2], tot+" vs Ld "+ld+" — "+(fail?"failed":"passed"));
-    if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed (2D6 &lt; Ld). Flagged this turn.");
+    const shown = syn ? [d1,d2,d3] : [d1,d2];
+    logLine(u.name+" Battle-shock "+shown.join("+")+"="+tot+" vs Ld "+ld+(syn?" (Synapse 3D6)":"")+" → "+(fail?"FAILED":"passed"));
+    document.getElementById("dice").textContent = "Battle-shock ["+shown.join("] [")+"] = "+tot+" vs Ld "+ld+" — "+(fail?"failed":"passed")+(syn?" (Synapse)":"");
+    setSimpleRoll("Battle-shock", u.name, shown, tot+" vs Ld "+ld+" — "+(fail?"failed":"passed")+(syn?" · Synapse 3D6":""));
+    if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed ("+(syn?"3D6":"2D6")+" &lt; Ld). Flagged this turn.");
     else hideWarn();
   } else if (a.id === "pileIn"){
     logLine(u.name+" Pile-in (honor 3″ toward nearest enemy)");
@@ -2163,6 +2194,11 @@ function dropArmyEntry(entry, seat){
     const prof = window.PTSheets.profileForIndex(sheet, i, n);
     u.name = prof.name || entry.name || sheet.name;
     if (prof.W){ u.W = prof.W; u.wounds = prof.W; }
+    if (prof.Ld) u.Ld = prof.Ld;
+    if (prof.OC != null) u.OC = prof.OC;
+    if (prof.keywords && prof.keywords.length){
+      u.keywords = (u.keywords || []).concat(prof.keywords.filter(k => u.keywords.indexOf(k) < 0));
+    }
   }
   selectObj(null);
   logLine("Dropped " + (entry.name || sheet.name) + " ×" + n);
@@ -2471,7 +2507,9 @@ function resolveAttack(){
   const hitMod = cov ? -1 : 0;
   const hitNeed = Math.max(2, Math.min(7, w.skill - hitMod));
   const firstRec = pickRecipient(mates, preferAllocId) || measure;
-  const wn = woundNeed(w.S, firstRec.T);
+  const synMelee = pw.kind === "melee" && inSynapseRange(atk);
+  const atkS = (Number(w.S) || 0) + (synMelee ? 1 : 0);
+  const wn = woundNeed(atkS, firstRec.T);
   const armourNeed0 = Math.max(2, Math.min(7, firstRec.Sv - (w.AP||0)));
   const saveLabel = firstRec.Inv
     ? `Inv ${firstRec.Inv}+ or Sv ${armourNeed0}+ (AP${w.AP})`
@@ -2496,12 +2534,49 @@ function resolveAttack(){
     if (!hit){ dice.push(entry); continue; }
     hitN++;
     const wr = d6();
-    const needW = woundNeed(w.S, rec.T);
+    const needW = woundNeed(atkS, rec.T);
     const wounded = wr!==1 && (wr===6 || wr>=needW);
-    entry.wound = { roll: wr, need: needW, ok: wounded };
-    wounds.push(wr+(wounded?"":"×"));
+    const prey = isGapingMaw(w) && swallowPrey(rec);
+    const critW = !!(wounded && (wr===6 || prey));
+    entry.wound = { roll: wr, need: needW, ok: wounded, crit: critW, swallow: !!(critW && prey) };
+    wounds.push(wr+(wounded?"":"×")+(critW?"!":""));
     if (!wounded){ dice.push(entry); continue; }
     woundN++;
+    if (critW && wepTag(w, "DEVASTATING WOUNDS")){
+      const mort = rollExpr(w.D);
+      let deal = Math.min(mort, rec.wounds ?? rec.W);
+      const fnp = fnpOf(rec);
+      const fnpDice = [];
+      if (fnp && deal > 0){
+        let kept = 0;
+        for (let p = 0; p < deal; p++){
+          const fr = d6();
+          fnpDice.push(fr);
+          if (fr < fnp) kept++;
+        }
+        deal = kept;
+        entry.fnp = { need: fnp, rolls: fnpDice, kept };
+      }
+      rec.wounds = (rec.wounds ?? rec.W) - deal;
+      dmg += deal;
+      unsaved++;
+      entry.dmg = deal;
+      entry.save = { roll: null, ok: false, how: "Dev Wounds "+mort };
+      entry.onto = rec.name + " (mortal "+deal+(mort>deal?" overflow lost":"")+")";
+      dice.push(entry);
+      saves.push("DevW "+mort+" → "+rec.name);
+      if (rec.wounds <= 0){
+        killed.push(rec.name);
+        if (prey){
+          const heal = rollExpr("D3+2");
+          atk.wounds = Math.min(atk.W, (atk.wounds ?? atk.W) + heal);
+          logLine(atk.name+" Swallow Whole — regain "+heal+" W");
+        }
+        S.units = S.units.filter(u => u.id !== rec.id);
+        if (preferAllocId === rec.id) preferAllocId = null;
+      }
+      continue;
+    }
     const armourNeed = Math.max(2, Math.min(7, rec.Sv - (w.AP||0)));
     const sv = d6();
     let saved = false, how = "Sv "+armourNeed+"+";
@@ -2539,6 +2614,11 @@ function resolveAttack(){
     }
     if (rec.wounds <= 0){
       killed.push(rec.name);
+      if (isGapingMaw(w) && swallowPrey(rec)){
+        const heal = rollExpr("D3+2");
+        atk.wounds = Math.min(atk.W, (atk.wounds ?? atk.W) + heal);
+        logLine(atk.name+" Swallow Whole — regain "+heal+" W");
+      }
       S.units = S.units.filter(u => u.id !== rec.id);
       if (preferAllocId === rec.id) preferAllocId = null;
     }
@@ -2554,7 +2634,7 @@ function resolveAttack(){
     kind: pw.kind,
     attacks: w.A,
     skill: w.skill,
-    S: w.S, AP: w.AP, D: w.D, T: firstRec.T,
+    S: atkS, AP: w.AP, D: w.D, T: firstRec.T, synapse: synMelee,
     cover: cov,
     hitNeed, woundNeed: wn, saveLabel,
     hitN, woundN, unsaved, dmg,

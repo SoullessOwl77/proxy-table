@@ -137,6 +137,10 @@ td input,td select{width:100%;}
       </div>
       <p class="hint">Add uses the known library. Add? is for a PDF/skill guess that is not in the library yet — it is marked pending until you rename or keep it.</p>
     </div>
+    <div class="row" id="sourceRow">
+      <label class="field">Source</label>
+      <p class="hint" id="sourceBits"></p>
+    </div>
     <div class="foot">
       <button class="btn gold" type="button" id="btnSave">Save</button>
       <button class="btn" type="button" id="btnRevert">Revert this sheet</button>
@@ -207,6 +211,13 @@ function render(){
   document.getElementById("fSearch").value = csv(s.search);
   document.getElementById("fComp").value = (s.composition && s.composition.label) || "";
   document.getElementById("wepBody").innerHTML = (s.weapons || []).map(wepRow).join("");
+  const src = s.source || {};
+  const bits = [];
+  if (src.label) bits.push(src.label + (src.page ? " p."+src.page : ""));
+  if (src.file) bits.push(`<a href="./rules/${encodeURIComponent(src.file)}${src.page?"#page="+src.page:""}" target="_blank" rel="noopener">Open local PDF</a>`);
+  if (src.hub) bits.push(`<a href="${src.hub}" target="_blank" rel="noopener">Warhammer Community downloads</a>`);
+  bits.push(`<a href="https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" target="_blank" rel="noopener">Core Rules / packs hub</a>`);
+  document.getElementById("sourceBits").innerHTML = bits.join(" · ") + '<br>Drop official PDFs in a <code>rules/</code> folder next to this page (same names as the sheet source file).';
   document.getElementById("abilBody").innerHTML = (s.abilities || []).map((a,i) => {
     const lib = PT.ABILITY_LIB[a.id] || { name: a.id, pending: true };
     return `<div class="abil" data-ai="${i}">
