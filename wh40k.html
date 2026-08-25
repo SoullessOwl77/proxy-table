@@ -36,7 +36,8 @@ button:not(:disabled){cursor:pointer;}
   white-space:normal;line-height:1.2;overflow-wrap:break-word;}
 .phases .sub{font-size:9px;text-align:center;padding:2px 0;white-space:normal;}
 .btn{background:var(--felt-3);border:1px solid #0006;border-radius:6px;padding:7px 10px;
-  font-size:12px;font-weight:500;letter-spacing:.03em;}
+  font-size:12px;font-weight:500;letter-spacing:.03em;color:inherit;text-decoration:none;}
+a.btn{display:block;text-align:center;color:var(--parchment);}
 .btn:active{background:var(--brass-dim);}
 .btn.gold{background:var(--brass);color:#191207;font-weight:700;}
 .btn.ghost{background:none;border:1px solid var(--brass-dim);color:var(--brass);}
@@ -327,7 +328,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.14.3-sheet-boot";
+const BUILD = "v2.14.4-map-boot";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -663,6 +664,7 @@ if (practice){
   try{ const p = JSON.parse(localStorage.getItem(STORE)||"null"); if (p && p.game==="wh40k") S = p; }catch(_){}
 }
 if (!S.units) S.units = [];
+if (!S.terrain) S.terrain = [];
 if (!S.log) S.log = [];
 if (!S.turn) S.turn = { battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false };
 if (S.turn.deploymentDone === false && S.turn.phase === "command") S.turn.phase = "setup";
@@ -1624,11 +1626,16 @@ function fit(){
 }
 function resize(){
   const dpr = Math.min(window.devicePixelRatio||1, 2);
-  canvas.width = Math.floor(canvas.clientWidth*dpr);
-  canvas.height = Math.floor(canvas.clientHeight*dpr);
+  const cw = canvas.clientWidth || 0;
+  const ch = canvas.clientHeight || 0;
+  canvas.width = Math.floor(Math.max(cw, 1) * dpr);
+  canvas.height = Math.floor(Math.max(ch, 1) * dpr);
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  if (!resizedOnce){ fit(); resizedOnce = true; }
-  draw();
+  if (cw >= 40 && ch >= 40 && (!resizedOnce || cam.scale < 1)){
+    fit();
+    resizedOnce = true;
+  }
+  try { draw(); } catch (err) { console.error("draw", err); }
 }
 
 function localOf(t, wx, wy){
@@ -1855,7 +1862,7 @@ function draw(){
   ctx.fillText("SEAT 0  ·  12\"", midX, z0.y - 6);
   ctx.fillText("SEAT 1  ·  12\"", midX, z1.y + 14);
 
-  S.terrain.forEach(t => drawPiece(t, selected && selected.kind==="t" && selected.id===t.id));
+  (S.terrain || []).forEach(t => drawPiece(t, selected && selected.kind==="t" && selected.id===t.id));
   const selU = selected && selected.kind==="u" ? S.units.find(u=>u.id===selected.id) : null;
   if (selU){
     const phase = (S.turn && S.turn.phase) || "command";
@@ -1921,7 +1928,7 @@ function draw(){
       ctx.strokeStyle="#c39a4ecc"; ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
     }
   }
-  S.units.forEach(u => { if (!u.reserved) drawUnit(u); });
+  (S.units || []).forEach(u => { if (!u.reserved) drawUnit(u); });
   if (tape && tape.a){
     const a = toScreen(tape.a.x, tape.a.y);
     ctx.beginPath(); ctx.arc(a.x,a.y,5,0,Math.PI*2); ctx.fillStyle="#c39a4e"; ctx.fill();
@@ -1934,7 +1941,7 @@ function draw(){
       ctx.fillText(d.toFixed(1)+"\"", (a.x+b.x)/2, (a.y+b.y)/2 - 8);
     }
   }
-  if (!S.terrain.length && !S.units.length){
+  if (!(S.terrain || []).length && !(S.units || []).length){
     ctx.fillStyle="#e9e3d4aa"; ctx.font="400 22px Fraunces,serif"; ctx.textAlign="center";
     ctx.fillText("Empty table", w/2, h/2-10);
     ctx.font="12px Archivo,sans-serif"; ctx.fillStyle="#8e9490";
@@ -2803,7 +2810,12 @@ function startSync(){
 
 guideOn = !!practice; // practice on, PVP off; user may toggle either way
 rollsOn = !!practice;
-renderLog(); renderPhases(); refreshTip(); refreshGuide(); setRolls(rollsOn); updateTerrainTools(); updateChargeRow(); renderActions(); resize();
+try {
+  renderLog(); renderPhases(); refreshTip(); refreshGuide(); setRolls(rollsOn); updateTerrainTools(); updateChargeRow(); renderActions();
+} catch (err) { console.error("boot ui", err); }
+resize();
+requestAnimationFrame(() => { resizedOnce = false; resize(); });
+setTimeout(() => { resizedOnce = false; resize(); }, 250);
 async function bindSeatFromServer(){
   if (practice || !who || !matchId) return;
   try{
