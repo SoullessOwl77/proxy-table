@@ -17,6 +17,22 @@
       kind: "reserve",
       announce: null,
       note: "May start in Reserves and Ingress from the second battle round."
+    },
+    "waaagh": {
+      id: "waaagh",
+      name: "Waaagh!",
+      kind: "other",
+      announce: null,
+      pending: true,
+      note: "Ork faction ability. Not simulated yet."
+    },
+    "get-da-good-bitz": {
+      id: "get-da-good-bitz",
+      name: "Get da Good Bitz",
+      kind: "other",
+      announce: "command",
+      pending: true,
+      note: "If this unit controls an objective at the end of your Command phase, it stays yours."
     }
   };
 
@@ -71,6 +87,31 @@
         { name: "Fist", kind: "melee", A: 4, skill: 3, S: 8, AP: -2, D: 2, rng: 0, tags: [] }
       ],
       abilities: []
+    },
+    boyz: {
+      id: "boyz",
+      edition: "11th",
+      faction: "Orks",
+      factionKeywords: ["ORKS"],
+      type: "Infantry",
+      name: "Boyz",
+      keywords: ["INFANTRY", "BATTLELINE", "MOB", "EXPLOSIVES", "BOYZ"],
+      search: ["boyz", "orks", "battleline"],
+      M: 6, T: 5, Sv: 5, Inv: 0, W: 1, Ld: 7, OC: 2, baseMm: 32,
+      composition: { label: "1 Boss Nob, 9 Boyz", defaultCount: 10 },
+      weapons: [
+        { name: "Kustom shoota", kind: "ranged", A: 4, skill: 5, S: 4, AP: 0, D: 1, rng: 18, tags: ["RAPID FIRE 2"] },
+        { name: "Kombi-rokkit", kind: "ranged", A: 1, skill: 5, S: 10, AP: -2, D: 3, rng: 24, tags: [] },
+        { name: "Kombi-shoota", kind: "ranged", A: 2, skill: 5, S: 4, AP: 0, D: 1, rng: 24, tags: [] },
+        { name: "Shoota", kind: "ranged", A: 2, skill: 5, S: 4, AP: 0, D: 1, rng: 18, tags: ["RAPID FIRE 1"] },
+        { name: "Slugga", kind: "ranged", A: 1, skill: 5, S: 4, AP: 0, D: 1, rng: 12, tags: ["CLOSE-QUARTERS"] },
+        { name: "Big choppa", kind: "melee", A: 3, skill: 3, S: 7, AP: -1, D: 2, rng: 0, tags: [] },
+        { name: "Choppa", kind: "melee", A: 3, skill: 3, S: 4, AP: -1, D: 1, rng: 0, tags: [] }
+      ],
+      abilities: [
+        { id: "waaagh" },
+        { id: "get-da-good-bitz", announce: "command" }
+      ]
     }
   };
 
@@ -127,6 +168,47 @@
     return a && a.x ? a.x : 0;
   }
 
+  const ARMY_STORE = "pt_40k_army_v1";
+  function emptyArmy() {
+    return { v: 1, name: "My list", units: [] };
+  }
+  function loadArmy() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(ARMY_STORE) || "null");
+      if (raw && Array.isArray(raw.units)) return raw;
+    } catch (_) {}
+    return emptyArmy();
+  }
+  function saveArmy(army) {
+    localStorage.setItem(ARMY_STORE, JSON.stringify(army));
+    return army;
+  }
+  function defaultGear(sheet, count) {
+    count = Math.max(1, count || (sheet.composition && sheet.composition.defaultCount) || 1);
+    const gear = (sheet.weapons || []).map(w => ({ name: w.name, count: 0 }));
+    const set = (name, n) => {
+      const g = gear.find(x => x.name === name);
+      if (g) g.count = Math.max(0, Math.min(count, n));
+    };
+    if (sheet.id === "boyz") {
+      set("Slugga", count);
+      set("Shoota", Math.max(0, count - 1));
+      set("Choppa", Math.max(0, count - 1));
+      set("Kustom shoota", count >= 1 ? 1 : 0);
+      set("Big choppa", count >= 1 ? 1 : 0);
+    } else {
+      const r = (sheet.weapons || []).find(w => w.kind === "ranged");
+      const m = (sheet.weapons || []).find(w => w.kind === "melee");
+      if (r) set(r.name, count);
+      if (m) set(m.name, count);
+    }
+    return gear;
+  }
+  function weaponsForIndex(sheet, gear, index) {
+    const names = (gear || []).filter(g => index < (g.count || 0)).map(g => g.name);
+    return (sheet.weapons || []).filter(w => names.indexOf(w.name) >= 0);
+  }
+
   const live = { lib: currentLib(), sheets: currentSheets() };
 
   window.PTSheets = {
@@ -154,6 +236,12 @@
     abilitiesOf,
     fnpOf,
     slug,
+    ARMY_STORE,
+    loadArmy,
+    saveArmy,
+    emptyArmy,
+    defaultGear,
+    weaponsForIndex,
     addAbility(name, extra) {
       const id = slug(name);
       if (!live.lib[id]) {

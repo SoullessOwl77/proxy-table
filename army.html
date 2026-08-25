@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proxy Table — Army</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#141d1b">
+<link rel="icon" href="./icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Archivo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --felt:#141d1b; --felt-2:#1b2825; --brass:#c39a4e; --brass-dim:#7d6433;
+  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;min-height:100%;background:var(--felt);color:var(--parchment);font-family:Archivo,sans-serif;}
+a{color:var(--brass);}
+.top{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #0006;background:#0f1614;}
+.top h1{font-family:Fraunces,serif;font-size:22px;font-weight:600;margin:0;flex:1;}
+.top .sub{font-size:12px;color:var(--parchment-dim);}
+.btn{background:#2a3a36;color:var(--parchment);border:1px solid #0008;border-radius:8px;padding:7px 10px;font:700 12px Archivo,sans-serif;cursor:pointer;}
+.btn.gold{background:var(--brass);color:#14110a;border-color:#0006;}
+.btn.ghost{background:transparent;}
+.btn.danger{color:var(--blood);border-color:var(--blood);}
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;padding:16px 18px 32px;max-width:1100px;margin:0 auto;}
+@media (max-width:800px){.wrap{grid-template-columns:1fr;}}
+.list,.card{background:#1b2825;border:1px solid var(--brass-dim);border-radius:10px;padding:12px 14px;}
+.list h2,.card h2{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);}
+.list button{display:block;width:100%;text-align:left;margin:0 0 6px;}
+.list button.on{background:var(--brass);color:#14110a;}
+label.field{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--parchment-dim);margin:8px 0 4px;}
+input,select{background:#0f1614;color:var(--parchment);border:1px solid #0007;border-radius:6px;padding:6px 8px;font:400 13px Archivo,sans-serif;width:100%;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{text-align:left;color:var(--brass);font-size:10px;padding:4px;}
+td{padding:4px 2px;}
+td input{width:72px;}
+.hint{font-size:12px;color:var(--parchment-dim);line-height:1.4;}
+.foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.saved{margin-top:16px;}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Army generator</h1>
+    <div class="sub">Pick a datasheet, set count and gear, save the unit that goes to the table</div>
+  </div>
+  <a class="btn ghost" href="./index.html">Hub</a>
+  <a class="btn ghost" href="./datasheet.html">Datasheets</a>
+  <a class="btn ghost" href="./wh40k.html">Table</a>
+</header>
+<div class="wrap">
+  <aside class="list">
+    <h2>Catalog</h2>
+    <div id="sheetList"></div>
+  </aside>
+  <section class="card">
+    <h2>Build a unit</h2>
+    <label class="field">Unit name on the table</label>
+    <input id="fName">
+    <label class="field">Models in this unit</label>
+    <input id="fCount" inputmode="numeric" value="10">
+    <p class="hint" id="compHint"></p>
+    <label class="field">How many models have each weapon</label>
+    <table>
+      <thead><tr><th>Weapon</th><th>Kind</th><th>Models</th></tr></thead>
+      <tbody id="gearBody"></tbody>
+    </table>
+    <div class="foot">
+      <button class="btn gold" type="button" id="btnSave">Save to list</button>
+      <span class="hint" id="saveMsg"></span>
+    </div>
+    <div class="saved">
+      <h2>Saved units (this device)</h2>
+      <div id="savedList" class="hint">None yet.</div>
+    </div>
+  </section>
+</div>
+<script src="./datasheets.js"></script>
+<script>
+const PT = window.PTSheets;
+let key = PT.DATASHEETS.boyz ? "boyz" : Object.keys(PT.DATASHEETS)[0];
+let army = PT.loadArmy();
+function renderSheets(){
+  document.getElementById("sheetList").innerHTML = Object.keys(PT.DATASHEETS).map(k => {
+    const s = PT.DATASHEETS[k];
+    return `<button class="btn ${k===key?"on":""}" data-k="${k}" type="button">${s.name}</button>`;
+  }).join("");
+}
+document.getElementById("sheetList").onclick = e => {
+  const b = e.target.closest("[data-k]");
+  if (!b) return;
+  key = b.dataset.k;
+  loadSheet();
+};
+function loadSheet(){
+  const s = PT.DATASHEETS[key];
+  if (!s) return;
+  const count = (s.composition && s.composition.defaultCount) || 1;
+  document.getElementById("fName").value = s.name;
+  document.getElementById("fCount").value = count;
+  document.getElementById("compHint").textContent = (s.composition && s.composition.label) || "";
+  const gear = PT.defaultGear(s, count);
+  drawGear(s, gear);
+  renderSheets();
+  renderSaved();
+}
+function drawGear(s, gear){
+  document.getElementById("gearBody").innerHTML = (s.weapons || []).map(w => {
+    const g = (gear || []).find(x => x.name === w.name);
+    return `<tr>
+      <td>${w.name}${w.tags && w.tags.length ? " ["+w.tags.join(", ")+"]" : ""}</td>
+      <td>${w.kind}</td>
+      <td><input data-w="${w.name}" inputmode="numeric" value="${g ? g.count : 0}"></td>
+    </tr>`;
+  }).join("");
+}
+function readCount(){ return Math.max(1, parseInt(document.getElementById("fCount").value, 10) || 1); }
+function readGear(){
+  return [...document.querySelectorAll("#gearBody [data-w]")].map(el => ({
+    name: el.dataset.w,
+    count: Math.max(0, parseInt(el.value, 10) || 0)
+  }));
+}
+document.getElementById("fCount").onchange = () => {
+  const s = PT.DATASHEETS[key];
+  const n = readCount();
+  readGear().forEach(g => { if (g.count > n) g.count = n; });
+  const gear = readGear();
+  gear.forEach(g => { if (g.count > n) g.count = n; });
+  drawGear(s, gear);
+};
+document.getElementById("btnSave").onclick = () => {
+  const s = PT.DATASHEETS[key];
+  const count = readCount();
+  const gear = readGear().map(g => ({ name: g.name, count: Math.min(count, g.count) }));
+  army.units.push({
+    id: "au_" + Date.now().toString(36),
+    sheetKey: key,
+    sheetId: s.id,
+    name: document.getElementById("fName").value.trim() || s.name,
+    count,
+    gear
+  });
+  PT.saveArmy(army);
+  document.getElementById("saveMsg").textContent = "Saved. Setup on the table can drop this unit.";
+  renderSaved();
+};
+function renderSaved(){
+  army = PT.loadArmy();
+  const el = document.getElementById("savedList");
+  if (!army.units.length){ el.textContent = "None yet."; return; }
+  el.innerHTML = army.units.map(u => {
+    const bits = (u.gear || []).filter(g => g.count).map(g => g.count + "× " + g.name).join(", ");
+    return `<div style="margin:0 0 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <strong>${u.name}</strong> ×${u.count}
+      <span>${bits || "no gear"}</span>
+      <a class="btn gold" href="./wh40k.html?drop=${encodeURIComponent(u.id)}">Drop on table</a>
+      <button class="btn danger" data-del="${u.id}" type="button">Remove</button>
+    </div>`;
+  }).join("");
+}
+document.getElementById("savedList").onclick = e => {
+  const b = e.target.closest("[data-del]");
+  if (!b) return;
+  army.units = army.units.filter(u => u.id !== b.dataset.del);
+  PT.saveArmy(army);
+  renderSaved();
+};
+loadSheet();
+</script>
+</body>
+</html>

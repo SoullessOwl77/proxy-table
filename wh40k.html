@@ -297,6 +297,8 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn" data-drop="cmd">Commander</button>
     <button class="btn" data-drop="wlk">Walker</button>
     <button class="btn ghost" id="btnClearU">Clear units</button>
+    <select id="armyPick" title="Saved army units" style="max-width:160px;background:#1b2825;color:#e9e3d4;border:1px solid #0006;border-radius:6px;padding:6px;"></select>
+    <button class="btn gold" id="btnArmyDrop">Drop saved</button>
     <button class="btn" id="btnReserve">Reserves</button>
     <button class="btn" id="btnDeepStrike">Deep Strike</button>
     <span class="hint" id="reserveSetupHint">Reserves = off the table until Ingress in Movement.</span>
@@ -328,7 +330,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.14.7-fnp-ui";
+const BUILD = "v2.15.0-army-gen";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -2131,6 +2133,47 @@ function addDrop(key){
   const u = dropUnit(key, mySeat, W/2, y, key==="inf"?"solo"+uidn:null);
   selectObj("u", u); logLine("Placed "+u.name); save(); draw();
 }
+function wepCopy(w){
+  if (!w) return null;
+  const d = (typeof w.D === "number") ? w.D : 1;
+  return { name:w.name, A:w.A||1, skill:w.skill||4, S:w.S||4, AP:w.AP||0, D:d, rng:w.rng||0, tags:(w.tags||[]).slice() };
+}
+function dropArmyEntry(entry, seat){
+  if (!entry) return;
+  const sheet = sheetOf(entry.sheetKey) || Object.keys(DATASHEETS).map(k => DATASHEETS[k]).find(s => s && s.id === entry.sheetId);
+  if (!sheet){ logLine("Saved unit sheet missing"); return; }
+  const n = Math.max(1, entry.count || 1);
+  const g = "g" + seat + "_" + uidn;
+  const y = seat === 0 ? 6 : H - 6;
+  const startX = 14;
+  for (let i = 0; i < n; i++){
+    const u = dropUnit(entry.sheetKey, seat, startX + i * 1.45, y, g);
+    if (!u) continue;
+    u.armyId = entry.id;
+    const weps = window.PTSheets.weaponsForIndex(sheet, entry.gear, i);
+    const ranged = weps.find(w => w.kind === "ranged");
+    const melee = weps.find(w => w.kind === "melee");
+    if (ranged) u.ranged = wepCopy(ranged);
+    if (melee) u.melee = wepCopy(melee);
+    if (sheet.id === "boyz" && i === 0){
+      u.name = "Boss Nob";
+      u.W = 2; u.wounds = 2;
+    } else {
+      u.name = entry.name || sheet.name;
+    }
+  }
+  selectObj(null);
+  logLine("Dropped " + (entry.name || sheet.name) + " ×" + n);
+  save(); draw();
+}
+function refreshArmyPick(){
+  const sel = document.getElementById("armyPick");
+  if (!sel || !window.PTSheets || !PTSheets.loadArmy) return;
+  const army = PTSheets.loadArmy();
+  sel.innerHTML = '<option value="">Saved units…</option>' + (army.units || []).map(u =>
+    `<option value="${u.id}">${u.name} ×${u.count}</option>`
+  ).join("");
+}
 
 document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
 document.getElementById("btnMenu").addEventListener("pointerenter", () => showTip(TIPS.menu));
@@ -2226,6 +2269,14 @@ document.getElementById("btnClearU").onclick = () => {
   S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw();
 };
 document.getElementById("btnDemo").onclick = demoForces;
+document.getElementById("btnArmyDrop").onclick = () => {
+  if (!inSetup()){ logLine("Place units in Setup"); return; }
+  const id = document.getElementById("armyPick").value;
+  if (!id){ logLine("Pick a saved unit first (Army generator)"); return; }
+  const entry = (window.PTSheets.loadArmy().units || []).find(u => u.id === id);
+  dropArmyEntry(entry, mySeat);
+};
+refreshArmyPick();
 document.getElementById("btnReserve").onclick = () => {
   const u = selectedUnit();
   if (!u){ document.getElementById("dice").textContent = "Select a unit, then Reserves."; return; }
@@ -2834,6 +2885,14 @@ try {
 resize();
 requestAnimationFrame(() => { resizedOnce = false; resize(); });
 setTimeout(() => { resizedOnce = false; resize(); }, 250);
+(function spawnSaved(){
+  const dropId = params.get("drop");
+  if (!dropId) return;
+  if (!inSetup()){ logLine("Return to Setup to drop a saved unit"); return; }
+  const entry = (window.PTSheets.loadArmy().units || []).find(u => u.id === dropId);
+  if (!entry){ logLine("Saved unit not found"); return; }
+  dropArmyEntry(entry, mySeat);
+})();
 async function bindSeatFromServer(){
   if (practice || !who || !matchId) return;
   try{
