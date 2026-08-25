@@ -454,6 +454,8 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
         <div class="actionrow">
           <button class="bigbtn" type="button" id="menu40kPractice"><span class="t">Practice table</span>
             <span class="d">Interactive map, terrain, and pieces. Nothing is synced.</span></button>
+          <button class="bigbtn" type="button" id="menu40kSheets"><span class="t">Datasheets</span>
+            <span class="d">Editable card template the army manager will reuse.</span></button>
           <button class="bigbtn" type="button" disabled><span class="t">Army manager</span>
             <span class="d">Lists and points. Not built yet.</span></button>
           <button class="bigbtn" type="button" disabled><span class="t">How to play</span>
@@ -779,7 +781,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.7-deck-line";
+const BUILD = "v2.7.8-datasheet";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1315,6 +1317,7 @@ $("#menuCode").onclick = () => { challengeGame = "mtg"; switchTab("tabCode"); op
 let challengeGame = "mtg";
 function open40kTable(id){ location.href = "./wh40k.html?match=" + encodeURIComponent(id); }
 $("#menu40kPractice").onclick = () => { location.href = "./wh40k.html"; };
+$("#menu40kSheets").onclick = () => { location.href = "./datasheet.html"; };
 $("#menu40kChallenge").onclick = () => { challengeGame = "wh40k"; switchTab("tabName"); open("#challengeModal"); };
 $("#menu40kCode").onclick = () => { challengeGame = "wh40k"; switchTab("tabCode"); open("#challengeModal"); };
 function switchTab(id){

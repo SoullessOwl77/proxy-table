@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proxy Table — Datasheet</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#141d1b">
+<link rel="icon" href="./icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Archivo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --felt:#141d1b; --felt-2:#1b2825; --felt-3:#233330;
+  --brass:#c39a4e; --brass-dim:#7d6433;
+  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;min-height:100%;background:var(--felt);color:var(--parchment);
+  font-family:Archivo,sans-serif;}
+a{color:var(--brass);}
+.top{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #0006;
+  background:#0f1614;}
+.top h1{font-family:Fraunces,serif;font-size:22px;font-weight:600;margin:0;flex:1;}
+.top .sub{font-size:12px;color:var(--parchment-dim);}
+.btn{background:#2a3a36;color:var(--parchment);border:1px solid #0008;border-radius:8px;
+  padding:7px 10px;font:700 12px Archivo,sans-serif;cursor:pointer;}
+.btn.gold{background:var(--brass);color:#14110a;border-color:#0006;}
+.btn.ghost{background:transparent;}
+.wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:16px;padding:16px 18px 32px;
+  max-width:1100px;margin:0 auto;}
+@media (max-width:800px){.wrap{grid-template-columns:1fr;}}
+.list{background:var(--felt-2);border:1px solid var(--brass-dim);border-radius:10px;padding:10px;}
+.list h2{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);}
+.list button{display:block;width:100%;text-align:left;margin:0 0 6px;}
+.list button.on{background:var(--brass);color:#14110a;}
+.card{background:linear-gradient(180deg,#24322e,#1b2825);border:1px solid var(--brass-dim);
+  border-radius:12px;padding:16px 18px;box-shadow:0 12px 32px #0006;}
+.cardhead{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.cardhead input,.cardhead select{flex:1;min-width:120px;}
+.stats{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;margin:0 0 14px;}
+@media (max-width:700px){.stats{grid-template-columns:repeat(4,minmax(0,1fr));}}
+.stat{background:#0f1614;border:1px solid #0007;border-radius:8px;padding:6px 4px;text-align:center;}
+.stat label{display:block;font-size:10px;letter-spacing:.1em;color:var(--brass);margin-bottom:4px;}
+.stat input{width:100%;background:transparent;border:0;color:var(--parchment);text-align:center;
+  font:700 16px Archivo,sans-serif;}
+input,select,textarea{background:#0f1614;color:var(--parchment);border:1px solid #0007;border-radius:6px;
+  padding:6px 8px;font:400 13px Archivo,sans-serif;}
+label.field{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
+.row{margin:0 0 12px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{text-align:left;color:var(--brass);font-size:10px;letter-spacing:.08em;padding:4px;}
+td{padding:3px 2px;}
+td input,td select{width:100%;}
+.abil{display:flex;gap:6px;align-items:center;margin:0 0 6px;flex-wrap:wrap;}
+.abil select{flex:1;min-width:160px;}
+.abil input{width:64px;}
+.hint{font-size:12px;color:var(--parchment-dim);line-height:1.4;}
+.pending{color:#e0c56a;}
+.foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Datasheet</h1>
+    <div class="sub">Shared template · army manager will use this same card</div>
+  </div>
+  <a class="btn ghost" href="./index.html">Hub</a>
+  <a class="btn ghost" href="./wh40k.html">Table</a>
+</header>
+<div class="wrap">
+  <aside class="list">
+    <h2>Sheets</h2>
+    <div id="sheetList"></div>
+    <button class="btn" id="btnNew" type="button">New sheet</button>
+  </aside>
+  <section class="card" id="card">
+    <div class="cardhead">
+      <div style="flex:2;">
+        <label class="field">Name</label>
+        <input id="fName">
+      </div>
+      <div>
+        <label class="field">Faction</label>
+        <input id="fFaction">
+      </div>
+      <div>
+        <label class="field">Type</label>
+        <select id="fType"></select>
+      </div>
+      <div>
+        <label class="field">Edition</label>
+        <select id="fEdition"></select>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><label>M</label><input id="fM" inputmode="numeric"></div>
+      <div class="stat"><label>T</label><input id="fT" inputmode="numeric"></div>
+      <div class="stat"><label>Sv</label><input id="fSv" inputmode="numeric" title="Armour save as 3 for 3+"></div>
+      <div class="stat"><label>Inv</label><input id="fInv" inputmode="numeric" title="0 = none"></div>
+      <div class="stat"><label>W</label><input id="fW" inputmode="numeric"></div>
+      <div class="stat"><label>Ld</label><input id="fLd" inputmode="numeric"></div>
+      <div class="stat"><label>OC</label><input id="fOC" inputmode="numeric"></div>
+      <div class="stat"><label>Base</label><input id="fBase" inputmode="numeric"></div>
+    </div>
+    <div class="row">
+      <label class="field">Keywords (comma)</label>
+      <input id="fKeywords">
+    </div>
+    <div class="row">
+      <label class="field">Search tags (comma)</label>
+      <input id="fSearch">
+    </div>
+    <div class="row">
+      <label class="field">Composition</label>
+      <input id="fComp" placeholder="1 Commander">
+    </div>
+    <div class="row">
+      <label class="field">Weapons</label>
+      <table>
+        <thead><tr><th>Name</th><th>Kind</th><th>A</th><th>BS/WS</th><th>S</th><th>AP</th><th>D</th><th>Rng</th><th>Tags</th><th></th></tr></thead>
+        <tbody id="wepBody"></tbody>
+      </table>
+      <button class="btn" type="button" id="btnAddWep">Add weapon</button>
+    </div>
+    <div class="row">
+      <label class="field">Abilities</label>
+      <div id="abilBody"></div>
+      <div class="abil">
+        <select id="abilPick"></select>
+        <input id="abilX" placeholder="X+" title="e.g. 5 for Feel No Pain 5+">
+        <button class="btn gold" type="button" id="btnAddAbil">Add</button>
+      </div>
+      <div class="abil">
+        <input id="abilNew" placeholder="Unknown ability name" style="flex:1;min-width:160px;">
+        <button class="btn" type="button" id="btnAddUnknown">Add?</button>
+      </div>
+      <p class="hint">Add uses the known library. Add? is for a PDF/skill guess that is not in the library yet — it is marked pending until you rename or keep it.</p>
+    </div>
+    <div class="foot">
+      <button class="btn gold" type="button" id="btnSave">Save</button>
+      <button class="btn" type="button" id="btnRevert">Revert this sheet</button>
+      <button class="btn" type="button" id="btnResetAll">Reset all to demo</button>
+      <span class="hint" id="saveMsg"></span>
+    </div>
+  </section>
+</div>
+<script src="./datasheets.js"></script>
+<script>
+const PT = window.PTSheets;
+let key = "cmd";
+function opt(sel, arr, cur){
+  sel.innerHTML = arr.map(v => `<option value="${v}">${v}</option>`).join("");
+  sel.value = cur;
+}
+function csv(arr){ return (arr || []).join(", "); }
+function fromCsv(s){ return String(s || "").split(",").map(x => x.trim()).filter(Boolean); }
+function num(el){ const n = parseInt(el.value, 10); return n === n ? n : 0; }
+function renderList(){
+  const el = document.getElementById("sheetList");
+  el.innerHTML = Object.keys(PT.DATASHEETS).map(k => {
+    const s = PT.DATASHEETS[k];
+    return `<button class="btn ${k===key?"on":""}" data-k="${k}" type="button">${s.name}</button>`;
+  }).join("");
+  el.onclick = e => {
+    const b = e.target.closest("[data-k]");
+    if (b){ collect(); key = b.dataset.k; render(); }
+  };
+}
+function wepRow(w, i){
+  return `<tr data-i="${i}">
+    <td><input data-f="name" value="${w.name||""}"></td>
+    <td><select data-f="kind"><option value="ranged"${w.kind==="ranged"?" selected":""}>ranged</option><option value="melee"${w.kind==="melee"?" selected":""}>melee</option></select></td>
+    <td><input data-f="A" value="${w.A??1}"></td>
+    <td><input data-f="skill" value="${w.skill??4}"></td>
+    <td><input data-f="S" value="${w.S??4}"></td>
+    <td><input data-f="AP" value="${w.AP??0}"></td>
+    <td><input data-f="D" value="${w.D??1}"></td>
+    <td><input data-f="rng" value="${w.rng??0}"></td>
+    <td><input data-f="tags" value="${csv(w.tags)}"></td>
+    <td><button class="btn" data-del="${i}" type="button">×</button></td>
+  </tr>`;
+}
+function renderAbilPick(){
+  const sel = document.getElementById("abilPick");
+  sel.innerHTML = Object.keys(PT.ABILITY_LIB).map(id => {
+    const a = PT.ABILITY_LIB[id];
+    return `<option value="${id}">${a.name}${a.pending?" (pending)":""}</option>`;
+  }).join("");
+}
+function render(){
+  const s = PT.DATASHEETS[key];
+  if (!s) return;
+  document.getElementById("fName").value = s.name || "";
+  document.getElementById("fFaction").value = s.faction || "";
+  opt(document.getElementById("fType"), PT.TYPES, s.type || "Infantry");
+  opt(document.getElementById("fEdition"), PT.EDITIONS, s.edition || "11th");
+  document.getElementById("fM").value = s.M ?? 6;
+  document.getElementById("fT").value = s.T ?? 4;
+  document.getElementById("fSv").value = s.Sv ?? 3;
+  document.getElementById("fInv").value = s.Inv ?? 0;
+  document.getElementById("fW").value = s.W ?? 1;
+  document.getElementById("fLd").value = s.Ld ?? 7;
+  document.getElementById("fOC").value = s.OC ?? 1;
+  document.getElementById("fBase").value = s.baseMm ?? 32;
+  document.getElementById("fKeywords").value = csv(s.keywords);
+  document.getElementById("fSearch").value = csv(s.search);
+  document.getElementById("fComp").value = (s.composition && s.composition.label) || "";
+  document.getElementById("wepBody").innerHTML = (s.weapons || []).map(wepRow).join("");
+  document.getElementById("abilBody").innerHTML = (s.abilities || []).map((a,i) => {
+    const lib = PT.ABILITY_LIB[a.id] || { name: a.id, pending: true };
+    return `<div class="abil" data-ai="${i}">
+      <span class="${lib.pending?"pending":""}">${lib.name}${a.x ? " "+a.x+"+" : ""}</span>
+      <button class="btn" data-adel="${i}" type="button">×</button>
+    </div>`;
+  }).join("") || `<p class="hint">None yet.</p>`;
+  renderAbilPick();
+  renderList();
+}
+function collectWeapons(){
+  return [...document.querySelectorAll("#wepBody tr")].map(tr => {
+    const g = f => tr.querySelector("[data-f='"+f+"']").value;
+    return {
+      name: g("name"),
+      kind: g("kind"),
+      A: +g("A") || 1,
+      skill: +g("skill") || 4,
+      S: +g("S") || 4,
+      AP: +g("AP") || 0,
+      D: +g("D") || 1,
+      rng: +g("rng") || 0,
+      tags: fromCsv(g("tags"))
+    };
+  });
+}
+function collect(){
+  const s = PT.DATASHEETS[key];
+  if (!s) return;
+  s.name = document.getElementById("fName").value.trim() || s.name;
+  s.faction = document.getElementById("fFaction").value.trim() || "Demo";
+  s.type = document.getElementById("fType").value;
+  s.edition = document.getElementById("fEdition").value;
+  s.M = num(document.getElementById("fM"));
+  s.T = num(document.getElementById("fT"));
+  s.Sv = num(document.getElementById("fSv"));
+  s.Inv = num(document.getElementById("fInv"));
+  s.W = num(document.getElementById("fW"));
+  s.Ld = num(document.getElementById("fLd"));
+  s.OC = num(document.getElementById("fOC"));
+  s.baseMm = num(document.getElementById("fBase"));
+  s.keywords = fromCsv(document.getElementById("fKeywords").value).map(x => x.toUpperCase());
+  s.search = fromCsv(document.getElementById("fSearch").value).map(x => x.toLowerCase());
+  s.composition = s.composition || {};
+  s.composition.label = document.getElementById("fComp").value.trim();
+  s.weapons = collectWeapons();
+}
+document.getElementById("wepBody").onclick = e => {
+  const b = e.target.closest("[data-del]");
+  if (!b) return;
+  collect();
+  PT.DATASHEETS[key].weapons.splice(+b.dataset.del, 1);
+  render();
+};
+document.getElementById("btnAddWep").onclick = () => {
+  collect();
+  PT.DATASHEETS[key].weapons.push({ name: "Weapon", kind: "ranged", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 24, tags: [] });
+  render();
+};
+document.getElementById("abilBody").onclick = e => {
+  const b = e.target.closest("[data-adel]");
+  if (!b) return;
+  collect();
+  PT.DATASHEETS[key].abilities.splice(+b.dataset.adel, 1);
+  render();
+};
+document.getElementById("btnAddAbil").onclick = () => {
+  collect();
+  const id = document.getElementById("abilPick").value;
+  const x = parseInt(document.getElementById("abilX").value, 10);
+  const row = { id };
+  if (x === x) row.x = x;
+  PT.DATASHEETS[key].abilities = PT.DATASHEETS[key].abilities || [];
+  PT.DATASHEETS[key].abilities.push(row);
+  render();
+};
+document.getElementById("btnAddUnknown").onclick = () => {
+  const name = document.getElementById("abilNew").value.trim();
+  if (!name) return;
+  collect();
+  const ab = PT.addAbility(name, { pending: true, note: "Added from editor (low confidence)." });
+  PT.DATASHEETS[key].abilities = PT.DATASHEETS[key].abilities || [];
+  PT.DATASHEETS[key].abilities.push({ id: ab.id });
+  document.getElementById("abilNew").value = "";
+  render();
+};
+document.getElementById("btnSave").onclick = () => {
+  collect();
+  PT.save();
+  document.getElementById("saveMsg").textContent = "Saved on this device. New drops on the table use this sheet.";
+};
+document.getElementById("btnRevert").onclick = () => {
+  const def = PT.defaults.sheets[key];
+  if (def) PT.DATASHEETS[key] = JSON.parse(JSON.stringify(def));
+  PT.save();
+  render();
+};
+document.getElementById("btnResetAll").onclick = () => {
+  if (!confirm("Clear all saved sheet edits on this device?")) return;
+  PT.reset();
+  key = "cmd";
+  render();
+};
+document.getElementById("btnNew").onclick = () => {
+  collect();
+  const k = "u" + Date.now().toString(36);
+  PT.DATASHEETS[k] = {
+    id: k, edition: "11th", faction: "Demo", factionKeywords: ["DEMO"],
+    type: "Infantry", name: "New unit", keywords: ["INFANTRY"], search: [],
+    M: 6, T: 4, Sv: 4, Inv: 0, W: 1, Ld: 7, OC: 1, baseMm: 32,
+    composition: { label: "1 model", defaultCount: 1 },
+    weapons: [{ name: "Ranged", kind: "ranged", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 24, tags: [] }],
+    abilities: []
+  };
+  key = k;
+  render();
+};
+render();
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Proxy Table — 40K</title>
+<script src="./datasheets.js"></script>
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#141d1b">
 <link rel="icon" href="./icon-192.png">
@@ -232,6 +233,10 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn sm" id="devCharge2">charge 1+1</button>
     <button class="btn sm" id="devClear">Clear</button>
   </div>
+  <label class="hint" style="display:flex;align-items:flex-start;gap:8px;margin:0 0 8px;cursor:pointer;">
+    <input type="checkbox" id="devSkipGates" checked style="margin-top:2px;">
+    <span>Skip eligibility (already shot / Advanced / Fall Back / charge roll / range / ER). Phase drag locks stay on.</span>
+  </label>
   <p class="hint">Practice only. Combat uses hit → wound → save in that order, one d6 each. Charge and Advance pull the next dice the same way. Unused dice stay queued.</p>
 </aside>
 <aside class="rollpanel" id="rollpanel">
@@ -322,7 +327,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.7-devdice";
+const BUILD = "v2.14.1-sheet-ui";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -582,23 +587,13 @@ const PRESETS = {
   hill:     { preset:"hill",     category:"light",   w:10,h:6, label:"Hill" },
   obstacle: { preset:"obstacle", category:"exposed", w:6, h:2, label:"Obstacle" }
 };
-const DROPS = {
-  inf: {
-    name:"Infantry", keywords:["INFANTRY"], M:6, T:4, Sv:3, Inv:0, W:2, Ld:6, baseMm:32,
-    ranged:{ name:"Rifle", A:2, skill:3, S:4, AP:0, D:1, rng:24 },
-    melee:{ name:"Blade", A:3, skill:3, S:4, AP:0, D:1 }
-  },
-  cmd: {
-    name:"Commander", keywords:["INFANTRY","CHARACTER"], M:6, T:4, Sv:3, Inv:4, W:5, Ld:7, baseMm:40,
-    ranged:{ name:"Pistol", A:1, skill:2, S:4, AP:-1, D:1, rng:12 },
-    melee:{ name:"Power blade", A:5, skill:2, S:5, AP:-2, D:2 }
-  },
-  wlk: {
-    name:"Walker", keywords:["VEHICLE","WALKER"], M:8, T:10, Sv:3, Inv:0, W:7, Ld:7, baseMm:80,
-    ranged:{ name:"Cannon", A:3, skill:3, S:8, AP:-1, D:2, rng:36 },
-    melee:{ name:"Fist", A:4, skill:3, S:8, AP:-2, D:2 }
-  }
-};
+const ABILITY_LIB = window.PTSheets.ABILITY_LIB;
+const DATASHEETS = window.PTSheets.DATASHEETS;
+const DROPS = DATASHEETS;
+function sheetOf(key){ return window.PTSheets.sheetOf(key); }
+function firstWeapon(sheet, kind){ return window.PTSheets.firstWeapon(sheet, kind); }
+function abilitiesOf(u){ return window.PTSheets.abilitiesOf(u); }
+function fnpOf(u){ return window.PTSheets.fnpOf(u); }
 const CAT_FILL = { exposed:"#8a7a62cc", light:"#3f6b4acc", dense:"#4a3d38ee" };
 const CAT_STROKE = { exposed:"#c4b08a", light:"#6bbf8a", dense:"#a88870" };
 
@@ -766,13 +761,13 @@ function rollCharge(){
     document.getElementById("dice").textContent = "Select an active-player model first, then Roll charge.";
     return;
   }
-  if (chargeFor(u.id)){
+  if (chargeFor(u.id) && !devOpenGates()){
     showWarn("<strong>Charge:</strong> this model already rolled this phase.");
     return;
   }
   const g = chargeGate(u);
   if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
-  if (inEngagement(u)){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
+  if (inEngagement(u) && !devOpenGates()){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
   const d1 = d6(), d2 = d6(), total = d1 + d2;
   if (!S.chargeRolls) S.chargeRolls = {};
   S.chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y };
@@ -1090,7 +1085,7 @@ function announceAction(){
   const group = unitGroup(u);
   const st = groupMoveState(u);
   if (a.id === "advance"){
-    if (st.declared){
+    if (st.declared && !devOpenGates()){
       showWarn("<strong>Advance:</strong> this unit already chose a move. Revert first.");
       return;
     }
@@ -1102,7 +1097,7 @@ function announceAction(){
     document.getElementById("dice").textContent = "Advance [ "+d+" ] → move up to "+cap+"″ from base edge";
     setSimpleRoll("Advance", u.name, [d], "M"+(u.M||6)+" + "+d+" = "+cap+"″ from base edge");
   } else if (a.id === "fallBack"){
-    if (st.declared){
+    if (st.declared && !devOpenGates()){
       showWarn("<strong>Fall Back:</strong> this unit already chose a move. Revert first.");
       return;
     }
@@ -1115,7 +1110,7 @@ function announceAction(){
     logLine(u.name+(group.length>1?" unit":"")+" Falls Back");
     document.getElementById("dice").textContent = "Fell Back — leave ER; usually cannot shoot or charge.";
   } else if (a.id === "remain"){
-    if (st.declared){
+    if (st.declared && !devOpenGates()){
       showWarn("<strong>Remain Stationary:</strong> this unit already chose a move. Revert first.");
       return;
     }
@@ -1180,6 +1175,7 @@ function announceAction(){
   save(); draw(); refreshTip(); renderActions();
 }
 function shootGate(atk){
+  if (devOpenGates()) return null;
   const f = flagsOf(atk);
   if (f.advanced) return "This unit Advanced — it usually cannot shoot (soft-gate).";
   if (f.fellBack) return "This unit Fell Back — it usually cannot shoot.";
@@ -1188,12 +1184,14 @@ function shootGate(atk){
   return null;
 }
 function warnShootEligibility(u){
+  if (devOpenGates()) return;
   if (!u || S.turn.phase !== "shooting") return;
   if (u.seat !== S.turn.activeSeat) return;
   const g = shootGate(u);
   if (g) showWarn("<strong>Shooting:</strong> "+g);
 }
 function chargeGate(atk){
+  if (devOpenGates()) return null;
   const f = flagsOf(atk);
   if (f.advanced) return "This unit Advanced — it cannot charge.";
   if (f.fellBack) return "This unit Fell Back — it cannot charge.";
@@ -1411,7 +1409,7 @@ function unitTip(u){
   }
   return {
     title: u.name,
-    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. "+ringNote,
+    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+(fnpOf(u)?" · FnP "+fnpOf(u)+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. "+ringNote,
     more:
       "Move (M): up to "+u.M+"″. Rings are from the base edge — keep the edge on or inside the gold ring.\n"+
       "Toughness (T): "+u.T+" — compared to weapon Strength on the wound roll (equal Strength needs 4+).\n"+
@@ -1569,6 +1567,11 @@ if (practice){
   document.getElementById("devCharge12").onclick = () => enqueueDice(6, 6);
   document.getElementById("devCharge2").onclick = () => enqueueDice(1, 1);
   document.getElementById("devClear").onclick = () => { devQueue = []; renderDevQueue(); };
+  const skip = document.getElementById("devSkipGates");
+  if (skip){
+    skip.checked = devSkipGates;
+    skip.onchange = () => { devSkipGates = !!skip.checked; };
+  }
 }
 
 const cam = { x: W/2, y: H/2, scale: 12 };
@@ -1975,7 +1978,8 @@ function selectObj(kind, obj){
     } else {
       document.getElementById("selName").textContent = obj.name;
       const inv = obj.Inv ? (" Inv"+obj.Inv+"+") : "";
-      document.getElementById("selMeta").textContent = "M"+obj.M+" T"+obj.T+" Sv"+obj.Sv+"+"+inv+" W "+(obj.wounds??obj.W)+"/"+obj.W;
+      const fnp = fnpOf(obj) ? (" FnP"+fnpOf(obj)+"+") : "";
+      document.getElementById("selMeta").textContent = "M"+obj.M+" T"+obj.T+" Sv"+obj.Sv+"+"+inv+fnp+" W "+(obj.wounds??obj.W)+"/"+obj.W;
       lock.style.display = "none";
       if (rotL) rotL.style.display = "";
       if (rotR) rotR.style.display = "";
@@ -2007,12 +2011,21 @@ function generate(){
   selectObj(null); logLine("Generated terrain"); save(); draw();
 }
 function dropUnit(key, seat, x, y, groupId){
-  const d = DROPS[key];
+  const d = sheetOf(key) || DROPS[key];
+  if (!d) return null;
   const u = {
-    id:"u_"+(uidn++)+"_s"+seat, seat, name:d.name, keywords:d.keywords.slice(),
-    M:d.M, T:d.T, Sv:d.Sv, Inv:d.Inv||0, W:d.W, wounds:d.W, Ld:d.Ld||6, baseMm:d.baseMm,
-    ranged: Object.assign({}, d.ranged), melee: Object.assign({}, d.melee),
-    x, y, rot:0, groupId: groupId||null, reserved:false, flags: defaultFlags()
+    id: "u_"+(uidn++)+"_s"+seat,
+    seat,
+    sheetId: d.id || key,
+    name: d.name,
+    keywords: (d.keywords || []).slice(),
+    factionKeywords: (d.factionKeywords || []).slice(),
+    M: d.M, T: d.T, Sv: d.Sv, Inv: d.Inv || 0, W: d.W,
+    wounds: d.W, Ld: d.Ld || 6, OC: d.OC || 0, baseMm: d.baseMm,
+    ranged: firstWeapon(d, "ranged"),
+    melee: firstWeapon(d, "melee"),
+    abilities: (d.abilities || []).map(a => Object.assign({}, a)),
+    x, y, rot: 0, groupId: groupId || null, reserved: false, flags: defaultFlags()
   };
   S.units.push(u); return u;
 }
@@ -2211,6 +2224,8 @@ function rotSel(d){
 /* ---------- combat ---------- */
 let devQueue = [];
 let devOn = false;
+let devSkipGates = true;
+function devOpenGates(){ return !!(practice && devSkipGates); }
 function renderDevQueue(){
   const el = document.getElementById("devQueue");
   if (!el) return;
@@ -2302,15 +2317,15 @@ function resolveAttack(){
   const pw = pickWeapon(atk, measure);
   const w = pw.w;
   if (pw.kind === "ranged"){
-    if (unitInER(atk, mates) && S.turn.phase === "shooting"){
+    if (unitInER(atk, mates) && S.turn.phase === "shooting" && !devOpenGates()){
       document.getElementById("dice").textContent = "In Engagement Range — use Fight, or a close-quarters weapon (not in this slice).";
       return;
     }
-    if (pw.dist > (w.rng||24)+0.05){
+    if (pw.dist > (w.rng||24)+0.05 && !devOpenGates()){
       document.getElementById("dice").textContent = "Out of range ("+pw.dist.toFixed(1)+"\" > "+w.rng+"\").";
       return;
     }
-  } else if (!unitInER(atk, mates)){
+  } else if (!unitInER(atk, mates) && !devOpenGates()){
     document.getElementById("dice").textContent = "Not in 2\" Engagement Range.";
     showWarn("<strong>Fight:</strong> not in 2″ Engagement Range of that unit.");
     return;
