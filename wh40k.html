@@ -330,7 +330,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.15.1-cq-nob";
+const BUILD = "v2.15.2-drop-once";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -2905,10 +2905,19 @@ setTimeout(() => { resizedOnce = false; resize(); }, 250);
 (function spawnSaved(){
   const dropId = params.get("drop");
   if (!dropId) return;
-  if (!inSetup()){ logLine("Return to Setup to drop a saved unit"); return; }
+  const strip = () => {
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete("drop");
+      history.replaceState({}, "", u.pathname + (u.search || "") + u.hash);
+    } catch (_) {}
+  };
+  if ((S.units || []).some(u => u.armyId === dropId)){ strip(); return; }
+  if (!inSetup()){ logLine("Return to Setup to drop a saved unit"); strip(); return; }
   const entry = (window.PTSheets.loadArmy().units || []).find(u => u.id === dropId);
-  if (!entry){ logLine("Saved unit not found"); return; }
+  if (!entry){ logLine("Saved unit not found"); strip(); return; }
   dropArmyEntry(entry, mySeat);
+  strip();
 })();
 async function bindSeatFromServer(){
   if (practice || !who || !matchId) return;
