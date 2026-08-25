@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Proxy Table — 40K</title>
-<script src="./datasheets.js"></script>
+<script src="./datasheets/load.js"></script>
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#141d1b">
 <link rel="icon" href="./icon-192.png">
@@ -330,7 +330,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.15.0-army-gen";
+const BUILD = "v2.15.1-cq-nob";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -1211,7 +1211,11 @@ function shootGate(atk){
   if (f.advanced) return "This unit Advanced — it usually cannot shoot (soft-gate).";
   if (f.fellBack) return "This unit Fell Back — it usually cannot shoot.";
   if (f.shot) return "This model already shot this phase.";
-  if (inEngagement(atk)) return "This model is in 2″ Engagement Range — use Fight, or a close-quarters weapon (not in this slice).";
+  if (inEngagement(atk)){
+    const guns = modelGuns(atk);
+    if (guns.some(w => window.PTSheets.isCloseQuarters(w))) return null;
+    return "This model is in 2″ Engagement Range — Fight, or shoot a [CLOSE-QUARTERS] / [PISTOL] weapon.";
+  }
   return null;
 }
 function warnShootEligibility(u){
@@ -2151,16 +2155,14 @@ function dropArmyEntry(entry, seat){
     if (!u) continue;
     u.armyId = entry.id;
     const weps = window.PTSheets.weaponsForIndex(sheet, entry.gear, i);
+    u.weapons = weps.map(w => Object.assign({ kind: w.kind }, wepCopy(w), { kind: w.kind, tags: (w.tags || []).slice() }));
     const ranged = weps.find(w => w.kind === "ranged");
     const melee = weps.find(w => w.kind === "melee");
     if (ranged) u.ranged = wepCopy(ranged);
     if (melee) u.melee = wepCopy(melee);
-    if (sheet.id === "boyz" && i === 0){
-      u.name = "Boss Nob";
-      u.W = 2; u.wounds = 2;
-    } else {
-      u.name = entry.name || sheet.name;
-    }
+    const prof = window.PTSheets.profileForIndex(sheet, i, n);
+    u.name = prof.name || entry.name || sheet.name;
+    if (prof.W){ u.W = prof.W; u.wounds = prof.W; }
   }
   selectObj(null);
   logLine("Dropped " + (entry.name || sheet.name) + " ×" + n);
@@ -2381,12 +2383,24 @@ function woundNeed(Sval, T){
   if (Sval*2 <= T) return 6;
   return 5;
 }
+function modelGuns(u){
+  const listed = (u.weapons || []).filter(w => w && w.kind === "ranged");
+  if (listed.length) return listed;
+  return u.ranged ? [u.ranged] : [];
+}
 function pickWeapon(atk, tgt){
   const phase = S.turn.phase;
   const dist = edgeDist(atk, tgt);
   const er = dist <= 2.01;
   if (phase === "fight" || phase === "charge") return { kind:"melee", w: atk.melee, dist, er };
-  if (phase === "shooting") return { kind:"ranged", w: atk.ranged, dist, er };
+  if (phase === "shooting"){
+    const guns = modelGuns(atk);
+    if (er){
+      const cq = guns.find(w => window.PTSheets.isCloseQuarters(w));
+      if (cq) return { kind:"ranged", w: cq, dist, er, cq: true };
+    }
+    return { kind:"ranged", w: guns[0] || atk.ranged, dist, er };
+  }
   if (er) return { kind:"melee", w: atk.melee, dist, er };
   return { kind:"ranged", w: atk.ranged, dist, er };
 }
@@ -2438,8 +2452,11 @@ function resolveAttack(){
   const w = pw.w;
   if (pw.kind === "ranged"){
     if (unitInER(atk, mates) && S.turn.phase === "shooting" && !devOpenGates()){
-      document.getElementById("dice").textContent = "In Engagement Range — use Fight, or a close-quarters weapon (not in this slice).";
-      return;
+      if (!window.PTSheets.isCloseQuarters(w)){
+        document.getElementById("dice").textContent = "In Engagement Range — only [CLOSE-QUARTERS] / [PISTOL] can shoot here.";
+        showWarn("<strong>Shooting:</strong> engaged — fire a Close Quarters weapon at that unit, or Fight.");
+        return;
+      }
     }
     if (pw.dist > (w.rng||24)+0.05 && !devOpenGates()){
       document.getElementById("dice").textContent = "Out of range ("+pw.dist.toFixed(1)+"\" > "+w.rng+"\").";

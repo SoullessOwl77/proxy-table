@@ -1,0 +1,5 @@
+/* Chaos Daemons — 11th edition catalog. Accept a card to add units here. */
+PTSheetsPack('chaos-daemons', {
+  faction: 'Chaos Daemons',
+  sheets: {}
+});
