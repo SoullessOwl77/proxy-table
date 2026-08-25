@@ -328,7 +328,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.14.6-dev-tdz";
+const BUILD = "v2.14.7-fnp-ui";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -611,7 +611,15 @@ const DROPS = DATASHEETS;
 function sheetOf(key){ return window.PTSheets.sheetOf(key); }
 function firstWeapon(sheet, kind){ return window.PTSheets.firstWeapon(sheet, kind); }
 function abilitiesOf(u){ return window.PTSheets.abilitiesOf(u); }
-function fnpOf(u){ return window.PTSheets.fnpOf(u); }
+function fnpOf(u){
+  const n = window.PTSheets.fnpOf(u);
+  if (n) return n;
+  if (!u) return 0;
+  const sheets = window.PTSheets.DATASHEETS || {};
+  const sheet = (u.sheetId && Object.keys(sheets).map(k => sheets[k]).find(s => s && s.id === u.sheetId))
+    || Object.keys(sheets).map(k => sheets[k]).find(s => s && s.name === u.name);
+  return sheet ? window.PTSheets.fnpOf(sheet) : 0;
+}
 const CAT_FILL = { exposed:"#8a7a62cc", light:"#3f6b4acc", dense:"#4a3d38ee" };
 const CAT_STROKE = { exposed:"#c4b08a", light:"#6bbf8a", dense:"#a88870" };
 
@@ -1559,8 +1567,17 @@ function renderRollPanel(){
     } else if (d.wound && d.wound.ok){
       html += `<div class="math">Save — skipped</div>`;
     }
+    if (d.fnp && d.fnp.rolls && d.fnp.rolls.length){
+      const ignored = d.fnp.rolls.length - (d.fnp.kept || 0);
+      html += `<div>FnP ${d.fnp.rolls.map(r =>
+        `<span class="die ${r >= d.fnp.need ? "ok" : "fail"}">${r}</span>`
+      ).join(" ")}
+        <span class="math">need ${d.fnp.need}+ · ${ignored} ignored · ${d.fnp.kept} go through</span></div>`;
+    }
     if (d.dmg){
-      html += `<div>Damage <span class="die ok">${d.dmg}</span> <span class="math">applied to target</span></div>`;
+      html += `<div>Damage <span class="die ok">${d.dmg}</span> <span class="math">applied to ${d.onto || "target"}</span></div>`;
+    } else if (d.fnp && d.save && !d.save.ok){
+      html += `<div class="math">Damage — all ignored by Feel No Pain</div>`;
     }
     html += `</div>`;
   });
