@@ -1,7 +1,7 @@
 /* Proxy Table service worker — app shell + card art caching, plus
    push notifications for challenges and nudges. */
 
-const SHELL = "pt-shell-v13";
+const SHELL = "pt-shell-v14";
 const ART = "pt-art-v1";
 const ART_LIMIT = 900;
 
@@ -50,7 +50,14 @@ self.addEventListener("fetch", e => {
           caches.open(SHELL).then(c => c.put(req, copy));
         }
         return res;
-      }).catch(() => caches.match(req).then(r => r || caches.match("./index.html")))
+      }).catch(() => caches.match(req).then(r => {
+        if (r) return r;
+        const path = url.pathname || "";
+        if (path.endsWith(".js") || path.endsWith(".css") || path.endsWith(".webmanifest")) {
+          return new Response("/* missing */", { status: 404, headers: { "Content-Type": "text/plain" } });
+        }
+        return caches.match("./index.html");
+      }))
     );
   }
 });

@@ -169,7 +169,7 @@ canvas.dragging{cursor:grabbing;}
   <span class="sync" id="syncState"></span>
 </div>
 <nav class="rail left" aria-label="Table controls">
-  <button class="btn sm" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
+  <a class="btn sm" id="btnMenu" href="./index.html" title="Back to the game chooser and your matches">Menu</a>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
   <button class="btn sm" id="btnDev" title="Practice only — queue the next dice" style="display:none">Dev</button>
@@ -327,7 +327,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.14.1-sheet-ui";
+const BUILD = "v2.14.3-sheet-boot";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -468,9 +468,9 @@ const ACTIONS = {
     more:"Later: spend 1 CP at the end of the other seat’s Movement to Ingress one reserved unit on their turn."
   },
   allocation: {
-    id:"allocation", phase:"shooting", label:"Allocation", announce:false, placeholder:true,
-    short:"Who takes the hits — not automated yet. Pick the model that should be wounded.",
-    more:"Full rules assign attacks to the closest / legal model. This table: you choose attacker and target tokens by hand."
+    id:"allocation", phase:"shooting", label:"Allocation", announce:false, placeholder:false,
+    short:"Target the unit, then tap which eligible model takes the next wound.",
+    more:"Wounded troopers first, then fresh troopers, Character last. Tapping a model only sticks if it is in that current bucket. Feel No Pain on that model (if the sheet has it) is rolled per wound after a failed save."
   },
   overwatch: {
     id:"overwatch", phase:"charge", label:"Overwatch", announce:false, placeholder:true,
@@ -587,6 +587,23 @@ const PRESETS = {
   hill:     { preset:"hill",     category:"light",   w:10,h:6, label:"Hill" },
   obstacle: { preset:"obstacle", category:"exposed", w:6, h:2, label:"Obstacle" }
 };
+if (!window.PTSheets){
+  window.PTSheets = {
+    ABILITY_LIB: {},
+    DATASHEETS: {
+      inf: { id:"demo-infantry", name:"Infantry", keywords:["INFANTRY"], M:6,T:4,Sv:3,Inv:0,W:2,Ld:6,OC:2,baseMm:32, weapons:[{name:"Rifle",kind:"ranged",A:2,skill:3,S:4,AP:0,D:1,rng:24},{name:"Blade",kind:"melee",A:3,skill:3,S:4,AP:0,D:1,rng:0}], abilities:[] },
+      cmd: { id:"demo-commander", name:"Commander", keywords:["INFANTRY","CHARACTER"], M:6,T:4,Sv:3,Inv:4,W:5,Ld:7,OC:1,baseMm:40, weapons:[{name:"Pistol",kind:"ranged",A:1,skill:2,S:4,AP:-1,D:1,rng:12},{name:"Blade",kind:"melee",A:5,skill:2,S:5,AP:-2,D:2,rng:0}], abilities:[{id:"feel-no-pain",x:5}] },
+      wlk: { id:"demo-walker", name:"Walker", keywords:["VEHICLE","WALKER"], M:8,T:10,Sv:3,Inv:0,W:7,Ld:7,OC:3,baseMm:80, weapons:[{name:"Cannon",kind:"ranged",A:3,skill:3,S:8,AP:-1,D:2,rng:36},{name:"Fist",kind:"melee",A:4,skill:3,S:8,AP:-2,D:2,rng:0}], abilities:[] }
+    },
+    sheetOf(key){ return this.DATASHEETS[key] || null; },
+    firstWeapon(sheet, kind){
+      const w = ((sheet && sheet.weapons) || []).find(x => x.kind === kind) || { name:"Weapon", A:1, skill:4, S:4, AP:0, D:1, rng: kind==="ranged"?24:0 };
+      return { name:w.name, A:w.A, skill:w.skill, S:w.S, AP:w.AP, D:w.D, rng:w.rng||0, tags:(w.tags||[]).slice() };
+    },
+    abilitiesOf(u){ return (u && u.abilities) || []; },
+    fnpOf(u){ const a = this.abilitiesOf(u).find(x => x.id === "feel-no-pain"); return a && a.x ? a.x : 0; }
+  };
+}
 const ABILITY_LIB = window.PTSheets.ABILITY_LIB;
 const DATASHEETS = window.PTSheets.DATASHEETS;
 const DROPS = DATASHEETS;
@@ -607,7 +624,7 @@ if (matchId && !who){
 let mySeat = 0;
 let tool = "terrain";
 let selected = null;
-let attackerId = null, targetId = null;
+let attackerId = null, targetId = null, preferAllocId = null;
 /* Charge phase: 2D6 per model. Lives on S.chargeRolls so PVP syncs the ring. */
 let selectedAction = null;
 let nid = 1, uidn = 1;
@@ -726,6 +743,7 @@ function renderPhases(){
 function clearCombatPair(){
   attackerId = null;
   targetId = null;
+  preferAllocId = null;
   if (S) S.chargeRolls = {};
   const dice = document.getElementById("dice");
   if (dice) dice.textContent = "";
@@ -1666,6 +1684,31 @@ function allocQueue(models){
   const charF = living.filter(m => isCharacter(m) && (m.wounds ?? m.W) >= m.W);
   return bodyW.concat(bodyF, charW, charF);
 }
+function allocRank(m){
+  if (!m) return 99;
+  const char = isCharacter(m);
+  const hurt = (m.wounds ?? m.W) < m.W;
+  if (!char && hurt) return 0;
+  if (!char && !hurt) return 1;
+  if (char && hurt) return 2;
+  return 3;
+}
+function pickRecipient(models, preferId){
+  const q = allocQueue(models);
+  if (!q.length) return null;
+  const rank = allocRank(q[0]);
+  if (preferId){
+    const p = (models || []).find(m => m.id === preferId && (m.wounds ?? m.W) > 0);
+    if (p && allocRank(p) === rank) return p;
+  }
+  return q[0];
+}
+function allocNote(models, rec){
+  if (!rec) return "";
+  const rank = allocRank(rec);
+  const names = ["wounded troopers", "fresh troopers", "wounded Character", "Character"];
+  return rec.name + " (" + (names[rank] || "eligible") + ")";
+}
 function closestModel(from, models){
   let best = null, bestD = Infinity;
   for (const m of models || []){
@@ -1936,11 +1979,12 @@ function drawUnit(u){
   const isAtk = u.id===attackerId;
   const tgtU = targetId && S.units.find(x => x.id===targetId);
   const isTgt = !!(tgtU && unitModels(tgtU).some(m => m.id===u.id));
+  const isAlloc = !!(preferAllocId && u.id === preferAllocId);
   ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
   ctx.fillStyle = u.seat===0 ? "#6b8fbfdd" : "#bf6b6bdd";
   ctx.fill();
-  ctx.strokeStyle = isTgt ? "#a8443c" : isAtk ? "#c39a4e" : isSel ? "#e9e3d4" : "#e9e3d4aa";
-  ctx.lineWidth = (isAtk||isTgt||isSel) ? 2.6 : 1.2; ctx.stroke();
+  ctx.strokeStyle = isAlloc ? "#e0c56a" : isTgt ? "#a8443c" : isAtk ? "#c39a4e" : isSel ? "#e9e3d4" : "#e9e3d4aa";
+  ctx.lineWidth = (isAtk||isTgt||isAlloc||isSel) ? 2.6 : 1.2; ctx.stroke();
   ctx.fillStyle="#0a0f0e"; ctx.font="700 "+Math.max(9, Math.min(12,r*0.7))+"px Archivo,sans-serif";
   ctx.textAlign="center"; ctx.textBaseline="middle";
   ctx.fillText((u.name||"?")[0], p.x, p.y);
@@ -2333,7 +2377,7 @@ function resolveAttack(){
   const cov = inCover(measure, atk);
   const hitMod = cov ? -1 : 0;
   const hitNeed = Math.max(2, Math.min(7, w.skill - hitMod));
-  const firstRec = allocQueue(mates)[0] || measure;
+  const firstRec = pickRecipient(mates, preferAllocId) || measure;
   const wn = woundNeed(w.S, firstRec.T);
   const armourNeed0 = Math.max(2, Math.min(7, firstRec.Sv - (w.AP||0)));
   const saveLabel = firstRec.Inv
@@ -2345,7 +2389,7 @@ function resolveAttack(){
   const killed = [];
   for (let i=0;i<w.A;i++){
     const entry = { hit: null, wound: null, save: null, dmg: 0, onto: null };
-    const rec = allocQueue(unitModels(tgt))[0];
+    const rec = pickRecipient(unitModels(tgt), preferAllocId);
     if (!rec){ dice.push(entry); break; }
     const h = d6();
     const hit = (h===1) ? false : (h===6 || h>=hitNeed);
@@ -2379,14 +2423,31 @@ function resolveAttack(){
     saves.push(sv+(saved?(" "+how):" fail")+" → "+rec.name);
     if (saved){ dice.push(entry); continue; }
     unsaved++;
-    const deal = Math.min(w.D, rec.wounds ?? rec.W);
+    let deal = Math.min(w.D, rec.wounds ?? rec.W);
+    const fnp = fnpOf(rec);
+    const fnpDice = [];
+    if (fnp && deal > 0){
+      let kept = 0;
+      for (let p = 0; p < deal; p++){
+        const fr = d6();
+        fnpDice.push(fr);
+        if (fr < fnp) kept++;
+      }
+      deal = kept;
+      entry.fnp = { need: fnp, rolls: fnpDice, kept };
+    }
     rec.wounds = (rec.wounds ?? rec.W) - deal;
     dmg += deal;
     entry.dmg = deal;
+    entry.onto = rec.name + (isCharacter(rec) ? " (Character)" : "") + (fnp ? " FnP"+fnp+"+" : "");
     dice.push(entry);
+    if (fnpDice.length){
+      saves[saves.length - 1] += " FnP["+fnpDice.join(" ")+"]";
+    }
     if (rec.wounds <= 0){
       killed.push(rec.name);
       S.units = S.units.filter(u => u.id !== rec.id);
+      if (preferAllocId === rec.id) preferAllocId = null;
     }
   }
   const left = unitModels(tgt);
@@ -2426,7 +2487,7 @@ function resolveAttack(){
   save(); draw(); refreshTip(); renderActions();
 }
 document.getElementById("btnResolve").onclick = resolveAttack;
-document.getElementById("btnClearAtk").onclick = () => { attackerId=targetId=null; document.getElementById("dice").textContent=""; draw(); refreshTip(); };
+document.getElementById("btnClearAtk").onclick = () => { clearCombatPair(); draw(); refreshTip(); renderCombatBar(); };
 
 const ptrs = new Map();
 let mode=null, drag=null;
@@ -2463,8 +2524,25 @@ canvas.addEventListener("pointerdown", e => {
             attackerId = null;
             document.getElementById("dice").textContent = seatName(active) + "'s turn — tap one of their models first.";
           } else {
+            const prev = targetId && S.units.find(x => x.id === targetId);
+            const sameUnit = prev && unitModels(prev).some(m => m.id === hu.id);
             targetId = hu.id;
-            document.getElementById("dice").textContent = "Target " + unitLabel(hu);
+            if (sameUnit){
+              const rec = pickRecipient(unitModels(hu), hu.id);
+              if (rec && rec.id === hu.id){
+                preferAllocId = hu.id;
+                document.getElementById("dice").textContent = "Allocate to " + allocNote(unitModels(hu), rec);
+              } else {
+                const must = pickRecipient(unitModels(hu), null);
+                preferAllocId = must ? must.id : null;
+                document.getElementById("dice").textContent = "Not eligible yet — " + (must ? allocNote(unitModels(hu), must) : "no models");
+                showWarn("<strong>Allocation:</strong> wounded troopers first, Character last. Next wound goes to " + (must ? must.name : "an eligible model") + ".");
+              }
+            } else {
+              preferAllocId = pickRecipient(unitModels(hu), hu.id)?.id || hu.id;
+              const rec = pickRecipient(unitModels(hu), preferAllocId);
+              document.getElementById("dice").textContent = "Target " + unitLabel(hu) + (rec ? " → " + allocNote(unitModels(hu), rec) : "");
+            }
           }
         }
       }
