@@ -123,6 +123,17 @@ canvas.dragging{cursor:grabbing;}
 .guide .do li,.guide .dont li{margin-bottom:3px;}
 .guide .nextwhen{font-size:12px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:4px;}
 .guide .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
+.devpanel{position:fixed;top:40px;left:calc(var(--rail-l) + var(--edge-l) + 8px);z-index:6;width:min(280px,34vw);
+  background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
+  box-shadow:0 8px 24px #0008;display:none;font-size:12px;line-height:1.4;}
+.devpanel.on{display:block;}
+.devpanel .gbar{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+.devpanel .gbar h3{flex:1;font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0;}
+.devpanel .die-row,.devpanel .preset-row{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px;}
+.devpanel .die-row .btn{min-width:32px;}
+.devpanel .q{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--brass);
+  min-height:1.4em;word-break:break-word;margin:0 0 8px;}
+.devpanel .hint{font-size:11px;color:var(--parchment-dim);line-height:1.35;}
 .rollpanel{position:fixed;bottom:calc(120px + env(safe-area-inset-bottom,0px));right:calc(var(--rail-r) + var(--edge-r) + 8px);z-index:5;
   width:min(320px,36vw);max-height:min(40vh,320px);overflow:auto;
   background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
@@ -160,6 +171,7 @@ canvas.dragging{cursor:grabbing;}
   <button class="btn sm" id="btnMenu" title="Back to the game chooser and your matches">Menu</button>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
+  <button class="btn sm" id="btnDev" title="Practice only — queue the next dice" style="display:none">Dev</button>
   <button class="btn sm danger" id="btnReset" title="Reset">Reset</button>
   <button class="btn sm" id="btnSetup" title="Return to setup — place terrain and units. Battle phases do not come back here.">Setup</button>
   <div class="rail-label">Tools</div>
@@ -197,6 +209,30 @@ canvas.dragging{cursor:grabbing;}
   <div class="label">Don’t</div>
   <ul class="dont" id="guideDont"></ul>
   <div class="nextwhen" id="guideNext"></div>
+</aside>
+<aside class="devpanel" id="devpanel">
+  <div class="gbar">
+    <h3>Dev dice</h3>
+    <button class="btn sm ghost" id="btnDevHide" title="Hide">–</button>
+  </div>
+  <div class="label" style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;">Next d6 (front of queue first)</div>
+  <div class="q" id="devQueue">empty — random</div>
+  <div class="die-row" id="devDice">
+    <button class="btn sm" data-die="1">1</button>
+    <button class="btn sm" data-die="2">2</button>
+    <button class="btn sm" data-die="3">3</button>
+    <button class="btn sm" data-die="4">4</button>
+    <button class="btn sm" data-die="5">5</button>
+    <button class="btn sm" data-die="6">6</button>
+  </div>
+  <div class="preset-row">
+    <button class="btn sm" id="devHitWound">hit+wound 6,6</button>
+    <button class="btn sm" id="devFail">fail 1</button>
+    <button class="btn sm" id="devCharge12">charge 6+6</button>
+    <button class="btn sm" id="devCharge2">charge 1+1</button>
+    <button class="btn sm" id="devClear">Clear</button>
+  </div>
+  <p class="hint">Practice only. Combat uses hit → wound → save in that order, one d6 each. Charge and Advance pull the next dice the same way. Unused dice stay queued.</p>
 </aside>
 <aside class="rollpanel" id="rollpanel">
   <div class="rbar">
@@ -286,7 +322,7 @@ canvas.dragging{cursor:grabbing;}
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
 <script>
-const BUILD = "v2.13.5-names-turn";
+const BUILD = "v2.13.7-devdice";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -1517,6 +1553,23 @@ document.getElementById("btnRolls").onclick = () => {
 };
 document.getElementById("btnRolls").addEventListener("pointerenter", () => showTip(TIPS.rolls));
 document.getElementById("btnRollsHide").onclick = () => setRolls(false);
+if (practice){
+  const devBtn = document.getElementById("btnDev");
+  if (devBtn){
+    devBtn.style.display = "";
+    devBtn.onclick = () => setDev(!devOn);
+  }
+  document.getElementById("btnDevHide").onclick = () => setDev(false);
+  document.getElementById("devDice").onclick = e => {
+    const b = e.target.closest("[data-die]");
+    if (b) enqueueDice(+b.dataset.die);
+  };
+  document.getElementById("devHitWound").onclick = () => enqueueDice(6, 6);
+  document.getElementById("devFail").onclick = () => enqueueDice(1);
+  document.getElementById("devCharge12").onclick = () => enqueueDice(6, 6);
+  document.getElementById("devCharge2").onclick = () => enqueueDice(1, 1);
+  document.getElementById("devClear").onclick = () => { devQueue = []; renderDevQueue(); };
+}
 
 const cam = { x: W/2, y: H/2, scale: 12 };
 let resizedOnce = false;
@@ -1583,6 +1636,43 @@ function rangeReach(u, inches){ return unitR(u) + (inches || 0); }
 function groupMembers(groupId){
   if (!groupId) return [];
   return S.units.filter(u => u.groupId === groupId && !u.reserved);
+}
+function unitModels(u){
+  if (!u) return [];
+  if (u.groupId){
+    const g = groupMembers(u.groupId);
+    if (g.length) return g;
+  }
+  return S.units.filter(x => x.id === u.id);
+}
+function unitLabel(u){
+  const ms = unitModels(u);
+  const whoSeat = u ? seatName(u.seat) : "";
+  if (!ms.length) return "unit";
+  if (ms.length === 1) return (u.name || "model") + " (" + whoSeat + ")";
+  return (u.name || "unit") + " unit ×" + ms.length + " (" + whoSeat + ")";
+}
+function isCharacter(u){
+  return !!(u && (u.keywords || []).some(k => String(k).toUpperCase() === "CHARACTER"));
+}
+function allocQueue(models){
+  const living = (models || []).filter(m => (m.wounds ?? m.W) > 0);
+  const bodyW = living.filter(m => !isCharacter(m) && (m.wounds ?? m.W) < m.W);
+  const bodyF = living.filter(m => !isCharacter(m) && (m.wounds ?? m.W) >= m.W);
+  const charW = living.filter(m => isCharacter(m) && (m.wounds ?? m.W) < m.W);
+  const charF = living.filter(m => isCharacter(m) && (m.wounds ?? m.W) >= m.W);
+  return bodyW.concat(bodyF, charW, charF);
+}
+function closestModel(from, models){
+  let best = null, bestD = Infinity;
+  for (const m of models || []){
+    const d = edgeDist(from, m);
+    if (d < bestD){ bestD = d; best = m; }
+  }
+  return best;
+}
+function unitInER(from, models){
+  return (models || []).some(m => edgeDist(from, m) <= 2.01);
 }
 function coherencyCheck(groupId){
   const members = groupMembers(groupId);
@@ -1779,7 +1869,8 @@ function draw(){
   if (attackerId && targetId){
     const a=S.units.find(u=>u.id===attackerId), t=S.units.find(u=>u.id===targetId);
     if (a&&t){
-      const pa=toScreen(a.x,a.y), pt=toScreen(t.x,t.y);
+      const near = closestModel(a, unitModels(t)) || t;
+      const pa=toScreen(a.x,a.y), pt=toScreen(near.x,near.y);
       ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pt.x,pt.y);
       ctx.strokeStyle="#c39a4ecc"; ctx.lineWidth=2; ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
     }
@@ -1839,7 +1930,9 @@ function drawPiece(t, isSel){
 function drawUnit(u){
   const p=toScreen(u.x,u.y), r=unitR(u)*cam.scale;
   const isSel = selected && selected.kind==="u" && selected.id===u.id;
-  const isAtk = u.id===attackerId, isTgt = u.id===targetId;
+  const isAtk = u.id===attackerId;
+  const tgtU = targetId && S.units.find(x => x.id===targetId);
+  const isTgt = !!(tgtU && unitModels(tgtU).some(m => m.id===u.id));
   ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
   ctx.fillStyle = u.seat===0 ? "#6b8fbfdd" : "#bf6b6bdd";
   ctx.fill();
@@ -2116,7 +2209,36 @@ function rotSel(d){
 }
 
 /* ---------- combat ---------- */
-function d6(){ return 1 + Math.floor(Math.random()*6); }
+let devQueue = [];
+let devOn = false;
+function renderDevQueue(){
+  const el = document.getElementById("devQueue");
+  if (!el) return;
+  el.textContent = devQueue.length ? devQueue.join(" → ") : "empty — random";
+}
+function enqueueDice(){
+  for (let i = 0; i < arguments.length; i++){
+    const n = Math.max(1, Math.min(6, parseInt(arguments[i], 10)));
+    if (n === n) devQueue.push(n);
+  }
+  renderDevQueue();
+}
+function d6(){
+  if (practice && devQueue.length){
+    const n = devQueue.shift();
+    renderDevQueue();
+    return n;
+  }
+  return 1 + Math.floor(Math.random()*6);
+}
+function setDev(on){
+  if (!practice) on = false;
+  devOn = !!on;
+  const panel = document.getElementById("devpanel");
+  const btn = document.getElementById("btnDev");
+  if (panel) panel.classList.toggle("on", devOn);
+  if (btn) btn.classList.toggle("on", devOn);
+}
 function woundNeed(Sval, T){
   if (Sval >= T*2) return 2;
   if (Sval > T) return 3;
@@ -2139,10 +2261,11 @@ function renderCombatBar(){
   const tgt = S.units.find(u=>u.id===targetId);
   if (!atk || !tgt){ box.classList.remove("on"); return; }
   box.classList.add("on");
-  document.getElementById("atkName").textContent = atk.name + " (P"+atk.seat+")";
-  document.getElementById("tgtName").textContent = tgt.name + " (P"+tgt.seat+")";
-  const pw = pickWeapon(atk, tgt);
-  const cov = inCover(tgt, atk);
+  document.getElementById("atkName").textContent = atk.name + " (" + seatName(atk.seat) + ")";
+  document.getElementById("tgtName").textContent = unitLabel(tgt);
+  const measure = closestModel(atk, unitModels(tgt)) || tgt;
+  const pw = pickWeapon(atk, measure);
+  const cov = inCover(measure, atk);
   const bits = [
     pw.w.name,
     "A"+pw.w.A,
@@ -2163,7 +2286,7 @@ function resolveAttack(){
   }
   if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return; }
   if (tgt.seat === S.turn.activeSeat){
-    document.getElementById("dice").textContent = "Target must be the enemy (not P"+S.turn.activeSeat+").";
+    document.getElementById("dice").textContent = "Target must be the enemy (not " + seatName(S.turn.activeSeat) + ").";
     return;
   }
   if (S.turn.phase === "shooting"){
@@ -2174,10 +2297,12 @@ function resolveAttack(){
     const g = chargeGate(atk);
     if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
   }
-  const pw = pickWeapon(atk, tgt);
+  const mates = unitModels(tgt);
+  const measure = closestModel(atk, mates) || tgt;
+  const pw = pickWeapon(atk, measure);
   const w = pw.w;
   if (pw.kind === "ranged"){
-    if (pw.er && S.turn.phase === "shooting"){
+    if (unitInER(atk, mates) && S.turn.phase === "shooting"){
       document.getElementById("dice").textContent = "In Engagement Range — use Fight, or a close-quarters weapon (not in this slice).";
       return;
     }
@@ -2185,24 +2310,28 @@ function resolveAttack(){
       document.getElementById("dice").textContent = "Out of range ("+pw.dist.toFixed(1)+"\" > "+w.rng+"\").";
       return;
     }
-  } else if (!pw.er){
+  } else if (!unitInER(atk, mates)){
     document.getElementById("dice").textContent = "Not in 2\" Engagement Range.";
-    showWarn("<strong>Fight:</strong> not in 2″ Engagement Range.");
+    showWarn("<strong>Fight:</strong> not in 2″ Engagement Range of that unit.");
     return;
   }
-  const cov = inCover(tgt, atk);
+  const cov = inCover(measure, atk);
   const hitMod = cov ? -1 : 0;
   const hitNeed = Math.max(2, Math.min(7, w.skill - hitMod));
-  const wn = woundNeed(w.S, tgt.T);
-  const armourNeed = Math.max(2, Math.min(7, tgt.Sv - (w.AP||0)));
-  const saveLabel = tgt.Inv
-    ? `Inv ${tgt.Inv}+ or Sv ${armourNeed}+ (AP${w.AP})`
-    : `Sv ${armourNeed}+ (AP${w.AP})`;
+  const firstRec = allocQueue(mates)[0] || measure;
+  const wn = woundNeed(w.S, firstRec.T);
+  const armourNeed0 = Math.max(2, Math.min(7, firstRec.Sv - (w.AP||0)));
+  const saveLabel = firstRec.Inv
+    ? `Inv ${firstRec.Inv}+ or Sv ${armourNeed0}+ (AP${w.AP})`
+    : `Sv ${armourNeed0}+ (AP${w.AP})`;
   const hits=[], wounds=[], saves=[];
   const dice = [];
   let hitN=0, woundN=0, unsaved=0, dmg=0;
+  const killed = [];
   for (let i=0;i<w.A;i++){
-    const entry = { hit: null, wound: null, save: null, dmg: 0 };
+    const entry = { hit: null, wound: null, save: null, dmg: 0, onto: null };
+    const rec = allocQueue(unitModels(tgt))[0];
+    if (!rec){ dice.push(entry); break; }
     const h = d6();
     const hit = (h===1) ? false : (h===6 || h>=hitNeed);
     entry.hit = {
@@ -2215,55 +2344,64 @@ function resolveAttack(){
     if (!hit){ dice.push(entry); continue; }
     hitN++;
     const wr = d6();
-    const wounded = wr!==1 && (wr===6 || wr>=wn);
-    entry.wound = { roll: wr, need: wn, ok: wounded };
+    const needW = woundNeed(w.S, rec.T);
+    const wounded = wr!==1 && (wr===6 || wr>=needW);
+    entry.wound = { roll: wr, need: needW, ok: wounded };
     wounds.push(wr+(wounded?"":"×"));
     if (!wounded){ dice.push(entry); continue; }
     woundN++;
+    const armourNeed = Math.max(2, Math.min(7, rec.Sv - (w.AP||0)));
     const sv = d6();
     let saved = false, how = "Sv "+armourNeed+"+";
     if (sv === 1) saved = false;
-    else if (tgt.Inv && sv >= tgt.Inv){ saved = true; how = "Inv "+tgt.Inv+"+"; }
+    else if (rec.Inv && sv >= rec.Inv){ saved = true; how = "Inv "+rec.Inv+"+"; }
     else {
       saved = sv >= armourNeed;
       how = "Sv "+armourNeed+"+";
     }
     entry.save = { roll: sv, ok: saved, how };
-    saves.push(sv+(saved?(" "+how):" fail"));
+    entry.onto = rec.name + (isCharacter(rec) ? " (Character)" : "");
+    saves.push(sv+(saved?(" "+how):" fail")+" → "+rec.name);
     if (saved){ dice.push(entry); continue; }
     unsaved++;
-    const deal = Math.min(w.D, tgt.wounds);
-    tgt.wounds -= deal;
+    const deal = Math.min(w.D, rec.wounds ?? rec.W);
+    rec.wounds = (rec.wounds ?? rec.W) - deal;
     dmg += deal;
     entry.dmg = deal;
     dice.push(entry);
-    if (tgt.wounds <= 0) break;
+    if (rec.wounds <= 0){
+      killed.push(rec.name);
+      S.units = S.units.filter(u => u.id !== rec.id);
+    }
   }
-  const destroyed = tgt.wounds <= 0;
+  const left = unitModels(tgt);
+  const destroyed = left.length === 0;
+  if (destroyed) targetId = null;
+  else if (!S.units.some(u => u.id === targetId)) targetId = left[0].id;
   lastRoll = {
-    atkName: atk.name + " (P"+atk.seat+")",
-    tgtName: tgt.name + " (P"+tgt.seat+")",
+    atkName: atk.name + " (" + seatName(atk.seat) + ")",
+    tgtName: unitLabel(tgt),
     wepName: w.name,
     kind: pw.kind,
     attacks: w.A,
     skill: w.skill,
-    S: w.S, AP: w.AP, D: w.D, T: tgt.T,
+    S: w.S, AP: w.AP, D: w.D, T: firstRec.T,
     cover: cov,
     hitNeed, woundNeed: wn, saveLabel,
     hitN, woundN, unsaved, dmg,
     destroyed,
-    tgtW: tgt.W,
-    tgtWoundsLeft: Math.max(0, tgt.wounds),
-    /* Per-die detail — ready for a future “select which dice count” UI */
+    tgtW: firstRec.W,
+    tgtWoundsLeft: left.reduce((n,m) => n + Math.max(0, m.wounds ?? m.W), 0),
     dice
   };
-  let line = atk.name+" → "+tgt.name+" "+w.name+": hit "+hitN+"/"+w.A+" wound "+woundN+" dmg "+dmg;
+  let line = atk.name+" → "+unitLabel(tgt)+" "+w.name+": hit "+hitN+"/"+w.A+" wound "+woundN+" dmg "+dmg;
   if (cov) line += " (cover −1)";
-  if (destroyed){
-    line += " — destroyed";
-    S.units = S.units.filter(u => u.id !== tgt.id);
-    targetId = null;
-  } else line += " ("+tgt.wounds+"/"+tgt.W+" left)";
+  if (killed.length) line += " — removed "+killed.join(", ");
+  if (destroyed) line += " — unit destroyed";
+  else if (left.length){
+    const q = allocQueue(left)[0];
+    if (q) line += " ("+q.name+" "+q.wounds+"/"+q.W+", "+left.length+" models)";
+  }
   logLine(line);
   if (S.turn.phase === "shooting") flagsOf(atk).shot = true;
   if (S.turn.phase === "fight") flagsOf(atk).fought = true;
@@ -2300,19 +2438,18 @@ canvas.addEventListener("pointerdown", e => {
         // Active player's model → attacker
         attackerId = hu.id;
         if (targetId === hu.id) targetId = null;
-        document.getElementById("dice").textContent = "Attacker P"+active+" · now tap an enemy";
+        document.getElementById("dice").textContent = "Attacker " + seatName(active) + " · now tap an enemy unit";
       } else {
-        // Enemy model → target (only if attacker already set)
         if (!attackerId){
-          document.getElementById("dice").textContent = "P"+active+"'s turn — tap one of their models first, then an enemy.";
+          document.getElementById("dice").textContent = seatName(active) + "'s turn — tap one of their models first, then an enemy unit.";
         } else {
           const atk = S.units.find(u=>u.id===attackerId);
           if (!atk || atk.seat !== active){
             attackerId = null;
-            document.getElementById("dice").textContent = "P"+active+"'s turn — tap one of their models first.";
+            document.getElementById("dice").textContent = seatName(active) + "'s turn — tap one of their models first.";
           } else {
             targetId = hu.id;
-            document.getElementById("dice").textContent = "";
+            document.getElementById("dice").textContent = "Target " + unitLabel(hu);
           }
         }
       }
