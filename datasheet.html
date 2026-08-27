@@ -33,6 +33,12 @@ a{color:var(--brass);}
 .list h2{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);}
 .list button{display:block;width:100%;text-align:left;margin:0 0 6px;}
 .list button.on{background:var(--brass);color:#14110a;}
+.list button.pts-only{color:#e07070;}
+.list button.pts-only.on{background:#5a2424;color:#f0c0c0;border-color:#a8443c;}
+.list button.fan-src{color:#b388ff;}
+.list button.fan-src.on{background:#3a2a55;color:#e4d4ff;border-color:#7a4fd6;}
+h1.pts-only,#fName.pts-only{color:#e07070;}
+#fName.fan-src{color:#b388ff;}
 .card{background:linear-gradient(180deg,#24322e,#1b2825);border:1px solid var(--brass-dim);
   border-radius:12px;padding:16px 18px;box-shadow:0 12px 32px #0006;}
 .cardhead{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
@@ -173,7 +179,7 @@ td input,td select{width:100%;}
 <script src="./datasheets/load.js"></script>
 <script>
 const PT = window.PTSheets;
-let key = "cmd";
+let key = Object.keys(PT.DATASHEETS).find(k => PT.DATASHEETS[k] && !PT.isDemoSheet(PT.DATASHEETS[k])) || Object.keys(PT.DATASHEETS)[0];
 function opt(sel, arr, cur){
   sel.innerHTML = arr.map(v => `<option value="${v}">${v}</option>`).join("");
   sel.value = cur;
@@ -185,7 +191,11 @@ function renderList(){
   const el = document.getElementById("sheetList");
   el.innerHTML = Object.keys(PT.DATASHEETS).map(k => {
     const s = PT.DATASHEETS[k];
-    return `<button class="btn ${k===key?"on":""}" data-k="${k}" type="button">${s.name}</button>`;
+    const miss = PT.isPtsOnly && PT.isPtsOnly(s);
+    const fan = PT.isFanSheet && PT.isFanSheet(s);
+    const extra = miss ? " pts-only" : (fan ? " fan-src" : "");
+    const flag = miss ? " · pts only" : (fan ? " · fan" : "");
+    return `<button class="btn ${k===key?"on":""}${extra}" data-k="${k}" type="button">${s.name}${flag}</button>`;
   }).join("");
   el.onclick = e => {
     const b = e.target.closest("[data-k]");
@@ -379,23 +389,22 @@ document.getElementById("btnMfmLook").onclick = () => {
 document.getElementById("btnMfmCheck").onclick = () => {
   Object.keys(PT.DATASHEETS).forEach(k => {
     const s = PT.DATASHEETS[k];
-    if (s && s.ptsSource !== "demo") PT.applyMfmProposal(s);
+    if (s && !PT.isDemoSheet(s)) PT.applyMfmProposal(s);
   });
   PT.save();
   const diff = PT.mfmCatalogDiff();
   const msg = document.getElementById("saveMsg");
-  if (!diff.rows.length) {
+  const changed = diff.rows.filter(r => r.kind === "changed");
+  const missing = diff.rows.filter(r => r.kind === "missing");
+  if (!changed.length && !missing.length) {
     msg.textContent = "Catalog matches MFM seed v" + (diff.version || "?") + ".";
     render();
     return;
   }
-  const bits = diff.rows.map(r => {
-    if (r.kind === "missing") return r.name + " not in seed";
-    return r.name + " " + (r.have == null ? "?" : r.have) + " → " + r.want;
-  });
-  msg.textContent = "MFM v" + diff.version + " updates: " + bits.join("; ") + ". Accept or Keep on each sheet.";
-  const first = diff.rows.find(r => r.kind === "changed") || diff.rows[0];
-  if (first) key = first.key;
+  const bits = changed.map(r => r.name + " " + (r.have == null ? "?" : r.have) + " → " + r.want);
+  if (missing.length) bits.push(missing.length + " unit" + (missing.length===1?"":"s") + " not in the seed (ignored Demo)");
+  msg.textContent = "MFM v" + diff.version + ": " + bits.join("; ") + (changed.length ? ". Accept or Keep on the highlighted sheet." : ".");
+  if (changed.length) key = changed[0].key;
   render();
 };
 };

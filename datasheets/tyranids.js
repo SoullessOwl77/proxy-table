@@ -137,6 +137,7 @@ PTSheetsPack("tyranids", {
   },
   sheets: {
     "red-terror": {
+      sheetComplete: true,
       id: "red-terror",
       edition: "11th",
       faction: "Tyranids",
@@ -161,6 +162,7 @@ PTSheetsPack("tyranids", {
       ]
     },
     "tyranid-prime-lash-whip": {
+      sheetComplete: true,
       id: "tyranid-prime-lash-whip",
       edition: "11th",
       faction: "Tyranids",
@@ -188,6 +190,7 @@ PTSheetsPack("tyranids", {
       ]
     },
     "raveners": {
+      sheetComplete: true,
       id: "raveners",
       edition: "11th",
       faction: "Tyranids",
@@ -199,7 +202,8 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 11, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 10, T: 5, Sv: 4, Inv: 0, W: 3, Ld: 8, OC: 1, baseMm: 40,
       composition: { label: "5 Raveners", defaultCount: 5 },
-      pts: 125, ptsProposed: 125, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:5, pts:125}],
+      pts: 125, ptsProposed: 125, ptsSource: "proposed", ptsMfmVersion: "1.3",
+      ptsBands: [{count:5, pts:125, tier:"1st-2nd"}, {count:5, pts:135, tier:"3rd+"}],
       weapons: [
         { name: "Ravener claws and talons", kind: "melee", A: 3, skill: 3, S: 5, AP: -2, D: 2, rng: 0, tags: ["TWIN-LINKED"] }
       ],
@@ -210,6 +214,7 @@ PTSheetsPack("tyranids", {
       ]
     },
     "hyperadapted-raveners": {
+      sheetComplete: true,
       id: "hyperadapted-raveners",
       edition: "11th",
       faction: "Tyranids",
@@ -221,7 +226,8 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 13, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 10, T: 5, Sv: 4, Inv: 0, W: 3, Ld: 8, OC: 1, baseMm: 40,
       composition: { label: "1 Ravener Prime, 4 Raveners", defaultCount: 5 },
-      pts: 165, ptsProposed: 165, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:5, pts:165}],
+      pts: 165, ptsProposed: 165, ptsSource: "proposed", ptsMfmVersion: "1.3",
+      ptsBands: [{count:5, pts:165, tier:"1st-2nd"}, {count:5, pts:175, tier:"3rd+"}],
       profiles: [
         { id: "prime", name: "Ravener Prime", W: 6, Ld: 7, OC: 1, keywords: ["CHARACTER", "SYNAPSE"], count: 1 },
         { id: "ravener", name: "Ravener", W: 3, Ld: 8, OC: 1, count: 4 }
@@ -242,6 +248,7 @@ PTSheetsPack("tyranids", {
       ]
     },
     "harridan": {
+      sheetComplete: true,
       id: "harridan",
       edition: "11th",
       faction: "Tyranids",
@@ -253,7 +260,8 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 15, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 14, T: 10, Sv: 3, Inv: 0, W: 30, Ld: 8, OC: 0, baseMm: 0,
       composition: { label: "1 Harridan", defaultCount: 1 },
-      pts: 610, ptsProposed: 610, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:1, pts:610}],
+      pts: 610, ptsProposed: 610, ptsSource: "proposed", ptsMfmVersion: "1.3",
+      ptsBands: [{count:1, pts:610, tier:"1st-2nd"}, {count:1, pts:660, tier:"3rd+"}],
       transport: { capacity: 20, note: "20 Gargoyles and 1 Winged Tyranid Prime" },
       damaged: { wounds: "1-10", hitMod: -1 },
       weapons: [
@@ -268,6 +276,7 @@ PTSheetsPack("tyranids", {
       ]
     },
     "hierophant": {
+      sheetComplete: true,
       id: "hierophant",
       edition: "11th",
       faction: "Tyranids",
@@ -279,7 +288,8 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 17, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 12, T: 14, Sv: 2, Inv: 5, W: 30, Ld: 8, OC: 12, baseMm: 0,
       composition: { label: "1 Hierophant", defaultCount: 1 },
-      pts: 810, ptsProposed: 810, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:1, pts:810}],
+      pts: 810, ptsProposed: 810, ptsSource: "proposed", ptsMfmVersion: "1.3",
+      ptsBands: [{count:1, pts:810, tier:"1st"}, {count:1, pts:910, tier:"2nd+"}],
       transport: { capacity: 20, note: "20 Tyranids Infantry; W>1 counts as 3; no Fly" },
       damaged: { wounds: "1-10", hitMod: -1, OC: 6 },
       weapons: [

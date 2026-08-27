@@ -69,8 +69,7 @@
     const look = lookupMfm(sheet);
     if (!look.hit) return look;
     sheet.ptsProposed = look.pts;
-    sheet.ptsBands = (look.bands || []).filter(b => !b.tier || b.tier === "unit" || String(b.tier).indexOf("1st") === 0)
-      .map(b => ({ count: b.count, pts: b.pts }));
+    sheet.ptsBands = (look.bands || []).map(b => ({ count: b.count, pts: b.pts, tier: b.tier || "unit" }));
     sheet.ptsMfmVersion = look.version;
     if (sheet.pts == null) {
       sheet.pts = look.pts;
@@ -80,12 +79,32 @@
     }
     return look;
   }
+  function isDemoSheet(s) {
+    if (!s) return false;
+    if (s.ptsSource === "demo") return true;
+    if (String(s.faction || "").toUpperCase() === "DEMO") return true;
+    if (String(s.id || "").indexOf("demo-") === 0) return true;
+    return false;
+  }
+  function isPtsOnly(s) {
+    if (!s) return false;
+    if (s.fanSourced || (s.source && s.source.kind === "fan")) return false;
+    if (s.pendingStats) return true;
+    if (s.sheetComplete === false) return true;
+    return false;
+  }
+  function isFanSheet(s) {
+    if (!s) return false;
+    if (s.fanSourced) return true;
+    if (s.source && s.source.kind === "fan") return true;
+    return false;
+  }
   function mfmCatalogDiff() {
     const sheets = currentSheets();
     const out = [];
     Object.keys(sheets).forEach(k => {
       const s = sheets[k];
-      if (s.ptsSource === "demo") return;
+      if (isDemoSheet(s)) return;
       const look = lookupMfm(s);
       if (!look.hit) {
         out.push({ key: k, name: s.name, kind: "missing", have: s.pts, want: null, url: look.url });
@@ -189,7 +208,7 @@
     const l = activeList();
     return { v: 1, id: l.id, name: l.name, units: l.units, sizeId: l.sizeId, detachments: l.detachments, enhancementCount: l.enhancementCount };
   }
-  function loadArmy() { return emptyArmy(); }
+  function loadArmy() { const a = emptyArmy(); repriceList(a); return a; }
   function saveArmy(army) {
     const st = loadArmyStore();
     let l = st.lists.find(x => x.id === (army.id || st.activeId));
@@ -207,6 +226,7 @@
       if (army.detachments) l.detachments = army.detachments;
       if (army.enhancementCount != null) l.enhancementCount = army.enhancementCount;
     }
+    repriceList(l);
     saveArmyStore(st);
     return loadArmy();
   }
@@ -232,24 +252,84 @@
     return loadArmy();
   }
   function sizeById(id) { return BATTLE_SIZES.find(s => s.id === id) || null; }
-  function ptsForCount(sheet, count) {
+  function parseTier(tier) {
+    const raw = String(tier || "unit").toLowerCase();
+    if (!raw || raw === "unit") return { min: 1, max: Infinity, label: "any" };
+    const plus = raw.indexOf("+") >= 0;
+    const parts = raw.replace("+", "").split("-");
+    const ord = { "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5, "6th": 6 };
+    const num = s => ord[s] || parseInt(s, 10) || 1;
+    const min = num(parts[0]);
+    const max = plus ? Infinity : (parts[1] ? num(parts[1]) : min);
+    return { min, max, label: raw };
+  }
+  function bandFor(sheet, count, copyIndex) {
+    copyIndex = Math.max(1, copyIndex || 1);
     count = Math.max(1, count || 1);
-    if (!sheet) return { pts: null, source: "review", unknown: true };
-    const bands = sheet.ptsBands || [];
-    const hit = bands.find(b => b.count === count);
+    const bands = ((sheet && sheet.ptsBands) || []).filter(b => b.count === count);
+    if (!bands.length) return null;
+    const hit = bands.find(b => {
+      const t = parseTier(b.tier);
+      return copyIndex >= t.min && copyIndex <= t.max;
+    });
+    return hit || bands[0];
+  }
+  function ptsForCount(sheet, count, copyIndex) {
+    count = Math.max(1, count || 1);
+    copyIndex = Math.max(1, copyIndex || 1);
+    if (!sheet) return { pts: null, source: "review", unknown: true, copyIndex, tier: "" };
+    const seed = mfmEntryFor(sheet);
+    const bands = (sheet.ptsBands && sheet.ptsBands.length)
+      ? sheet.ptsBands
+      : ((seed && seed.bands) || []);
+    const view = Object.assign({}, sheet, { ptsBands: bands });
+    const hit = bandFor(view, count, copyIndex);
     if (hit && typeof hit.pts === "number") {
-      return { pts: hit.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review" };
+      return {
+        pts: hit.pts,
+        source: sheet.ptsSource || "mfm",
+        unknown: sheet.ptsSource === "review",
+        copyIndex,
+        tier: hit.tier || "unit",
+        count
+      };
     }
     const def = (sheet.composition && sheet.composition.defaultCount) || 1;
     if (typeof sheet.pts === "number" && count === def) {
-      return { pts: sheet.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review" };
+      return { pts: sheet.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review", copyIndex, tier: "unit", count };
     }
     if (sheet.ptsPer === "model" && typeof sheet.pts === "number") {
-      return { pts: sheet.pts * count, source: sheet.ptsSource || "mfm", unknown: false };
+      return { pts: sheet.pts * count, source: sheet.ptsSource || "mfm", unknown: false, copyIndex, tier: "unit", count };
     }
-    return { pts: null, source: "review", unknown: true };
+    return { pts: null, source: "review", unknown: true, copyIndex, tier: "", count };
+  }
+  function sheetKeyOf(u) { return (u && (u.sheetKey || u.sheetId || u.name)) || ""; }
+  function nextCopyIndex(list, sheetKey) {
+    const n = ((list && list.units) || []).filter(u => sheetKeyOf(u) === sheetKey).length;
+    return n + 1;
+  }
+  function repriceList(list) {
+    if (!list || !list.units) return list;
+    const seen = {};
+    list.units.forEach(u => {
+      const sid = sheetKeyOf(u);
+      seen[sid] = (seen[sid] || 0) + 1;
+      u.copyIndex = seen[sid];
+      const sheet = live.sheets[u.sheetKey] || live.sheets[u.sheetId] || null;
+      if (!sheet) return;
+      const quote = ptsForCount(sheet, u.count || 1, u.copyIndex);
+      if (!quote.unknown && quote.pts != null) {
+        u.pts = quote.pts;
+        u.ptsTier = quote.tier;
+        if (u.ptsSource === "review") u.ptsSource = sheet.ptsSource || "mfm";
+      } else {
+        u.ptsTier = quote.tier || "";
+      }
+    });
+    return list;
   }
   function listTotal(list) {
+    repriceList(list);
     let pts = 0, unknown = 0;
     ((list && list.units) || []).forEach(u => {
       if (u.ptsSource === "review" || u.pts == null || u.pts === "") unknown++;
@@ -402,6 +482,9 @@
     lookupMfm,
     applyMfmProposal,
     mfmCatalogDiff,
+    isDemoSheet,
+    isPtsOnly,
+    isFanSheet,
     mfmSeed,
     loadArmy,
     saveArmy,
@@ -414,6 +497,10 @@
     addList,
     deleteList,
     ptsForCount,
+    parseTier,
+    bandFor,
+    nextCopyIndex,
+    repriceList,
     listTotal,
     sizeById,
     formatPts,

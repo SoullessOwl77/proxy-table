@@ -29,6 +29,12 @@ a{color:var(--brass);}
 .list h2,.card h2{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);}
 .list button{display:block;width:100%;text-align:left;margin:0 0 6px;}
 .list button.on{background:var(--brass);color:#14110a;}
+.list button.pts-only{color:#e07070;}
+.list button.pts-only.on{background:#5a2424;color:#f0c0c0;border-color:#a8443c;}
+.list button.fan-src{color:#b388ff;}
+.list button.fan-src.on{background:#3a2a55;color:#e4d4ff;border-color:#7a4fd6;}
+#fName.pts-only{color:#e07070;}
+#fName.fan-src{color:#b388ff;}
 label.field{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--parchment-dim);margin:8px 0 4px;}
 input,select{background:#0f1614;color:var(--parchment);border:1px solid #0007;border-radius:6px;padding:6px 8px;font:400 13px Archivo,sans-serif;width:100%;}
 table{width:100%;border-collapse:collapse;font-size:12px;}
@@ -117,8 +123,11 @@ function renderSheets(){
     return s && s.ptsSource !== "demo" && s.faction !== "Demo";
   }).map(k => {
     const s = PT.DATASHEETS[k];
-    const flag = s.ptsSource === "proposed" ? " · accept pts" : (s.ptsSource === "review" || s.pts == null ? " · ?" : "");
-    return `<button class="btn ${k===key?"on":""}" data-k="${k}" type="button">${s.name}${flag}</button>`;
+    const miss = PT.isPtsOnly && PT.isPtsOnly(s);
+    const fan = PT.isFanSheet && PT.isFanSheet(s);
+    const extra = miss ? " pts-only" : (fan ? " fan-src" : "");
+    const flag = miss ? " · pts only" : (fan ? " · fan" : (s.ptsSource === "proposed" ? " · accept pts" : (s.ptsSource === "review" || s.pts == null ? " · ?" : "")));
+    return `<button class="btn ${k===key?"on":""}${extra}" data-k="${k}" type="button">${s.name}${flag}</button>`;
   }).join("");
 }
 function paintLegal(){
@@ -199,18 +208,25 @@ function loadSheet(){
   if (!s) return;
   const count = (s.composition && s.composition.defaultCount) || 1;
   document.getElementById("fName").value = s.name;
+  document.getElementById("fName").classList.toggle("pts-only", !!(PT.isPtsOnly && PT.isPtsOnly(s)));
+  document.getElementById("fName").classList.toggle("fan-src", !!(PT.isFanSheet && PT.isFanSheet(s)));
   document.getElementById("fCount").value = count;
   document.getElementById("compHint").textContent = (s.composition && s.composition.label) || "";
-  const quote = PT.ptsForCount(s, count);
-  document.getElementById("fPts").value = quote.unknown ? "" : quote.pts;
-  const hint = document.getElementById("ptsHint");
-  if (quote.source === "proposed") hint.innerHTML = "Proposed — confirm on the datasheet or edit here. <a href=\""+PT.MFM_HUB+"\" target=\"_blank\" rel=\"noopener\">Open MFM</a>";
-  else if (quote.unknown) hint.innerHTML = "Needs MFM review. <a href=\""+PT.MFM_HUB+"\" target=\"_blank\" rel=\"noopener\">Find it on MFM</a>";
-  else hint.textContent = (quote.pts || 0) + " pts for " + count + " models";
+  paintQuote(s, count);
   drawGear(s, PT.defaultGear(s, count));
   renderSheets();
   renderLists();
   renderSaved();
+}
+function paintQuote(s, count){
+  const copy = PT.nextCopyIndex(army, key);
+  const quote = PT.ptsForCount(s, count, copy);
+  document.getElementById("fPts").value = quote.unknown ? "" : quote.pts;
+  const hint = document.getElementById("ptsHint");
+  const copyBit = "Copy " + copy + (quote.tier && quote.tier !== "unit" && quote.tier !== "any" ? " · " + quote.tier : "");
+  if (quote.unknown) hint.innerHTML = copyBit + " — needs MFM review. <a href=\""+PT.MFM_HUB+"\" target=\"_blank\" rel=\"noopener\">Find it on MFM</a>";
+  else if (quote.source === "proposed") hint.innerHTML = copyBit + " · " + quote.pts + " pts (proposed). Confirm on the datasheet or edit here.";
+  else hint.textContent = copyBit + " · " + quote.pts + " pts for " + count + " models";
 }
 function drawGear(s, gear){
   document.getElementById("gearBody").innerHTML = (s.weapons || []).map(w => {
@@ -235,8 +251,7 @@ document.getElementById("fCount").onchange = () => {
   const gear = readGear();
   gear.forEach(g => { if (g.count > n) g.count = n; });
   drawGear(s, gear);
-  const quote = PT.ptsForCount(s, n);
-  document.getElementById("fPts").value = quote.unknown ? "" : quote.pts;
+  paintQuote(s, n);
 };
 document.getElementById("listPick").onchange = () => {
   PT.setActiveList(document.getElementById("listPick").value);
@@ -269,7 +284,8 @@ document.getElementById("btnSave").onclick = () => {
   const count = readCount();
   const gear = readGear().map(g => ({ name: g.name, count: Math.min(count, g.count) }));
   const typed = document.getElementById("fPts").value.trim();
-  const quote = PT.ptsForCount(s, count);
+  const copy = PT.nextCopyIndex(army, key);
+  const quote = PT.ptsForCount(s, count, copy);
   let pts = typed === "" ? null : parseInt(typed, 10);
   if (pts !== pts) pts = null;
   let ptsSource = "review";
@@ -282,7 +298,9 @@ document.getElementById("btnSave").onclick = () => {
     count,
     gear,
     pts,
-    ptsSource
+    ptsSource,
+    copyIndex: copy,
+    ptsTier: quote.tier || ""
   });
   PT.saveArmy(army);
   army = PT.loadArmy();
@@ -299,7 +317,7 @@ function renderSaved(){
     const review = u.ptsSource === "review" || u.pts == null;
     const cost = review
       ? `<a href="${PT.MFM_HUB}" target="_blank" rel="noopener">Needs MFM review</a>`
-      : ((u.pts||0) + " pts");
+      : ((u.pts||0) + " pts" + (u.ptsTier && u.ptsTier !== "unit" ? " · " + u.ptsTier : "") + (u.copyIndex ? " (#"+u.copyIndex+")" : ""));
     return `<div style="margin:0 0 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <strong>${u.name}</strong> ×${u.count}
       <span>${bits || "no gear"}</span>

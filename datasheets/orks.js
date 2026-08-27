@@ -32,7 +32,7 @@ PTSheetsPack("orks", {
       M: 6, T: 5, Sv: 5, Inv: 0, W: 1, Ld: 7, OC: 2, baseMm: 32,
       composition: { label: "1 Boss Nob, 9 Boyz", defaultCount: 10 },
       pts: 75, ptsProposed: 75, ptsSource: "proposed", ptsMfmVersion: "1.3",
-      ptsBands: [{ count: 10, pts: 75 }, { count: 20, pts: 160 }],
+      ptsBands: [{ count: 10, pts: 75, tier: "1st" }, { count: 20, pts: 160, tier: "1st" }, { count: 10, pts: 85, tier: "4th+" }, { count: 20, pts: 170, tier: "4th+" }],
       profiles: [
         { id: "nob", name: "Boss Nob", W: 2, count: 1 },
         { id: "boy", name: "Boyz", W: 1, count: 9 }
