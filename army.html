@@ -64,6 +64,9 @@ td input{width:72px;}
 <div class="wrap">
   <aside class="list">
     <h2>Catalog</h2>
+    <label class="field">Faction</label>
+    <select id="factionPick"></select>
+    <p class="hint" id="factionHint">One army faction per list.</p>
     <div id="sheetList"></div>
   </aside>
   <section class="card">
@@ -115,12 +118,48 @@ td input{width:72px;}
 <script src="./datasheets/load.js"></script>
 <script>
 const PT = window.PTSheets;
-let key = PT.DATASHEETS.boyz ? "boyz" : Object.keys(PT.DATASHEETS)[0];
 let army = PT.loadArmy();
+function catalogFactions(){
+  const set = {};
+  Object.keys(PT.DATASHEETS).forEach(k => {
+    const s = PT.DATASHEETS[k];
+    if (!s || s.ptsSource === "demo" || s.faction === "Demo") return;
+    if (s.faction) set[s.faction] = true;
+  });
+  return Object.keys(set).sort();
+}
+function listFactionFromUnits(){
+  const facs = {};
+  (army.units || []).forEach(u => {
+    const s = PT.DATASHEETS[u.sheetKey];
+    if (s && s.faction && s.faction !== "Demo") facs[s.faction] = true;
+  });
+  return Object.keys(facs);
+}
+let faction = army.faction || listFactionFromUnits()[0] || catalogFactions()[0] || "";
+function firstKeyForFaction(fac){
+  return Object.keys(PT.DATASHEETS).find(k => {
+    const s = PT.DATASHEETS[k];
+    return s && s.faction === fac && s.ptsSource !== "demo";
+  }) || "";
+}
+let key = firstKeyForFaction(faction) || (PT.DATASHEETS.boyz ? "boyz" : Object.keys(PT.DATASHEETS)[0]);
+function paintFactionPick(){
+  const el = document.getElementById("factionPick");
+  const facs = catalogFactions();
+  if (!faction || facs.indexOf(faction) < 0) faction = facs[0] || "";
+  el.innerHTML = facs.map(f => `<option value="${f}" ${f===faction?"selected":""}>${f}</option>`).join("");
+  const used = listFactionFromUnits();
+  const hint = document.getElementById("factionHint");
+  if (used.length > 1) hint.textContent = "This list already mixes " + used.join(" + ") + ". Matched play is one faction.";
+  else if (used.length === 1) hint.textContent = "List locked to " + used[0] + " until you remove those units.";
+  else hint.textContent = "One army faction per list. No mixing Tyranids with Marines.";
+}
 function renderSheets(){
+  paintFactionPick();
   document.getElementById("sheetList").innerHTML = Object.keys(PT.DATASHEETS).filter(k => {
     const s = PT.DATASHEETS[k];
-    return s && s.ptsSource !== "demo" && s.faction !== "Demo";
+    return s && s.ptsSource !== "demo" && s.faction !== "Demo" && (!faction || s.faction === faction);
   }).map(k => {
     const s = PT.DATASHEETS[k];
     const miss = PT.isPtsOnly && PT.isPtsOnly(s);
@@ -164,15 +203,7 @@ function renderLists(){
   paintLegal();
 }
 function listFaction(){
-  const facs = {};
-  (army.units || []).forEach(u => {
-    const s = PT.DATASHEETS[u.sheetKey];
-    if (s && s.faction) facs[s.faction] = true;
-  });
-  const keys = Object.keys(facs);
-  if (keys.length === 1) return keys[0];
-  const cur = PT.DATASHEETS[key];
-  return cur && cur.faction ? cur.faction : keys[0] || "";
+  return faction || listFactionFromUnits()[0] || "";
 }
 function paintDets(){
   const fac = listFaction();
@@ -190,6 +221,7 @@ function paintDets(){
 }
 function persistListMeta(){
   army.name = document.getElementById("listName").value.trim() || army.name;
+  army.faction = faction;
   army.sizeId = document.getElementById("listSize").value;
   army.enhancementCount = Math.max(0, parseInt(document.getElementById("fEnh").value, 10) || 0);
   army.detachments = [...document.querySelectorAll("#detBody [data-det]:checked")].map(el => el.dataset.det);
@@ -253,11 +285,31 @@ document.getElementById("fCount").onchange = () => {
   drawGear(s, gear);
   paintQuote(s, n);
 };
+document.getElementById("factionPick").onchange = () => {
+  const next = document.getElementById("factionPick").value;
+  const used = listFactionFromUnits();
+  if (used.length && used.indexOf(next) < 0) {
+    if (!confirm("This list already has " + used.join(", ") + " units. Switch faction anyway? You will not be able to add " + next + " until those are removed.")) {
+      document.getElementById("factionPick").value = faction;
+      return;
+    }
+  }
+  faction = next;
+  army.faction = faction;
+  PT.saveArmy(army);
+  const nk = firstKeyForFaction(faction);
+  if (nk) key = nk;
+  loadSheet();
+};
 document.getElementById("listPick").onchange = () => {
   PT.setActiveList(document.getElementById("listPick").value);
   army = PT.loadArmy();
+  faction = army.faction || listFactionFromUnits()[0] || faction;
+  const nk = firstKeyForFaction(faction);
+  if (nk) key = nk;
   renderLists();
   renderSaved();
+  loadSheet();
 };
 document.getElementById("listName").onchange = persistListMeta;
 document.getElementById("listSize").onchange = persistListMeta;
@@ -281,6 +333,13 @@ document.getElementById("btnDelList").onclick = () => {
 document.getElementById("btnSave").onclick = () => {
   persistListMeta();
   const s = PT.DATASHEETS[key];
+  if (!s) return;
+  const used = listFactionFromUnits();
+  if (s.faction && used.length && used.indexOf(s.faction) < 0) {
+    document.getElementById("saveMsg").textContent = "Cannot add " + s.faction + " to a " + used.join("/") + " list.";
+    return;
+  }
+  if (s.faction) { faction = s.faction; army.faction = faction; }
   const count = readCount();
   const gear = readGear().map(g => ({ name: g.name, count: Math.min(count, g.count) }));
   const typed = document.getElementById("fPts").value.trim();

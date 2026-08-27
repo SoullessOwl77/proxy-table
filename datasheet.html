@@ -77,6 +77,9 @@ td input,td select{width:100%;}
 <div class="wrap">
   <aside class="list">
     <h2>Sheets</h2>
+    <label class="field">Faction</label>
+    <select id="factionPick" style="margin:0 0 8px;"></select>
+    <input id="sheetFilter" placeholder="Filter name" style="margin:0 0 8px;">
     <div id="sheetList"></div>
     <button class="btn" id="btnNew" type="button">New sheet</button>
   </aside>
@@ -179,7 +182,33 @@ td input,td select{width:100%;}
 <script src="./datasheets/load.js"></script>
 <script>
 const PT = window.PTSheets;
-let key = Object.keys(PT.DATASHEETS).find(k => PT.DATASHEETS[k] && !PT.isDemoSheet(PT.DATASHEETS[k])) || Object.keys(PT.DATASHEETS)[0];
+if (PT && PT.reload) PT.reload();
+function sheetKeys(){ return Object.keys((PT && PT.DATASHEETS) || {}); }
+function pickKey(){
+  const keys = sheetKeys();
+  const live = (PT && PT.DATASHEETS) || {};
+  const skip = (s) => PT && PT.isDemoSheet && PT.isDemoSheet(s);
+  return keys.find(k => live[k] && !skip(live[k])) || keys[0] || "";
+}
+let key = pickKey();
+let listFilter = "";
+let factionFilter = "";
+function catalogFactions(){
+  const set = {};
+  Object.keys((PT && PT.DATASHEETS) || {}).forEach(k => {
+    const s = PT.DATASHEETS[k];
+    if (s && s.faction) set[s.faction] = true;
+  });
+  return Object.keys(set).sort();
+}
+function paintFactionPick(){
+  const el = document.getElementById("factionPick");
+  if (!el) return;
+  const facs = catalogFactions();
+  const cur = PT.DATASHEETS[key];
+  if (!factionFilter) factionFilter = (cur && cur.faction) || facs[0] || "";
+  el.innerHTML = facs.map(f => `<option value="${f}" ${f===factionFilter?"selected":""}>${f}</option>`).join("");
+}
 function opt(sel, arr, cur){
   sel.innerHTML = arr.map(v => `<option value="${v}">${v}</option>`).join("");
   sel.value = cur;
@@ -188,18 +217,30 @@ function csv(arr){ return (arr || []).join(", "); }
 function fromCsv(s){ return String(s || "").split(",").map(x => x.trim()).filter(Boolean); }
 function num(el){ const n = parseInt(el.value, 10); return n === n ? n : 0; }
 function renderList(){
+  paintFactionPick();
   const el = document.getElementById("sheetList");
-  el.innerHTML = Object.keys(PT.DATASHEETS).map(k => {
-    const s = PT.DATASHEETS[k];
+  if (!el) return;
+  const q = String(listFilter || "").toLowerCase();
+  const live = (PT && PT.DATASHEETS) || {};
+  const keys = Object.keys(live).filter(k => {
+    const s = live[k];
+    if (!s) return false;
+    if (factionFilter && s.faction !== factionFilter) return false;
+    if (!q) return true;
+    const blob = [s.name, s.faction, s.id].concat(s.search || []).concat(s.keywords || []).join(" ").toLowerCase();
+    return blob.indexOf(q) >= 0;
+  });
+  el.innerHTML = keys.map(k => {
+    const s = live[k];
     const miss = PT.isPtsOnly && PT.isPtsOnly(s);
     const fan = PT.isFanSheet && PT.isFanSheet(s);
     const extra = miss ? " pts-only" : (fan ? " fan-src" : "");
     const flag = miss ? " · pts only" : (fan ? " · fan" : "");
-    return `<button class="btn ${k===key?"on":""}${extra}" data-k="${k}" type="button">${s.name}${flag}</button>`;
-  }).join("");
+    return `<button class="btn ${k===key?"on":""}${extra}" data-k="${k}" type="button">${s.name || k}${flag}</button>`;
+  }).join("") || `<p class="hint">${sheetKeys().length ? "No match." : "Catalog did not load. Title-tap and reopen."}</p>`;
   el.onclick = e => {
     const b = e.target.closest("[data-k]");
-    if (b){ collect(); key = b.dataset.k; render(); }
+    if (b){ try { collect(); } catch (_) {} key = b.dataset.k; render(); }
   };
 }
 function wepRow(w, i){
@@ -224,7 +265,8 @@ function renderAbilPick(){
   }).join("");
 }
 function render(){
-  const s = PT.DATASHEETS[key];
+  renderList();
+  const s = PT && PT.DATASHEETS && PT.DATASHEETS[key];
   if (!s) return;
   document.getElementById("fName").value = s.name || "";
   document.getElementById("fFaction").value = s.faction || "";
@@ -418,6 +460,17 @@ document.getElementById("btnResetAll").onclick = () => {
   if (!confirm("Clear all saved sheet edits on this device?")) return;
   PT.reset();
   key = "cmd";
+  render();
+};
+const filterEl = document.getElementById("sheetFilter");
+if (filterEl) filterEl.oninput = () => { listFilter = filterEl.value; renderList(); };
+const facEl = document.getElementById("factionPick");
+if (facEl) facEl.onchange = () => {
+  factionFilter = facEl.value;
+  const live = PT.DATASHEETS || {};
+  if (!live[key] || live[key].faction !== factionFilter) {
+    key = Object.keys(live).find(k => live[k] && live[k].faction === factionFilter) || key;
+  }
   render();
 };
 document.getElementById("btnNew").onclick = () => {
