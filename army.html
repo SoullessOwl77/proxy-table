@@ -66,6 +66,7 @@ td input{width:72px;}
     <h2>Catalog</h2>
     <label class="field">Faction</label>
     <select id="factionPick"></select>
+    <input id="sheetFilter" placeholder="Search name or keyword" style="margin:8px 0;">
     <p class="hint" id="factionHint">One army faction per list.</p>
     <div id="sheetList"></div>
   </aside>
@@ -137,6 +138,16 @@ function listFactionFromUnits(){
   return Object.keys(facs);
 }
 let faction = army.faction || listFactionFromUnits()[0] || catalogFactions()[0] || "";
+let sheetQuery = "";
+function sheetMatches(s, q){
+  if (!q) return true;
+  const blob = [s.name, s.faction, s.id, s.type]
+    .concat(s.search || [])
+    .concat(s.keywords || [])
+    .concat(s.factionKeywords || [])
+    .join(" ").toLowerCase();
+  return q.split(/\s+/).filter(Boolean).every(part => blob.indexOf(part) >= 0);
+}
 function firstKeyForFaction(fac){
   return Object.keys(PT.DATASHEETS).find(k => {
     const s = PT.DATASHEETS[k];
@@ -159,7 +170,7 @@ function renderSheets(){
   paintFactionPick();
   document.getElementById("sheetList").innerHTML = Object.keys(PT.DATASHEETS).filter(k => {
     const s = PT.DATASHEETS[k];
-    return s && s.ptsSource !== "demo" && s.faction !== "Demo" && (!faction || s.faction === faction);
+    return s && s.ptsSource !== "demo" && s.faction !== "Demo" && (!faction || s.faction === faction) && sheetMatches(s, sheetQuery);
   }).map(k => {
     const s = PT.DATASHEETS[k];
     const miss = PT.isPtsOnly && PT.isPtsOnly(s);
@@ -284,6 +295,10 @@ document.getElementById("fCount").onchange = () => {
   gear.forEach(g => { if (g.count > n) g.count = n; });
   drawGear(s, gear);
   paintQuote(s, n);
+};
+document.getElementById("sheetFilter").oninput = () => {
+  sheetQuery = document.getElementById("sheetFilter").value.toLowerCase();
+  renderSheets();
 };
 document.getElementById("factionPick").onchange = () => {
   const next = document.getElementById("factionPick").value;

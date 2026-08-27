@@ -227,8 +227,10 @@ function renderList(){
     if (!s) return false;
     if (factionFilter && s.faction !== factionFilter) return false;
     if (!q) return true;
-    const blob = [s.name, s.faction, s.id].concat(s.search || []).concat(s.keywords || []).join(" ").toLowerCase();
-    return blob.indexOf(q) >= 0;
+    const blob = [s.name, s.faction, s.id, s.type]
+      .concat(s.search || []).concat(s.keywords || []).concat(s.factionKeywords || [])
+      .join(" ").toLowerCase();
+    return q.split(/\s+/).filter(Boolean).every(part => blob.indexOf(part) >= 0);
   });
   el.innerHTML = keys.map(k => {
     const s = live[k];
