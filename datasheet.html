@@ -234,10 +234,15 @@ function render(){
   document.getElementById("fPts").value = s.pts == null ? "" : s.pts;
   opt(document.getElementById("fPtsSource"), ["mfm","proposed","review"], s.ptsSource || (s.pts == null ? "review" : "mfm"));
   const box = document.getElementById("ptsPropose");
-  if (s.ptsSource === "proposed" || (s.ptsProposed != null && s.ptsProposed !== s.pts)) {
+  const look = PT.lookupMfm ? PT.lookupMfm(s) : { hit: false };
+  const want = look.hit ? look.pts : s.ptsProposed;
+  const cur = s.pts;
+  const changed = want != null && want !== cur;
+  if (changed) {
     box.style.display = "";
-    const cur = s.pts == null ? "?" : s.pts;
-    document.getElementById("ptsProposeText").textContent = s.name + " " + cur + " → " + s.ptsProposed + " pts";
+    document.getElementById("ptsProposeText").textContent =
+      s.name + " currently " + (cur == null ? "?" : cur) + " → MFM " + want + " pts" +
+      (look.version ? " (v" + look.version + ")" : "");
   } else box.style.display = "none";
   document.getElementById("wepBody").innerHTML = (s.weapons || []).map(wepRow).join("");
   const src = s.source || {};
@@ -372,19 +377,27 @@ document.getElementById("btnMfmLook").onclick = () => {
   }
 };
 document.getElementById("btnMfmCheck").onclick = () => {
+  Object.keys(PT.DATASHEETS).forEach(k => {
+    const s = PT.DATASHEETS[k];
+    if (s && s.ptsSource !== "demo") PT.applyMfmProposal(s);
+  });
+  PT.save();
   const diff = PT.mfmCatalogDiff();
   const msg = document.getElementById("saveMsg");
   if (!diff.rows.length) {
     msg.textContent = "Catalog matches MFM seed v" + (diff.version || "?") + ".";
+    render();
     return;
   }
   const bits = diff.rows.map(r => {
     if (r.kind === "missing") return r.name + " not in seed";
     return r.name + " " + (r.have == null ? "?" : r.have) + " → " + r.want;
   });
-  msg.textContent = "MFM v" + diff.version + " updates: " + bits.join("; ") + ". Open each sheet and Accept or Keep.";
+  msg.textContent = "MFM v" + diff.version + " updates: " + bits.join("; ") + ". Accept or Keep on each sheet.";
   const first = diff.rows.find(r => r.kind === "changed") || diff.rows[0];
-  if (first) { key = first.key; render(); }
+  if (first) key = first.key;
+  render();
+};
 };
 document.getElementById("btnRevert").onclick = () => {
   const def = PT.defaults.sheets[key];
