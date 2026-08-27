@@ -387,7 +387,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.10-faction-pick";
+const BUILD = "v2.16.14-demo-list";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -830,6 +830,7 @@ function myLobbyArmyOver(){
   const rec = L && L.army && L.army[String(mySeat)];
   const sz = window.PTSheets && PTSheets.sizeById && PTSheets.sizeById((L.size && L.size[String(mySeat)]) || "");
   if (!rec || !sz) return { over:false, unknown: !rec };
+  if (rec.id === "__demo__") return { over:false, unknown:false, pts: 0, cap: sz.pts };
   if (rec.unknown) return { over:false, unknown:true, pts: rec.pts||0, cap: sz.pts };
   return { over: (rec.pts||0) > sz.pts, unknown:false, pts: rec.pts||0, cap: sz.pts };
 }
@@ -841,7 +842,9 @@ function fillLobbySelects(){
   const armySel = document.getElementById("lobbyArmy");
   const st = window.PTSheets.loadArmyStore();
   const rec = S.lobby.army && S.lobby.army[String(mySeat)];
-  armySel.innerHTML = `<option value="">Choose a list…</option>` + (st.lists||[]).map(l => {
+  armySel.innerHTML = `<option value="">Choose a list…</option>` +
+    `<option value="__demo__">Demo Forces — teaching tokens</option>` +
+    (st.lists||[]).map(l => {
     const tot = PTSheets.listTotal(l);
     return `<option value="${esc(l.id)}">${esc(l.name)} — ${esc(PTSheets.formatPts(tot.pts, tot.unknown))}</option>`;
   }).join("");
@@ -916,12 +919,15 @@ function writeMyLobby(){
     S.lobby.size["0"] = S.lobby.size["1"] = size;
     S.lobby.first["0"] = S.lobby.first["1"] = first;
   }
-  if (armyId && PTSheets.listById){
+  if (armyId === "__demo__"){
+    S.lobby.army[String(mySeat)] = { id: "__demo__", name: "Demo Forces", pts: 0, unknown: false };
+    if (practice) S.lobby.army["1"] = { id: "__demo__", name: "Demo Forces", pts: 0, unknown: false };
+  } else if (armyId && PTSheets.listById){
     const list = PTSheets.listById(armyId);
     if (list){
       const tot = PTSheets.listTotal(list);
       S.lobby.army[String(mySeat)] = { id: list.id, name: list.name, pts: tot.pts, unknown: tot.unknown };
-    }
+    } else S.lobby.army[String(mySeat)] = null;
   } else S.lobby.army[String(mySeat)] = null;
   if (lobbyAgree()) S.lobby.chat = [];
   save();
@@ -929,7 +935,13 @@ function writeMyLobby(){
 }
 function spawnSeatArmy(seat){
   const rec = S.lobby.army && S.lobby.army[String(seat)];
-  if (!rec || !rec.id || !PTSheets.listById) return;
+  if (!rec || !rec.id) return;
+  if (rec.id === "__demo__"){
+    placeDemoSeat(seat);
+    if (practice) placeDemoSeat(seat === 0 ? 1 : 0);
+    return;
+  }
+  if (!PTSheets.listById) return;
   const list = PTSheets.listById(rec.id);
   if (!list) return;
   S.units = (S.units || []).filter(u => u.seat !== seat);
@@ -2369,34 +2381,37 @@ function dropUnit(key, seat, x, y, groupId){
   };
   S.units.push(u); return u;
 }
+function placeDemoSeat(seat){
+  S.units = (S.units||[]).filter(u => u.seat !== seat);
+  const g = "g"+seat;
+  const yInf = seat===0 ? 6 : 38;
+  const yCmd = seat===0 ? 8.5 : 35.5;
+  const yWlk = seat===0 ? 7 : 37;
+  for (let i=0;i<5;i++) dropUnit("inf", seat, 18+i*1.6, yInf, g);
+  dropUnit("cmd", seat, 22, yCmd, g);
+  dropUnit("wlk", seat, 40, yWlk, "w"+seat);
+}
+function isDemoLobby(seat){
+  const rec = S.lobby && S.lobby.army && S.lobby.army[String(seat == null ? mySeat : seat)];
+  return !!(rec && rec.id === "__demo__");
+}
 function demoForces(){
   if (!inSetup()){ logLine("Demo forces — return to Setup first"); return; }
   const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(mySeat)];
-  const list = rec && rec.id && window.PTSheets.listById ? PTSheets.listById(rec.id) : null;
-  if (list && list.units && list.units.length){
-    showWarn("<strong>Saved army:</strong> Demo is off while this list is loaded.");
-    return;
+  if (rec && rec.id && rec.id !== "__demo__"){
+    const list = window.PTSheets.listById ? PTSheets.listById(rec.id) : null;
+    if (list && list.units && list.units.length){
+      showWarn("<strong>Saved army:</strong> Demo is off while this list is loaded. Pick Demo Forces in the lobby to use teaching tokens.");
+      return;
+    }
   }
   if (!practice){
-    S.units = (S.units||[]).filter(u => u.seat !== mySeat);
-    const g = "g"+mySeat;
-    const yInf = mySeat===0 ? 6 : 38;
-    const yCmd = mySeat===0 ? 8.5 : 35.5;
-    const yWlk = mySeat===0 ? 7 : 37;
-    for (let i=0;i<5;i++) dropUnit("inf", mySeat, 18+i*1.6, yInf, g);
-    dropUnit("cmd", mySeat, 22, yCmd, g);
-    dropUnit("wlk", mySeat, 40, yWlk, "w"+mySeat);
+    placeDemoSeat(mySeat);
     selectObj(null); logLine("Demo forces — " + seatName(mySeat)); save(); draw();
     return;
   }
-  S.units = [];
-  const g0="g0", g1="g1";
-  for (let i=0;i<5;i++) dropUnit("inf", 0, 18+i*1.6, 6, g0);
-  dropUnit("cmd", 0, 22, 8.5, g0);
-  dropUnit("wlk", 0, 40, 7, "w0");
-  for (let i=0;i<5;i++) dropUnit("inf", 1, 18+i*1.6, 38, g1);
-  dropUnit("cmd", 1, 22, 35.5, g1);
-  dropUnit("wlk", 1, 40, 37, "w1");
+  placeDemoSeat(0);
+  placeDemoSeat(1);
   selectObj(null); logLine("Demo forces deployed"); save(); draw();
 }
 function addDrop(key){
@@ -2450,7 +2465,7 @@ function refreshArmyPick(){
   sel.innerHTML = '<option value="">Army units…</option>' + units.map(u =>
     `<option value="${u.id}">${u.name} ×${u.count}${u.pts != null ? " · "+u.pts : ""}</option>`
   ).join("");
-  const showDemo = !(rec && rec.id && units.length);
+  const showDemo = !rec || !rec.id || rec.id === "__demo__" || !units.length;
   document.querySelectorAll("#rowUnits [data-drop], #btnDemo").forEach(b => {
     if (b) b.style.display = showDemo ? "" : "none";
   });

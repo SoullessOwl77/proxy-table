@@ -49,6 +49,15 @@ td input{width:72px;}
 .det{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-size:13px;}
 .det input{width:auto;}
 .banner{margin:8px 0;padding:8px 10px;border:1px solid var(--brass-dim);border-radius:8px;font-size:12px;line-height:1.4;}
+.help{margin-top:18px;border:1px solid var(--brass-dim);border-radius:10px;background:#15201e;}
+.help>summary{cursor:pointer;padding:10px 12px;font:700 12px Archivo,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);list-style:none;}
+.help>summary::-webkit-details-marker{display:none;}
+.help>summary:after{content:" ▾";float:right;color:var(--parchment-dim);}
+.help[open]>summary:after{content:" ▴";}
+.help .qa{padding:0 12px 12px;}
+.help details{margin:6px 0;border-top:1px solid #0006;padding-top:6px;}
+.help details>summary{cursor:pointer;color:var(--parchment);font:600 13px Archivo,sans-serif;text-transform:none;letter-spacing:0;}
+.help p{margin:6px 0 0;font-size:13px;line-height:1.45;color:var(--parchment-dim);}
 </style>
 </head>
 <body>
@@ -114,6 +123,30 @@ td input{width:72px;}
       <h2>Saved units (this device)</h2>
       <div id="savedList" class="hint">None yet.</div>
     </div>
+    <details class="help" id="armyHelp">
+      <summary>Hints, FAQ, and how this page works</summary>
+      <div class="qa">
+        <p>Casual / learning lists for this table. Purple names are fan-sourced stats. Gold / normal names were checked against a pack or card. Red is points only.</p>
+        <details><summary>How do I start a list?</summary>
+          <p>New list → name it → pick battle size (Incursion 1000 / Strike Force 2000 / Onslaught 3000). Onslaught DP on this table is a house rule. Pick one faction. Add units. Detachments are optional until you care about rules.</p></details>
+        <details><summary>Can I mix factions?</summary>
+          <p>No. One army faction per list. Tyranids stay with Tyranids. Space Marines stay with Space Marines. Forgefather’s Seekers also locks the list to Salamanders — no Ultramarines characters in that detachment.</p></details>
+        <details><summary>What do the colors mean?</summary>
+          <p>Normal: accepted from an official pack/card. Purple · fan: Wahapedia fill for casual play — check the app if a fight depends on it. Red · pts only: cost only, no stat line yet. Do not drop red units and expect shooting to work.</p></details>
+        <details><summary>Points, copies, and “3rd+”</summary>
+          <p>MFM often charges more for the 3rd copy of the same datasheet, or for a bigger model count. Change the model count and the quote should follow. Two identical units in the list are copy 1 and copy 2. Battle size also caps how many copies you may take.</p></details>
+        <details><summary>What is DP?</summary>
+          <p>Detachment Points. Battle size gives a budget (2 / 3 / 4 on this table). Each detachment costs 1–3 DP. Tick only what you are using. Enhancements are a count until those cards are ingested — type how many you took; cap is on the size.</p></details>
+        <details><summary>Weapons and model counts</summary>
+          <p>Set how many models are in the unit, then how many carry each gun. That is for the table and for points bands. Optional wargear is not a full options tree yet — pick the sheet that already matches (Eradicators vs Eradicators with Heavy Bolters).</p></details>
+        <details><summary>Salamanders starter</summary>
+          <p>Search “salamanders” or open Space Marines. Useful pieces: Vulkan He’stan (official card, points still review), Adrax Agatone, Infernus, Aggressors, Eradicators, Firestrike. Detachment: Forgefather’s Seekers (2 DP) or Firestorm Assault Force (2 DP). Land Raider Redeemer is not in the catalog yet.</p></details>
+        <details><summary>Where does this list go?</summary>
+          <p>Saved on this device. Load it from the 40K table when you start a game — only that army’s units should appear, not Demo, once the list has models. Need the same list on a second PC? Export is not built yet; rebuild or copy the device.</p></details>
+        <details><summary>Official links</summary>
+          <p><a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a> · <a href="https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" target="_blank" rel="noopener">Core Rules and Faction Packs</a>. Points here are a snapshot, not a live scrape.</p></details>
+      </div>
+    </details>
   </section>
 </div>
 <script src="./datasheets/load.js"></script>
