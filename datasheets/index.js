@@ -19,6 +19,84 @@
   };
   const DATASHEETS_DEFAULT = {};
   const PACKS = {};
+  const DETACHMENTS_DEFAULT = {};
+
+  const BATTLE_SIZES = [
+    { id: "incursion", name: "Incursion", pts: 1000, dp: 2, enhancements: 2, copies: 2, source: "core" },
+    { id: "strike-force", name: "Strike Force", pts: 2000, dp: 3, enhancements: 4, copies: 3, source: "core" },
+    { id: "onslaught", name: "Onslaught", pts: 3000, dp: 4, enhancements: 6, copies: 4, source: "proxy" }
+  ];
+  const MFM_HUB = "https://mfm.warhammer-community.com/en";
+  function mfmSeed() { return window.PT_MFM_SEED || { version: "", units: {} }; }
+  function mfmNorm(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+  function mfmEntryFor(sheet) {
+    const seed = mfmSeed().units || {};
+    if (sheet && sheet.id && seed[sheet.id]) return seed[sheet.id];
+    const want = mfmNorm(sheet && (sheet.name || sheet.id));
+    if (!want) return null;
+    const keys = Object.keys(seed);
+    for (let i = 0; i < keys.length; i++) {
+      const e = seed[keys[i]];
+      if (mfmNorm(e.name) === want || mfmNorm(keys[i]) === want) return e;
+    }
+    return null;
+  }
+  function mfmFirstPts(entry) {
+    if (!entry || !entry.bands || !entry.bands.length) return null;
+    return entry.bands.find(b => !b.tier || b.tier === "unit" || String(b.tier).indexOf("1st") === 0) || entry.bands[0];
+  }
+  function lookupMfm(sheet) {
+    const entry = mfmEntryFor(sheet);
+    const slug = ((sheet && sheet.faction) || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const url = MFM_HUB + (slug ? "/" + slug : "");
+    if (!entry) {
+      return { hit: false, url, version: mfmSeed().version || "", message: "Not in the local MFM seed. Open the faction page and enter the cost." };
+    }
+    const first = mfmFirstPts(entry);
+    return {
+      hit: true,
+      url,
+      version: mfmSeed().version || "",
+      name: entry.name,
+      pts: first && first.pts,
+      bands: entry.bands,
+      message: "MFM v" + (mfmSeed().version || "?") + " · " + (first && first.pts) + " pts"
+    };
+  }
+  function applyMfmProposal(sheet) {
+    const look = lookupMfm(sheet);
+    if (!look.hit) return look;
+    sheet.ptsProposed = look.pts;
+    sheet.ptsBands = (look.bands || []).filter(b => !b.tier || b.tier === "unit" || String(b.tier).indexOf("1st") === 0)
+      .map(b => ({ count: b.count, pts: b.pts }));
+    sheet.ptsMfmVersion = look.version;
+    if (sheet.pts == null) {
+      sheet.pts = look.pts;
+      sheet.ptsSource = "proposed";
+    } else if (sheet.pts !== look.pts) {
+      sheet.ptsSource = "proposed";
+    }
+    return look;
+  }
+  function mfmCatalogDiff() {
+    const sheets = currentSheets();
+    const out = [];
+    Object.keys(sheets).forEach(k => {
+      const s = sheets[k];
+      if (s.ptsSource === "demo") return;
+      const look = lookupMfm(s);
+      if (!look.hit) {
+        out.push({ key: k, name: s.name, kind: "missing", have: s.pts, want: null, url: look.url });
+        return;
+      }
+      if (s.pts !== look.pts) {
+        out.push({ key: k, name: s.name, kind: "changed", have: s.pts, want: look.pts, url: look.url });
+      }
+    });
+    return { version: mfmSeed().version, rows: out };
+  }
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function slug(s) {
@@ -63,18 +141,181 @@
     return a && a.x ? a.x : 0;
   }
   const ARMY_STORE = "pt_40k_army_v1";
-  function emptyArmy() { return { v: 1, name: "My list", units: [] }; }
-  function loadArmy() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(ARMY_STORE) || "null");
-      if (raw && Array.isArray(raw.units)) return raw;
-    } catch (_) {}
-    return emptyArmy();
+  function nid() { return "list_" + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36); }
+  function emptyStore() {
+    return {
+      v: 2,
+      activeId: "list_default",
+      lists: [{ id: "list_default", name: "My list", units: [], sizeId: "strike-force", detachments: [], enhancementCount: 0 }]
+    };
   }
+  function migrateArmy(raw) {
+    if (!raw) return emptyStore();
+    if (raw.v >= 2 && Array.isArray(raw.lists) && raw.lists.length) {
+      raw.lists.forEach(l => {
+        if (!l.sizeId) l.sizeId = "strike-force";
+        if (!Array.isArray(l.detachments)) l.detachments = [];
+        if (l.enhancementCount == null) l.enhancementCount = 0;
+      });
+      if (!raw.activeId || !raw.lists.some(l => l.id === raw.activeId)) raw.activeId = raw.lists[0].id;
+      return raw;
+    }
+    if (Array.isArray(raw.units)) {
+      const id = "list_default";
+      return {
+        v: 2, activeId: id,
+        lists: [{ id, name: raw.name || "My list", units: raw.units, sizeId: "strike-force", detachments: [], enhancementCount: 0 }]
+      };
+    }
+    return emptyStore();
+  }
+  function loadArmyStore() {
+    try { return migrateArmy(JSON.parse(localStorage.getItem(ARMY_STORE) || "null")); }
+    catch (_) { return emptyStore(); }
+  }
+  function saveArmyStore(store) {
+    store.v = 2;
+    localStorage.setItem(ARMY_STORE, JSON.stringify(store));
+    return store;
+  }
+  function listById(id) {
+    return (loadArmyStore().lists || []).find(l => l.id === id) || null;
+  }
+  function activeList(store) {
+    store = store || loadArmyStore();
+    return (store.lists || []).find(l => l.id === store.activeId) || store.lists[0];
+  }
+  function emptyArmy() {
+    const l = activeList();
+    return { v: 1, id: l.id, name: l.name, units: l.units, sizeId: l.sizeId, detachments: l.detachments, enhancementCount: l.enhancementCount };
+  }
+  function loadArmy() { return emptyArmy(); }
   function saveArmy(army) {
-    localStorage.setItem(ARMY_STORE, JSON.stringify(army));
-    return army;
+    const st = loadArmyStore();
+    let l = st.lists.find(x => x.id === (army.id || st.activeId));
+    if (!l) {
+      l = {
+        id: army.id || nid(), name: army.name || "My list", units: army.units || [],
+        sizeId: army.sizeId || "strike-force", detachments: army.detachments || [], enhancementCount: army.enhancementCount || 0
+      };
+      st.lists.push(l);
+      st.activeId = l.id;
+    } else {
+      l.name = army.name || l.name;
+      l.units = army.units || [];
+      if (army.sizeId) l.sizeId = army.sizeId;
+      if (army.detachments) l.detachments = army.detachments;
+      if (army.enhancementCount != null) l.enhancementCount = army.enhancementCount;
+    }
+    saveArmyStore(st);
+    return loadArmy();
   }
+  function setActiveList(id) {
+    const st = loadArmyStore();
+    if (st.lists.some(l => l.id === id)) { st.activeId = id; saveArmyStore(st); }
+    return loadArmy();
+  }
+  function addList(name) {
+    const st = loadArmyStore();
+    const l = { id: nid(), name: name || ("List " + (st.lists.length + 1)), units: [], sizeId: "strike-force", detachments: [], enhancementCount: 0 };
+    st.lists.push(l);
+    st.activeId = l.id;
+    saveArmyStore(st);
+    return l;
+  }
+  function deleteList(id) {
+    const st = loadArmyStore();
+    st.lists = st.lists.filter(l => l.id !== id);
+    if (!st.lists.length) st.lists = emptyStore().lists;
+    if (!st.lists.some(l => l.id === st.activeId)) st.activeId = st.lists[0].id;
+    saveArmyStore(st);
+    return loadArmy();
+  }
+  function sizeById(id) { return BATTLE_SIZES.find(s => s.id === id) || null; }
+  function ptsForCount(sheet, count) {
+    count = Math.max(1, count || 1);
+    if (!sheet) return { pts: null, source: "review", unknown: true };
+    const bands = sheet.ptsBands || [];
+    const hit = bands.find(b => b.count === count);
+    if (hit && typeof hit.pts === "number") {
+      return { pts: hit.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review" };
+    }
+    const def = (sheet.composition && sheet.composition.defaultCount) || 1;
+    if (typeof sheet.pts === "number" && count === def) {
+      return { pts: sheet.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review" };
+    }
+    if (sheet.ptsPer === "model" && typeof sheet.pts === "number") {
+      return { pts: sheet.pts * count, source: sheet.ptsSource || "mfm", unknown: false };
+    }
+    return { pts: null, source: "review", unknown: true };
+  }
+  function listTotal(list) {
+    let pts = 0, unknown = 0;
+    ((list && list.units) || []).forEach(u => {
+      if (u.ptsSource === "review" || u.pts == null || u.pts === "") unknown++;
+      else pts += Number(u.pts) || 0;
+    });
+    return { pts, unknown };
+  }
+  function formatPts(n, unknown) {
+    if (unknown) return (n ? Number(n).toLocaleString() + " + ?" : "?");
+    if (n == null) return "?";
+    return Number(n).toLocaleString() + " pts";
+  }
+  function detachmentOf(id) { return DETACHMENTS_DEFAULT[id] || null; }
+  function detachmentsForFaction(faction) {
+    return Object.keys(DETACHMENTS_DEFAULT).map(k => DETACHMENTS_DEFAULT[k])
+      .filter(d => !faction || d.faction === faction);
+  }
+  function sheetKeywords(sheet) {
+    return ((sheet && sheet.keywords) || []).map(k => String(k).toUpperCase());
+  }
+  function copyCapForSheet(sheet, size) {
+    const kws = sheetKeywords(sheet);
+    if (kws.indexOf("EPIC HERO") >= 0) return 1;
+    const base = (size && size.copies) || 3;
+    if (kws.indexOf("BATTLELINE") >= 0 || kws.indexOf("DEDICATED TRANSPORT") >= 0) return base * 2;
+    return base;
+  }
+  function validateList(list) {
+    list = list || loadArmy();
+    const size = sizeById(list.sizeId) || sizeById("strike-force");
+    const tot = listTotal(list);
+    const dets = (list.detachments || []).map(detachmentOf).filter(Boolean);
+    const dp = dets.reduce((n, d) => n + (d.dp || 0), 0);
+    const tags = [];
+    let uniqueClash = false;
+    dets.forEach(d => {
+      (d.uniqueTags || []).forEach(t => {
+        if (tags.indexOf(t) >= 0) uniqueClash = true;
+        else tags.push(t);
+      });
+    });
+    const counts = {};
+    (list.units || []).forEach(u => {
+      const sid = u.sheetId || u.sheetKey || u.name;
+      counts[sid] = counts[sid] || { name: u.name, n: 0, sheet: live.sheets[u.sheetKey] };
+      counts[sid].n += 1;
+    });
+    const copies = Object.keys(counts).map(sid => {
+      const row = counts[sid];
+      const cap = copyCapForSheet(row.sheet, size);
+      return { name: row.name, n: row.n, cap, over: row.n > cap };
+    });
+    const enh = Number(list.enhancementCount) || 0;
+    const overPts = !tot.unknown && tot.pts > size.pts;
+    const overDp = dp > size.dp;
+    const overEnh = enh > size.enhancements;
+    const overCopies = copies.some(c => c.over);
+    return {
+      size, pts: tot.pts, unknown: tot.unknown, overPts,
+      dp, dpBudget: size.dp, overDp,
+      enh, enhCap: size.enhancements, overEnh,
+      copies, overCopies, uniqueClash,
+      legal: !overPts && !tot.unknown && !overDp && !overEnh && !overCopies && !uniqueClash
+    };
+  }
+
   function defaultGear(sheet, count) {
     count = Math.max(1, count || (sheet.composition && sheet.composition.defaultCount) || 1);
     const gear = (sheet.weapons || []).map(w => ({ name: w.name, count: 0 }));
@@ -122,6 +363,10 @@
     PACKS[id] = pack;
     Object.assign(ABILITY_LIB, pack.lib || {});
     Object.assign(DATASHEETS_DEFAULT, pack.sheets || {});
+    (pack.detachments || []).forEach(d => {
+      if (!d || !d.id) return;
+      DETACHMENTS_DEFAULT[d.id] = Object.assign({ faction: pack.faction || "" }, d);
+    });
     if (window.PTSheets && window.PTSheets.reload) window.PTSheets.reload();
   };
 
@@ -152,9 +397,29 @@
     fnpOf,
     slug,
     ARMY_STORE,
+    MFM_HUB,
+    BATTLE_SIZES,
+    lookupMfm,
+    applyMfmProposal,
+    mfmCatalogDiff,
+    mfmSeed,
     loadArmy,
     saveArmy,
     emptyArmy,
+    loadArmyStore,
+    saveArmyStore,
+    listById,
+    activeList,
+    setActiveList,
+    addList,
+    deleteList,
+    ptsForCount,
+    listTotal,
+    sizeById,
+    formatPts,
+    detachmentOf,
+    detachmentsForFaction,
+    validateList,
     defaultGear,
     weaponsForIndex,
     profileForIndex,

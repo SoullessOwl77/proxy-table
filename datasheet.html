@@ -116,6 +116,27 @@ td input,td select{width:100%;}
       <input id="fComp" placeholder="1 Commander">
     </div>
     <div class="row">
+      <label class="field">Points (MFM)</label>
+      <div class="abil">
+        <input id="fPts" inputmode="numeric" placeholder="blank = unknown" style="max-width:140px">
+        <select id="fPtsSource" style="max-width:160px">
+          <option value="mfm">MFM</option>
+          <option value="proposed">Proposed — accept</option>
+          <option value="review">Needs review</option>
+        </select>
+        <a class="btn" href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Open MFM</a>
+        <button class="btn" type="button" id="btnMfmLook">Look up MFM</button>
+        <button class="btn" type="button" id="btnMfmCheck">Check catalog</button>
+      </div>
+      <div id="ptsPropose" class="hint" style="display:none;margin-top:8px;padding:8px;border:1px solid var(--brass-dim);border-radius:8px;">
+        These models have updated information: <strong id="ptsProposeText"></strong>
+        <div class="abil" style="margin-top:8px">
+          <button class="btn gold" type="button" id="btnPtsAccept">Accept change</button>
+          <button class="btn" type="button" id="btnPtsKeep">Keep current</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
       <label class="field">Weapons</label>
       <table>
         <thead><tr><th>Name</th><th>Kind</th><th>A</th><th>BS/WS</th><th>S</th><th>AP</th><th>D</th><th>Rng</th><th>Tags</th><th></th></tr></thead>
@@ -210,6 +231,14 @@ function render(){
   document.getElementById("fKeywords").value = csv(s.keywords);
   document.getElementById("fSearch").value = csv(s.search);
   document.getElementById("fComp").value = (s.composition && s.composition.label) || "";
+  document.getElementById("fPts").value = s.pts == null ? "" : s.pts;
+  opt(document.getElementById("fPtsSource"), ["mfm","proposed","review"], s.ptsSource || (s.pts == null ? "review" : "mfm"));
+  const box = document.getElementById("ptsPropose");
+  if (s.ptsSource === "proposed" || (s.ptsProposed != null && s.ptsProposed !== s.pts)) {
+    box.style.display = "";
+    const cur = s.pts == null ? "?" : s.pts;
+    document.getElementById("ptsProposeText").textContent = s.name + " " + cur + " → " + s.ptsProposed + " pts";
+  } else box.style.display = "none";
   document.getElementById("wepBody").innerHTML = (s.weapons || []).map(wepRow).join("");
   const src = s.source || {};
   const bits = [];
@@ -263,6 +292,9 @@ function collect(){
   s.search = fromCsv(document.getElementById("fSearch").value).map(x => x.toLowerCase());
   s.composition = s.composition || {};
   s.composition.label = document.getElementById("fComp").value.trim();
+  const pv = document.getElementById("fPts").value.trim();
+  s.pts = pv === "" ? null : (parseInt(pv, 10) || null);
+  s.ptsSource = document.getElementById("fPtsSource").value || "review";
   s.weapons = collectWeapons();
 }
 document.getElementById("wepBody").onclick = e => {
@@ -308,6 +340,51 @@ document.getElementById("btnSave").onclick = () => {
   collect();
   PT.save();
   document.getElementById("saveMsg").textContent = "Saved on this device. New drops on the table use this sheet.";
+};
+document.getElementById("btnPtsAccept").onclick = () => {
+  const s = PT.DATASHEETS[key];
+  if (!s) return;
+  if (s.ptsProposed != null) s.pts = s.ptsProposed;
+  s.ptsSource = "mfm";
+  PT.save();
+  render();
+  document.getElementById("saveMsg").textContent = "Accepted MFM points.";
+};
+document.getElementById("btnPtsKeep").onclick = () => {
+  const s = PT.DATASHEETS[key];
+  if (!s) return;
+  s.ptsSource = s.pts == null ? "review" : "mfm";
+  PT.save();
+  render();
+  document.getElementById("saveMsg").textContent = "Kept current points.";
+};
+document.getElementById("btnMfmLook").onclick = () => {
+  const s = PT.DATASHEETS[key];
+  if (!s) return;
+  const look = PT.applyMfmProposal(s);
+  PT.save();
+  render();
+  const msg = document.getElementById("saveMsg");
+  if (look.hit) {
+    msg.textContent = look.message + " — Accept or Keep.";
+  } else {
+    msg.innerHTML = look.message + ' <a href="'+look.url+'" target="_blank" rel="noopener">Open faction on MFM</a>';
+  }
+};
+document.getElementById("btnMfmCheck").onclick = () => {
+  const diff = PT.mfmCatalogDiff();
+  const msg = document.getElementById("saveMsg");
+  if (!diff.rows.length) {
+    msg.textContent = "Catalog matches MFM seed v" + (diff.version || "?") + ".";
+    return;
+  }
+  const bits = diff.rows.map(r => {
+    if (r.kind === "missing") return r.name + " not in seed";
+    return r.name + " " + (r.have == null ? "?" : r.have) + " → " + r.want;
+  });
+  msg.textContent = "MFM v" + diff.version + " updates: " + bits.join("; ") + ". Open each sheet and Accept or Keep.";
+  const first = diff.rows.find(r => r.kind === "changed") || diff.rows[0];
+  if (first) { key = first.key; render(); }
 };
 document.getElementById("btnRevert").onclick = () => {
   const def = PT.defaults.sheets[key];

@@ -1,6 +1,18 @@
 /* Tyranids — 11th edition. Accepted from Faction Pack 1.1 (22 Jul 2026). */
 PTSheetsPack("tyranids", {
   faction: "Tyranids",
+  detachments: [
+    { id: "ambush-predators", name: "Ambush Predators", dp: 1, disposition: "Disruption" },
+    { id: "talons-of-the-norn-queen", name: "Talons of the Norn Queen", dp: 1, disposition: "Take and Hold" },
+    { id: "warrior-bioform-onslaught", name: "Warrior Bioform Onslaught", dp: 1, disposition: "Take and Hold" },
+    { id: "assimilation-swarm", name: "Assimilation Swarm", dp: 2, disposition: "Priority Assets" },
+    { id: "crusher-stampede", name: "Crusher Stampede", dp: 2, disposition: "Purge the Foe" },
+    { id: "invasion-fleet", name: "Invasion Fleet", dp: 3, disposition: "Take and Hold" },
+    { id: "subterranean-assault", name: "Subterranean Assault", dp: 3, disposition: "Disruption" },
+    { id: "synaptic-nexus", name: "Synaptic Nexus", dp: 2, disposition: "Disruption" },
+    { id: "unending-swarm", name: "Unending Swarm", dp: 2, disposition: "Take and Hold" },
+    { id: "vanguard-onslaught", name: "Vanguard Onslaught", dp: 2, disposition: "Reconnaissance" }
+  ],
   lib: {
     "shadow-in-the-warp": {
       id: "shadow-in-the-warp",
@@ -136,6 +148,7 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 7, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 10, T: 8, Sv: 3, Inv: 0, W: 9, Ld: 8, OC: 3, baseMm: 100,
       composition: { label: "1 The Red Terror", defaultCount: 1 },
+      pts: 130, ptsProposed: 130, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:1, pts:130}],
       weapons: [
         { name: "Gaping maw", kind: "melee", A: 1, skill: 2, S: 5, AP: 0, D: "D3+2", rng: 0, tags: ["EXTRA ATTACKS", "DEVASTATING WOUNDS", "PRECISION"] },
         { name: "Scything talons", kind: "melee", A: 12, skill: 2, S: 7, AP: -2, D: 2, rng: 0, tags: [] }
@@ -159,6 +172,7 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 9, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 10, T: 5, Sv: 3, Inv: 0, W: 6, Ld: 7, OC: 1, baseMm: 40,
       composition: { label: "1 Tyranid Prime with Lash Whip", defaultCount: 1 },
+      pts: 65, ptsProposed: 75, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:1, pts:75}],
       leader: ["Hormagaunts", "Termagants", "Tyranid Warriors with Melee Bio-weapons", "Tyranid Warriors with Ranged Bio-weapons"],
       weapons: [
         { name: "Rending claw", kind: "melee", A: 4, skill: 2, S: 8, AP: -2, D: 3, rng: 0, tags: [] },
@@ -185,6 +199,7 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 11, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 10, T: 5, Sv: 4, Inv: 0, W: 3, Ld: 8, OC: 1, baseMm: 40,
       composition: { label: "5 Raveners", defaultCount: 5 },
+      pts: 125, ptsProposed: 125, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:5, pts:125}],
       weapons: [
         { name: "Ravener claws and talons", kind: "melee", A: 3, skill: 3, S: 5, AP: -2, D: 2, rng: 0, tags: ["TWIN-LINKED"] }
       ],
@@ -206,6 +221,7 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 13, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 10, T: 5, Sv: 4, Inv: 0, W: 3, Ld: 8, OC: 1, baseMm: 40,
       composition: { label: "1 Ravener Prime, 4 Raveners", defaultCount: 5 },
+      pts: 165, ptsProposed: 165, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:5, pts:165}],
       profiles: [
         { id: "prime", name: "Ravener Prime", W: 6, Ld: 7, OC: 1, keywords: ["CHARACTER", "SYNAPSE"], count: 1 },
         { id: "ravener", name: "Ravener", W: 3, Ld: 8, OC: 1, count: 4 }
@@ -237,6 +253,7 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 15, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 14, T: 10, Sv: 3, Inv: 0, W: 30, Ld: 8, OC: 0, baseMm: 0,
       composition: { label: "1 Harridan", defaultCount: 1 },
+      pts: 610, ptsProposed: 610, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:1, pts:610}],
       transport: { capacity: 20, note: "20 Gargoyles and 1 Winged Tyranid Prime" },
       damaged: { wounds: "1-10", hitMod: -1 },
       weapons: [
@@ -262,6 +279,7 @@ PTSheetsPack("tyranids", {
       source: { label: "Tyranids Faction Pack 1.1", file: "tyranids-faction-pack-1.1.pdf", page: 17, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" },
       M: 12, T: 14, Sv: 2, Inv: 5, W: 30, Ld: 8, OC: 12, baseMm: 0,
       composition: { label: "1 Hierophant", defaultCount: 1 },
+      pts: 810, ptsProposed: 810, ptsSource: "proposed", ptsMfmVersion: "1.3", ptsBands: [{count:1, pts:810}],
       transport: { capacity: 20, note: "20 Tyranids Infantry; W>1 counts as 3; no Fly" },
       damaged: { wounds: "1-10", hitMod: -1, OC: 6 },
       weapons: [

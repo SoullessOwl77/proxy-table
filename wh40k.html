@@ -89,6 +89,32 @@ canvas.dragging{cursor:grabbing;}
 .warnbar.on{display:flex;}
 .warnbar strong{color:#f0a8a8;}
 .warnbar .wclose{margin-left:4px;flex-shrink:0;}
+.lobby{
+  position:fixed;inset:0;z-index:18;display:none;align-items:center;justify-content:center;
+  background:#0a0f0ef2;padding:18px;overflow:auto;
+}
+.lobby.on{display:flex;}
+.lobby .sheet{
+  width:min(520px,100%);background:linear-gradient(180deg,#24322e,#1b2825);
+  border:1px solid var(--brass-dim);border-radius:14px;padding:18px 18px 16px;
+  box-shadow:0 18px 48px #000a;
+}
+.lobby h2{font-family:Fraunces,serif;font-size:22px;margin:0 0 6px;}
+.lobby .sub{font-size:12px;color:var(--parchment-dim);margin:0 0 14px;line-height:1.4;}
+.lobby label{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:10px 0 4px;}
+.lobby select,.lobby input{
+  width:100%;background:#0f1614;color:var(--parchment);border:1px solid #0007;border-radius:8px;
+  padding:10px;font:400 14px Archivo,sans-serif;
+}
+.lobby .side{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;font-size:12px;}
+.lobby .seatcard{background:#0f1614;border:1px solid #0007;border-radius:8px;padding:8px 10px;}
+.lobby .seatcard .nm{font-weight:700;}
+.lobby .ok{color:var(--good);} .lobby .bad{color:#f0a8a8;}
+.lobby .chat{display:none;margin-top:12px;}
+.lobby .chat.on{display:block;}
+.lobby .msgs{max-height:120px;overflow:auto;font-size:12px;line-height:1.4;margin:0 0 8px;background:#0a0f0e;border-radius:8px;padding:8px;}
+.lobby .rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.lobby a{color:var(--brass);}
 .hint{font-size:11px;color:var(--parchment-dim);}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);pointer-events:none;
   text-shadow:0 1px 2px #000a;}
@@ -329,8 +355,39 @@ canvas.dragging{cursor:grabbing;}
 </div>
 <div class="rotate"><div><h2>Turn the phone sideways</h2>
   <p class="hint">The table is built for landscape.</p></div></div>
+<div class="lobby" id="lobby" aria-modal="true">
+  <div class="sheet">
+    <h2>Before the battle</h2>
+    <p class="sub" id="lobbySub">Agree battle size and who goes first. Armies do not have to match.</p>
+    <label for="lobbySize">Battle size</label>
+    <select id="lobbySize">
+      <option value="">Choose…</option>
+      <option value="incursion">Incursion — 1,000 pts · 2 DP</option>
+      <option value="strike-force">Strike Force — 2,000 pts · 3 DP</option>
+      <option value="onslaught">Onslaught — 3,000 pts · 4 DP (house)</option>
+    </select>
+    <label for="lobbyArmy">Your army</label>
+    <select id="lobbyArmy"></select>
+    <p class="hint" id="lobbyArmyHint"><a href="./army.html">Army generator</a> · costs from the <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a></p>
+    <label for="lobbyFirst">Who goes first</label>
+    <select id="lobbyFirst"></select>
+    <div class="side">
+      <div class="seatcard" id="lobbyMine"></div>
+      <div class="seatcard" id="lobbyTheirs"></div>
+    </div>
+    <p class="hint" id="lobbyMatch"></p>
+    <div class="chat" id="lobbyChat">
+      <div class="msgs" id="lobbyMsgs"></div>
+      <input id="lobbyChatIn" maxlength="240" placeholder="Scratch note — deleted when you agree">
+    </div>
+    <div class="rowbtns">
+      <button class="btn gold" type="button" id="btnLobbyGo">Enter table</button>
+      <a class="btn ghost" href="./index.html">Hub</a>
+    </div>
+  </div>
+</div>
 <script>
-const BUILD = "v2.15.3-synapse-swallow";
+const BUILD = "v2.16.1-mfm-seed";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -694,7 +751,19 @@ function emptyBoard(){
     log:[], players:{ "0": practice ? who : "", "1": "" },
     chargeRolls:{},
     ready:{ "0":false, "1":false },
-    resetAsk:{ "0":false, "1":false }
+    resetAsk:{ "0":false, "1":false },
+    lobby: emptyLobby()
+  };
+}
+function emptyLobby(){
+  return {
+    open: true,
+    committed: false,
+    size: { "0":"", "1":"" },
+    first: { "0":"", "1":"" },
+    army: { "0":null, "1":null },
+    chat: [],
+    ready: { "0":false, "1":false }
   };
 }
 let S = emptyBoard();
@@ -711,6 +780,8 @@ if (!S.chargeRolls) S.chargeRolls = {};
 if (!S.players) S.players = { "0": practice ? who : "", "1": "" };
 if (!S.ready) S.ready = { "0":false, "1":false };
 if (!S.resetAsk) S.resetAsk = { "0":false, "1":false };
+if (!S.lobby) S.lobby = emptyLobby();
+if (S.turn && S.turn.deploymentDone){ S.lobby.committed = true; S.lobby.open = false; }
 function bumpIds(){
   nid = 1; uidn = 1;
   (S.terrain||[]).forEach(t => {
@@ -740,6 +811,166 @@ function setWho(){
   document.getElementById("whoSub").textContent = (who? who+" · ":"") + mode + " · "+BUILD;
 }
 setWho();
+
+function esc(s){
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+function lobbyOpen(){
+  return !!(S.lobby && S.lobby.open && !S.lobby.committed && inSetup());
+}
+function lobbyAgree(){
+  const L = S.lobby;
+  if (!L) return false;
+  return !!(L.size["0"] && L.size["0"] === L.size["1"] && L.first["0"] !== "" && L.first["0"] === L.first["1"]);
+}
+function myLobbyArmyOver(){
+  const L = S.lobby;
+  const rec = L && L.army && L.army[String(mySeat)];
+  const sz = window.PTSheets && PTSheets.sizeById && PTSheets.sizeById((L.size && L.size[String(mySeat)]) || "");
+  if (!rec || !sz) return { over:false, unknown: !rec };
+  if (rec.unknown) return { over:false, unknown:true, pts: rec.pts||0, cap: sz.pts };
+  return { over: (rec.pts||0) > sz.pts, unknown:false, pts: rec.pts||0, cap: sz.pts };
+}
+function fillLobbySelects(){
+  const first = document.getElementById("lobbyFirst");
+  const cur = (S.lobby.first && S.lobby.first[String(mySeat)]) || "";
+  first.innerHTML = `<option value="">Choose…</option><option value="0">${esc(seatName(0))}</option><option value="1">${esc(seatName(1))}</option>`;
+  first.value = cur;
+  const armySel = document.getElementById("lobbyArmy");
+  const st = window.PTSheets.loadArmyStore();
+  const rec = S.lobby.army && S.lobby.army[String(mySeat)];
+  armySel.innerHTML = `<option value="">Choose a list…</option>` + (st.lists||[]).map(l => {
+    const tot = PTSheets.listTotal(l);
+    return `<option value="${esc(l.id)}">${esc(l.name)} — ${esc(PTSheets.formatPts(tot.pts, tot.unknown))}</option>`;
+  }).join("");
+  if (rec && rec.id) armySel.value = rec.id;
+  document.getElementById("lobbySize").value = (S.lobby.size && S.lobby.size[String(mySeat)]) || "";
+}
+function seatLobbyCard(seat){
+  const L = S.lobby;
+  const sz = window.PTSheets.sizeById(L.size[String(seat)] || "");
+  const first = L.first[String(seat)];
+  const army = L.army[String(seat)];
+  const sizeTxt = sz ? (sz.name + " " + sz.pts.toLocaleString() + " · " + sz.dp + " DP") : "size not set";
+  const firstTxt = first === "" || first == null ? "first player not set" : seatName(Number(first));
+  const armyTxt = army ? (army.name + " · " + PTSheets.formatPts(army.pts, army.unknown)) : "no army";
+  return `<div class="nm">${esc(seatName(seat))}</div><div>${esc(sizeTxt)}</div><div>${esc(armyTxt)}</div><div>First: ${esc(firstTxt)}</div>`;
+}
+function renderLobby(){
+  const el = document.getElementById("lobby");
+  if (!el) return;
+  if (!lobbyOpen()){ el.classList.remove("on"); return; }
+  el.classList.add("on");
+  fillLobbySelects();
+  document.getElementById("lobbyMine").innerHTML = seatLobbyCard(mySeat);
+  document.getElementById("lobbyTheirs").innerHTML = seatLobbyCard(mySeat===0?1:0);
+  const agree = lobbyAgree();
+  const over = myLobbyArmyOver();
+  const match = document.getElementById("lobbyMatch");
+  const chat = document.getElementById("lobbyChat");
+  if (agree){
+    S.lobby.chat = [];
+    chat.classList.remove("on");
+    match.className = "hint ok";
+    match.textContent = "Size and first player match.";
+    if (over.unknown) match.textContent += " Army has uncosted units.";
+    else if (over.over) match.textContent += " Over points — " + over.pts.toLocaleString() + " / " + over.cap.toLocaleString() + ".";
+  } else {
+    chat.classList.add("on");
+    match.className = "hint bad";
+    match.textContent = "Size or who-goes-first does not match. Use the scratch box.";
+    document.getElementById("lobbyMsgs").innerHTML = (S.lobby.chat||[]).map(m =>
+      `<div><strong>${esc(seatName(m.seat))}:</strong> ${esc(m.line)}</div>`
+    ).join("") || "<div class='hint'>No notes yet.</div>";
+  }
+  const go = document.getElementById("btnLobbyGo");
+  const armyPicked = !!(S.lobby.army && S.lobby.army[String(mySeat)] && S.lobby.army[String(mySeat)].id);
+  const iReady = !!(S.lobby.ready && S.lobby.ready[String(mySeat)]);
+  if (iReady && !S.lobby.committed){
+    go.textContent = "Waiting…";
+    go.disabled = true;
+  } else {
+    go.textContent = "Enter table";
+    if (practice){
+      go.disabled = !S.lobby.size[String(mySeat)] || !S.lobby.first[String(mySeat)] || !armyPicked;
+      go.title = over.over ? ("Over points — Practice can continue.") : "";
+    } else {
+      go.disabled = !agree || !armyPicked || over.over || over.unknown;
+      go.title = over.over ? "Over points — cannot start" : (over.unknown ? "Needs MFM costs before PVP" : (agree ? "Enter table" : "Wait until size and first player match"));
+    }
+  }
+  document.getElementById("lobbySub").textContent = practice
+    ? "Pick size, your army, and who starts. Over-points warns but Practice can continue."
+    : "Agree battle size and who goes first. Armies do not have to match. Over-points blocks start.";
+}
+function writeMyLobby(){
+  if (!S.lobby) S.lobby = emptyLobby();
+  const size = document.getElementById("lobbySize").value;
+  const first = document.getElementById("lobbyFirst").value;
+  const armyId = document.getElementById("lobbyArmy").value;
+  S.lobby.size[String(mySeat)] = size;
+  S.lobby.first[String(mySeat)] = first;
+  if (practice){
+    S.lobby.size["0"] = S.lobby.size["1"] = size;
+    S.lobby.first["0"] = S.lobby.first["1"] = first;
+  }
+  if (armyId && PTSheets.listById){
+    const list = PTSheets.listById(armyId);
+    if (list){
+      const tot = PTSheets.listTotal(list);
+      S.lobby.army[String(mySeat)] = { id: list.id, name: list.name, pts: tot.pts, unknown: tot.unknown };
+    }
+  } else S.lobby.army[String(mySeat)] = null;
+  if (lobbyAgree()) S.lobby.chat = [];
+  save();
+  renderLobby();
+}
+function spawnSeatArmy(seat){
+  const rec = S.lobby.army && S.lobby.army[String(seat)];
+  if (!rec || !rec.id || !PTSheets.listById) return;
+  const list = PTSheets.listById(rec.id);
+  if (!list) return;
+  S.units = (S.units || []).filter(u => u.seat !== seat);
+  (list.units || []).forEach(entry => dropArmyEntry(entry, seat, true));
+}
+function commitLobby(){
+  if (!S.lobby) return;
+  const over = myLobbyArmyOver();
+  if (!practice && (over.over || over.unknown || !lobbyAgree())){ renderLobby(); return; }
+  if (practice && over.over){
+    showWarn("<strong>Over points:</strong> " + over.pts.toLocaleString() + " / " + over.cap.toLocaleString() + ". Practice can continue.");
+  }
+  const first = Number(S.lobby.first[String(mySeat)]);
+  if (first === 0 || first === 1) S.turn.activeSeat = first;
+  spawnSeatArmy(mySeat);
+  S.lobby.ready = S.lobby.ready || { "0":false, "1":false };
+  S.lobby.ready[String(mySeat)] = true;
+  if (practice){ S.lobby.ready["0"] = S.lobby.ready["1"] = true; }
+  const both = S.lobby.ready["0"] && S.lobby.ready["1"];
+  if (both){ S.lobby.committed = true; S.lobby.open = false; S.lobby.chat = []; }
+  logLine("Army: " + ((S.lobby.army[String(mySeat)] && S.lobby.army[String(mySeat)].name) || "list") + (both ? " — table open" : " — waiting for the other player"));
+  refreshArmyPick();
+  save();
+  renderLobby();
+  draw();
+}
+document.getElementById("lobbySize").onchange = writeMyLobby;
+document.getElementById("lobbyArmy").onchange = writeMyLobby;
+document.getElementById("lobbyFirst").onchange = writeMyLobby;
+document.getElementById("lobbyChatIn").onkeydown = e => {
+  if (e.key !== "Enter") return;
+  const line = e.target.value.trim();
+  if (!line) return;
+  S.lobby.chat = S.lobby.chat || [];
+  S.lobby.chat.push({ seat: mySeat, t: Date.now(), line });
+  if (S.lobby.chat.length > 20) S.lobby.chat = S.lobby.chat.slice(-20);
+  e.target.value = "";
+  save();
+  renderLobby();
+};
+document.getElementById("btnLobbyGo").onclick = commitLobby;
 
 function logLine(line){
   S.log.push({ t: Date.now(), seat: mySeat, line });
@@ -1425,7 +1656,7 @@ function save(){
   S.rev = Math.max((S.rev||0)+1, Date.now());
   if (practice){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(_){ } }
   else pushState();
-  renderPhases(); renderLog();
+  renderPhases(); renderLog(); renderLobby();
 }
 
 function tipKey(){
@@ -2140,6 +2371,12 @@ function dropUnit(key, seat, x, y, groupId){
 }
 function demoForces(){
   if (!inSetup()){ logLine("Demo forces — return to Setup first"); return; }
+  const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(mySeat)];
+  const list = rec && rec.id && window.PTSheets.listById ? PTSheets.listById(rec.id) : null;
+  if (list && list.units && list.units.length){
+    showWarn("<strong>Saved army:</strong> Demo is off while this list is loaded.");
+    return;
+  }
   if (!practice){
     S.units = (S.units||[]).filter(u => u.seat !== mySeat);
     const g = "g"+mySeat;
@@ -2173,7 +2410,7 @@ function wepCopy(w){
   const d = (typeof w.D === "number") ? w.D : 1;
   return { name:w.name, A:w.A||1, skill:w.skill||4, S:w.S||4, AP:w.AP||0, D:d, rng:w.rng||0, tags:(w.tags||[]).slice() };
 }
-function dropArmyEntry(entry, seat){
+function dropArmyEntry(entry, seat, quiet){
   if (!entry) return;
   const sheet = sheetOf(entry.sheetKey) || Object.keys(DATASHEETS).map(k => DATASHEETS[k]).find(s => s && s.id === entry.sheetId);
   if (!sheet){ logLine("Saved unit sheet missing"); return; }
@@ -2202,15 +2439,21 @@ function dropArmyEntry(entry, seat){
   }
   selectObj(null);
   logLine("Dropped " + (entry.name || sheet.name) + " ×" + n);
-  save(); draw();
+  if (!quiet){ save(); draw(); }
 }
 function refreshArmyPick(){
   const sel = document.getElementById("armyPick");
   if (!sel || !window.PTSheets || !PTSheets.loadArmy) return;
-  const army = PTSheets.loadArmy();
-  sel.innerHTML = '<option value="">Saved units…</option>' + (army.units || []).map(u =>
-    `<option value="${u.id}">${u.name} ×${u.count}</option>`
+  const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(mySeat)];
+  const list = rec && rec.id && PTSheets.listById ? PTSheets.listById(rec.id) : PTSheets.loadArmy();
+  const units = (list && list.units) || [];
+  sel.innerHTML = '<option value="">Army units…</option>' + units.map(u =>
+    `<option value="${u.id}">${u.name} ×${u.count}${u.pts != null ? " · "+u.pts : ""}</option>`
   ).join("");
+  const showDemo = !(rec && rec.id && units.length);
+  document.querySelectorAll("#rowUnits [data-drop], #btnDemo").forEach(b => {
+    if (b) b.style.display = showDemo ? "" : "none";
+  });
 }
 
 document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
@@ -2311,10 +2554,13 @@ document.getElementById("btnArmyDrop").onclick = () => {
   if (!inSetup()){ logLine("Place units in Setup"); return; }
   const id = document.getElementById("armyPick").value;
   if (!id){ logLine("Pick a saved unit first (Army generator)"); return; }
-  const entry = (window.PTSheets.loadArmy().units || []).find(u => u.id === id);
+  const rec = S.lobby && S.lobby.army && S.lobby.army[String(mySeat)];
+  const list = rec && rec.id && PTSheets.listById ? PTSheets.listById(rec.id) : PTSheets.loadArmy();
+  const entry = ((list && list.units) || []).find(u => u.id === id);
   dropArmyEntry(entry, mySeat);
 };
 refreshArmyPick();
+renderLobby();
 document.getElementById("btnReserve").onclick = () => {
   const u = selectedUnit();
   if (!u){ document.getElementById("dice").textContent = "Select a unit, then Reserves."; return; }
@@ -2882,14 +3128,39 @@ function applyRemote(board){
   if (mode==="move" || mode==="rot"){ pendingRemote = board; return; }
   const prevReady = S.ready;
   const prevReset = S.resetAsk;
+  const locLobby = S.lobby;
   S = board;
   if (!S.units) S.units=[];
   if (!S.terrain) S.terrain=[];
   if (!S.log) S.log=[];
   if (!S.chargeRolls) S.chargeRolls={};
   if (!S.players) S.players={ "0":"", "1":"" };
+  if (!S.lobby) S.lobby = emptyLobby();
   S.ready = orVotes(prevReady, S.ready);
   S.resetAsk = orVotes(prevReset, S.resetAsk);
+  if (locLobby){
+    const rem = S.lobby || emptyLobby();
+    const my = String(mySeat), ot = String(mySeat===0?1:0);
+    S.lobby = {
+      open: !(locLobby.committed || rem.committed),
+      committed: !!(locLobby.committed || rem.committed),
+      size: { "0": rem.size["0"], "1": rem.size["1"] },
+      first: { "0": rem.first["0"], "1": rem.first["1"] },
+      army: { "0": rem.army["0"], "1": rem.army["1"] },
+      chat: (rem.chat && rem.chat.length) ? rem.chat : (locLobby.chat || []),
+      ready: {
+        "0": !!(locLobby.ready && locLobby.ready["0"]) || !!(rem.ready && rem.ready["0"]),
+        "1": !!(locLobby.ready && locLobby.ready["1"]) || !!(rem.ready && rem.ready["1"])
+      }
+    };
+    S.lobby.size[my] = locLobby.size[my];
+    S.lobby.first[my] = locLobby.first[my];
+    S.lobby.army[my] = locLobby.army[my];
+    S.lobby.size[ot] = rem.size[ot];
+    S.lobby.first[ot] = rem.first[ot];
+    S.lobby.army[ot] = rem.army[ot];
+    if (S.lobby.ready["0"] && S.lobby.ready["1"]){ S.lobby.committed = true; S.lobby.open = false; S.lobby.chat = []; }
+  }
   bumpIds();
   if (!inSetup() && S.resetAsk["0"] && S.resetAsk["1"]){
     applyResetToSetup();
@@ -2909,7 +3180,7 @@ function applyRemote(board){
   if (attackerId && !S.units.some(u => u.id===attackerId)) attackerId=null;
   if (targetId && !S.units.some(u => u.id===targetId)) targetId=null;
   renderLog(); renderPhases(); draw(); refreshTip(); refreshGuide();
-  updateTerrainTools(); updateChargeRow(); renderActions();
+  updateTerrainTools(); updateChargeRow(); renderActions(); renderLobby();
 }
 function pushState(){
   if (practice || !matchWs || matchWs.readyState!==1) return;

@@ -11,7 +11,7 @@
 <style>
 :root{
   --felt:#141d1b; --felt-2:#1b2825; --brass:#c39a4e; --brass-dim:#7d6433;
-  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c;
+  --parchment:#e9e3d4; --parchment-dim:#8e9490; --blood:#a8443c; --good:#6bbf8a;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;min-height:100%;background:var(--felt);color:var(--parchment);font-family:Archivo,sans-serif;}
@@ -38,13 +38,18 @@ td input{width:72px;}
 .hint{font-size:12px;color:var(--parchment-dim);line-height:1.4;}
 .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
 .saved{margin-top:16px;}
+.ok{color:var(--good);}
+.bad{color:#f0a8a8;}
+.det{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-size:13px;}
+.det input{width:auto;}
+.banner{margin:8px 0;padding:8px 10px;border:1px solid var(--brass-dim);border-radius:8px;font-size:12px;line-height:1.4;}
 </style>
 </head>
 <body>
 <header class="top">
   <div>
     <h1>Army generator</h1>
-    <div class="sub">Pick a datasheet, set count and gear, save the unit that goes to the table</div>
+    <div class="sub">Named lists, points, Detachment Points. Demo tokens never save here.</div>
   </div>
   <a class="btn ghost" href="./index.html">Hub</a>
   <a class="btn ghost" href="./datasheet.html">Datasheets</a>
@@ -56,6 +61,24 @@ td input{width:72px;}
     <div id="sheetList"></div>
   </aside>
   <section class="card">
+    <h2>Army list</h2>
+    <label class="field">Active list</label>
+    <div class="foot" style="margin-top:0">
+      <select id="listPick"></select>
+      <button class="btn" type="button" id="btnNewList">New list</button>
+      <button class="btn danger" type="button" id="btnDelList">Delete list</button>
+    </div>
+    <label class="field">List name</label>
+    <input id="listName">
+    <label class="field">Battle size for this list</label>
+    <select id="listSize"></select>
+    <p class="hint" id="sizeHint"></p>
+    <label class="field">Detachments</label>
+    <div id="detBody"></div>
+    <label class="field">Enhancements taken</label>
+    <input id="fEnh" inputmode="numeric" value="0" style="max-width:80px">
+    <p class="hint">Count only until enhancement cards are ingested. Cap comes from battle size.</p>
+    <div class="banner" id="legalBox"></div>
     <h2>Build a unit</h2>
     <label class="field">Unit name on the table</label>
     <input id="fName">
@@ -67,6 +90,12 @@ td input{width:72px;}
       <thead><tr><th>Weapon</th><th>Kind</th><th>Models</th></tr></thead>
       <tbody id="gearBody"></tbody>
     </table>
+    <label class="field">Points for this unit</label>
+    <div class="foot" style="margin-top:0">
+      <input id="fPts" inputmode="numeric" placeholder="?" style="max-width:120px">
+      <span class="hint" id="ptsHint"></span>
+    </div>
+    <p class="hint">Costs are entered when a sheet is added. <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a> — no live scrape.</p>
     <div class="foot">
       <button class="btn gold" type="button" id="btnSave">Save to list</button>
       <span class="hint" id="saveMsg"></span>
@@ -83,10 +112,81 @@ const PT = window.PTSheets;
 let key = PT.DATASHEETS.boyz ? "boyz" : Object.keys(PT.DATASHEETS)[0];
 let army = PT.loadArmy();
 function renderSheets(){
-  document.getElementById("sheetList").innerHTML = Object.keys(PT.DATASHEETS).map(k => {
+  document.getElementById("sheetList").innerHTML = Object.keys(PT.DATASHEETS).filter(k => {
     const s = PT.DATASHEETS[k];
-    return `<button class="btn ${k===key?"on":""}" data-k="${k}" type="button">${s.name}</button>`;
+    return s && s.ptsSource !== "demo" && s.faction !== "Demo";
+  }).map(k => {
+    const s = PT.DATASHEETS[k];
+    const flag = s.ptsSource === "proposed" ? " · accept pts" : (s.ptsSource === "review" || s.pts == null ? " · ?" : "");
+    return `<button class="btn ${k===key?"on":""}" data-k="${k}" type="button">${s.name}${flag}</button>`;
   }).join("");
+}
+function paintLegal(){
+  const v = PT.validateList(army);
+  const el = document.getElementById("legalBox");
+  const bits = [];
+  bits.push(v.size.name + " · " + PT.formatPts(v.pts, v.unknown) + " / " + v.size.pts.toLocaleString());
+  bits.push("DP " + v.dp + " / " + v.dpBudget);
+  bits.push("Enh " + v.enh + " / " + v.enhCap);
+  if (v.size.source === "proxy") bits.push("Onslaught DP is a house rule for this table");
+  if (v.overPts) bits.push("Over points");
+  if (v.unknown) bits.push("Uncosted units");
+  if (v.overDp) bits.push("Over DP");
+  if (v.overEnh) bits.push("Over enhancements");
+  if (v.overCopies) bits.push("Copy limit: " + v.copies.filter(c => c.over).map(c => c.name + " " + c.n + "/" + c.cap).join(", "));
+  if (v.uniqueClash) bits.push("Two detachments share a unique tag");
+  el.className = "banner " + (v.legal ? "ok" : "bad");
+  el.textContent = (v.legal ? "Legal. " : "Needs review. ") + bits.join(" · ");
+  const sh = document.getElementById("sizeHint");
+  sh.textContent = "Budget " + v.size.pts.toLocaleString() + " pts · " + v.size.dp + " DP · " + v.size.enhancements + " enhancements · " + v.size.copies + " copies (" + (v.size.copies * 2) + " Battleline).";
+}
+function renderLists(){
+  const st = PT.loadArmyStore();
+  document.getElementById("listPick").innerHTML = st.lists.map(l => {
+    const tot = PT.listTotal(l);
+    return `<option value="${l.id}" ${l.id===st.activeId?"selected":""}>${l.name} — ${PT.formatPts(tot.pts, tot.unknown)}</option>`;
+  }).join("");
+  document.getElementById("listName").value = army.name || "";
+  document.getElementById("listSize").innerHTML = PT.BATTLE_SIZES.map(s =>
+    `<option value="${s.id}" ${s.id===(army.sizeId||"strike-force")?"selected":""}>${s.name} — ${s.pts.toLocaleString()} pts · ${s.dp} DP${s.source==="proxy"?" (house)":""}</option>`
+  ).join("");
+  document.getElementById("fEnh").value = army.enhancementCount || 0;
+  paintDets();
+  paintLegal();
+}
+function listFaction(){
+  const facs = {};
+  (army.units || []).forEach(u => {
+    const s = PT.DATASHEETS[u.sheetKey];
+    if (s && s.faction) facs[s.faction] = true;
+  });
+  const keys = Object.keys(facs);
+  if (keys.length === 1) return keys[0];
+  const cur = PT.DATASHEETS[key];
+  return cur && cur.faction ? cur.faction : keys[0] || "";
+}
+function paintDets(){
+  const fac = listFaction();
+  const dets = PT.detachmentsForFaction(fac);
+  const picked = army.detachments || [];
+  const el = document.getElementById("detBody");
+  if (!dets.length){
+    el.innerHTML = `<p class="hint">No detachments catalogued for ${fac || "this faction"} yet. Tyranids are seeded.</p>`;
+    return;
+  }
+  el.innerHTML = dets.map(d => `<label class="det">
+    <input type="checkbox" data-det="${d.id}" ${picked.indexOf(d.id)>=0?"checked":""}>
+    <span>${d.name} — ${d.dp} DP${d.disposition ? " · " + d.disposition : ""}</span>
+  </label>`).join("");
+}
+function persistListMeta(){
+  army.name = document.getElementById("listName").value.trim() || army.name;
+  army.sizeId = document.getElementById("listSize").value;
+  army.enhancementCount = Math.max(0, parseInt(document.getElementById("fEnh").value, 10) || 0);
+  army.detachments = [...document.querySelectorAll("#detBody [data-det]:checked")].map(el => el.dataset.det);
+  PT.saveArmy(army);
+  army = PT.loadArmy();
+  paintLegal();
 }
 document.getElementById("sheetList").onclick = e => {
   const b = e.target.closest("[data-k]");
@@ -101,9 +201,15 @@ function loadSheet(){
   document.getElementById("fName").value = s.name;
   document.getElementById("fCount").value = count;
   document.getElementById("compHint").textContent = (s.composition && s.composition.label) || "";
-  const gear = PT.defaultGear(s, count);
-  drawGear(s, gear);
+  const quote = PT.ptsForCount(s, count);
+  document.getElementById("fPts").value = quote.unknown ? "" : quote.pts;
+  const hint = document.getElementById("ptsHint");
+  if (quote.source === "proposed") hint.innerHTML = "Proposed — confirm on the datasheet or edit here. <a href=\""+PT.MFM_HUB+"\" target=\"_blank\" rel=\"noopener\">Open MFM</a>";
+  else if (quote.unknown) hint.innerHTML = "Needs MFM review. <a href=\""+PT.MFM_HUB+"\" target=\"_blank\" rel=\"noopener\">Find it on MFM</a>";
+  else hint.textContent = (quote.pts || 0) + " pts for " + count + " models";
+  drawGear(s, PT.defaultGear(s, count));
   renderSheets();
+  renderLists();
   renderSaved();
 }
 function drawGear(s, gear){
@@ -126,46 +232,90 @@ function readGear(){
 document.getElementById("fCount").onchange = () => {
   const s = PT.DATASHEETS[key];
   const n = readCount();
-  readGear().forEach(g => { if (g.count > n) g.count = n; });
   const gear = readGear();
   gear.forEach(g => { if (g.count > n) g.count = n; });
   drawGear(s, gear);
+  const quote = PT.ptsForCount(s, n);
+  document.getElementById("fPts").value = quote.unknown ? "" : quote.pts;
+};
+document.getElementById("listPick").onchange = () => {
+  PT.setActiveList(document.getElementById("listPick").value);
+  army = PT.loadArmy();
+  renderLists();
+  renderSaved();
+};
+document.getElementById("listName").onchange = persistListMeta;
+document.getElementById("listSize").onchange = persistListMeta;
+document.getElementById("fEnh").onchange = persistListMeta;
+document.getElementById("detBody").onchange = persistListMeta;
+document.getElementById("btnNewList").onclick = () => {
+  const name = prompt("List name", "Strike Force");
+  if (name == null) return;
+  PT.addList(name.trim() || "New list");
+  army = PT.loadArmy();
+  renderLists();
+  renderSaved();
+};
+document.getElementById("btnDelList").onclick = () => {
+  if (!confirm("Delete this list?")) return;
+  PT.deleteList(army.id);
+  army = PT.loadArmy();
+  renderLists();
+  renderSaved();
 };
 document.getElementById("btnSave").onclick = () => {
+  persistListMeta();
   const s = PT.DATASHEETS[key];
   const count = readCount();
   const gear = readGear().map(g => ({ name: g.name, count: Math.min(count, g.count) }));
+  const typed = document.getElementById("fPts").value.trim();
+  const quote = PT.ptsForCount(s, count);
+  let pts = typed === "" ? null : parseInt(typed, 10);
+  if (pts !== pts) pts = null;
+  let ptsSource = "review";
+  if (pts != null) ptsSource = (quote.source === "proposed" && pts === quote.pts) ? "proposed" : "mfm";
   army.units.push({
     id: "au_" + Date.now().toString(36),
     sheetKey: key,
     sheetId: s.id,
     name: document.getElementById("fName").value.trim() || s.name,
     count,
-    gear
+    gear,
+    pts,
+    ptsSource
   });
   PT.saveArmy(army);
-  document.getElementById("saveMsg").textContent = "Saved. Setup on the table can drop this unit.";
+  army = PT.loadArmy();
+  document.getElementById("saveMsg").textContent = "Saved to " + army.name + ".";
+  renderLists();
   renderSaved();
 };
 function renderSaved(){
   army = PT.loadArmy();
   const el = document.getElementById("savedList");
-  if (!army.units.length){ el.textContent = "None yet."; return; }
+  if (!army.units.length){ el.textContent = "None yet."; paintLegal(); return; }
   el.innerHTML = army.units.map(u => {
     const bits = (u.gear || []).filter(g => g.count).map(g => g.count + "× " + g.name).join(", ");
+    const review = u.ptsSource === "review" || u.pts == null;
+    const cost = review
+      ? `<a href="${PT.MFM_HUB}" target="_blank" rel="noopener">Needs MFM review</a>`
+      : ((u.pts||0) + " pts");
     return `<div style="margin:0 0 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <strong>${u.name}</strong> ×${u.count}
       <span>${bits || "no gear"}</span>
-      <a class="btn gold" href="./wh40k.html?drop=${encodeURIComponent(u.id)}">Drop on table</a>
+      <span>${cost}</span>
       <button class="btn danger" data-del="${u.id}" type="button">Remove</button>
     </div>`;
   }).join("");
+  paintLegal();
 }
 document.getElementById("savedList").onclick = e => {
   const b = e.target.closest("[data-del]");
   if (!b) return;
   army.units = army.units.filter(u => u.id !== b.dataset.del);
   PT.saveArmy(army);
+  army = PT.loadArmy();
+  renderLists();
   renderSaved();
 };
 loadSheet();
