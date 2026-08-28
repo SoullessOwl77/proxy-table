@@ -1,11 +1,11 @@
 /* Proxy Table service worker — app shell + card art caching, plus
    push notifications for challenges and nudges. */
 
-const SHELL = "pt-shell-v17";
+const SHELL = "pt-shell-v23";
 const ART = "pt-art-v1";
 const ART_LIMIT = 900;
 
-const SHELL_FILES = ["./", "./index.html", "./wh40k.html", "./datasheet.html", "./army.html", "./datasheets/load.js", "./datasheets/index.js", "./datasheets/mfm-seed.js", "./datasheets/demo.js", "./datasheets/orks.js", "./datasheets/tyranids.js", "./datasheets/tyranids-pts.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
+const SHELL_FILES = ["./", "./index.html", "./wh40k.html", "./datasheet.html", "./army.html", "./datasheets/load.js", "./datasheets/index.js", "./datasheets/mfm-seed.js", "./datasheets/demo.js", "./datasheets/orks.js", "./datasheets/tyranids.js", "./datasheets/tyranids-pts.js", "./datasheets/space-marines.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));

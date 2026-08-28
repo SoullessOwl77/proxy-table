@@ -147,12 +147,59 @@
     });
     localStorage.setItem(STORE, JSON.stringify(pack));
   }
+  function parseStatNum(v, fallback) {
+    if (typeof v === "number" && v === v) return v;
+    const s = String(v == null ? "" : v).replace(/["″'+\s]/g, "").trim();
+    if (!s || /^n\/a$/i.test(s) || s === "–" || s === "—") return fallback;
+    const n = parseInt(s, 10);
+    return n === n ? n : fallback;
+  }
+  function parseDiceOrNum(v, fallback) {
+    if (typeof v === "number" && v === v) return v;
+    const s = String(v == null ? "" : v).replace(/\s/g, "").trim();
+    if (!s) return fallback;
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    const m = s.match(/^(\d*)D(\d+)([+-]\d+)?$/i);
+    if (m) return ((m[1] || "1") + "D" + m[2] + (m[3] || "")).toUpperCase();
+    return fallback;
+  }
+  function parseRangeIn(w) {
+    if (typeof w.rng === "number" && w.rng === w.rng) return w.rng;
+    const raw = (w.rng != null && w.rng !== "") ? w.rng : w.range;
+    const s = String(raw == null ? "" : raw);
+    if (/melee/i.test(s)) return 0;
+    const m = s.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  function parseSkillIn(w) {
+    const raw = (w.skill != null && w.skill !== "") ? w.skill : (w.kind === "melee" ? w.WS : w.BS);
+    if (raw == null || raw === "") return 4;
+    const s = String(raw).trim();
+    if (/^n\/a$/i.test(s) || s === "–" || s === "—" || s === "-") return null;
+    const n = parseInt(s, 10);
+    return n === n ? n : 4;
+  }
+  function normalizeWeapon(w) {
+    if (!w) return null;
+    const kind = w.kind || (/melee/i.test(String(w.range || "")) ? "melee" : "ranged");
+    return {
+      name: w.name || "Weapon",
+      kind,
+      A: parseDiceOrNum(w.A, 1),
+      skill: parseSkillIn(Object.assign({}, w, { kind })),
+      S: parseStatNum(w.S, 4),
+      AP: parseStatNum(w.AP, 0),
+      D: parseDiceOrNum(w.D, 1),
+      rng: parseRangeIn(w),
+      tags: (w.tags || []).slice()
+    };
+  }
   function firstWeapon(sheet, kind) {
     const w = ((sheet && sheet.weapons) || []).find(x => x.kind === kind);
     if (!w) return kind === "ranged"
-      ? { name: "Gun", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 24, tags: [] }
-      : { name: "Close combat", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 0, tags: [] };
-    return { name: w.name, A: w.A, skill: w.skill, S: w.S, AP: w.AP, D: w.D, rng: w.rng || 0, tags: (w.tags || []).slice() };
+      ? { name: "Gun", kind: "ranged", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 24, tags: [] }
+      : { name: "Close combat", kind: "melee", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 0, tags: [] };
+    return normalizeWeapon(w);
   }
   function abilitiesOf(u) { return (u && u.abilities) || []; }
   function fnpOf(u) {
@@ -165,7 +212,7 @@
     return {
       v: 2,
       activeId: "list_default",
-      lists: [{ id: "list_default", name: "My list", units: [], sizeId: "strike-force", detachments: [], enhancementCount: 0 }]
+      lists: [{ id: "list_default", name: "My list", units: [], faction: "", sizeId: "strike-force", detachments: [], enhancementCount: 0 }]
     };
   }
   function migrateArmy(raw) {
@@ -173,6 +220,7 @@
     if (raw.v >= 2 && Array.isArray(raw.lists) && raw.lists.length) {
       raw.lists.forEach(l => {
         if (!l.sizeId) l.sizeId = "strike-force";
+        if (!l.faction) l.faction = "";
         if (!Array.isArray(l.detachments)) l.detachments = [];
         if (l.enhancementCount == null) l.enhancementCount = 0;
       });
@@ -206,7 +254,7 @@
   }
   function emptyArmy() {
     const l = activeList();
-    return { v: 1, id: l.id, name: l.name, units: l.units, sizeId: l.sizeId, detachments: l.detachments, enhancementCount: l.enhancementCount };
+    return { v: 1, id: l.id, name: l.name, units: l.units, faction: l.faction || "", sizeId: l.sizeId, detachments: l.detachments, enhancementCount: l.enhancementCount };
   }
   function loadArmy() { const a = emptyArmy(); repriceList(a); return a; }
   function saveArmy(army) {
@@ -215,13 +263,14 @@
     if (!l) {
       l = {
         id: army.id || nid(), name: army.name || "My list", units: army.units || [],
-        sizeId: army.sizeId || "strike-force", detachments: army.detachments || [], enhancementCount: army.enhancementCount || 0
+        faction: army.faction || "", sizeId: army.sizeId || "strike-force", detachments: army.detachments || [], enhancementCount: army.enhancementCount || 0
       };
       st.lists.push(l);
       st.activeId = l.id;
     } else {
       l.name = army.name || l.name;
       l.units = army.units || [];
+      if (army.faction != null) l.faction = army.faction;
       if (army.sizeId) l.sizeId = army.sizeId;
       if (army.detachments) l.detachments = army.detachments;
       if (army.enhancementCount != null) l.enhancementCount = army.enhancementCount;
@@ -237,7 +286,7 @@
   }
   function addList(name) {
     const st = loadArmyStore();
-    const l = { id: nid(), name: name || ("List " + (st.lists.length + 1)), units: [], sizeId: "strike-force", detachments: [], enhancementCount: 0 };
+    const l = { id: nid(), name: name || ("List " + (st.lists.length + 1)), units: [], faction: "", sizeId: "strike-force", detachments: [], enhancementCount: 0 };
     st.lists.push(l);
     st.activeId = l.id;
     saveArmyStore(st);
@@ -250,6 +299,100 @@
     if (!st.lists.some(l => l.id === st.activeId)) st.activeId = st.lists[0].id;
     saveArmyStore(st);
     return loadArmy();
+  }
+  const LIST_KIND = "proxy-table-40k-list";
+  const LISTS_KIND = "proxy-table-40k-lists";
+  function snapshotList(list) {
+    list = list || activeList();
+    if (!list) return null;
+    return {
+      name: list.name || "List",
+      faction: list.faction || "",
+      sizeId: list.sizeId || "strike-force",
+      detachments: (list.detachments || []).slice(),
+      enhancementCount: list.enhancementCount || 0,
+      units: (list.units || []).map(u => ({
+        sheetKey: u.sheetKey,
+        sheetId: u.sheetId,
+        name: u.name,
+        count: u.count,
+        gear: (u.gear || []).map(g => ({ name: g.name, count: g.count })),
+        pts: u.pts,
+        ptsSource: u.ptsSource || "",
+        copyIndex: u.copyIndex || 0,
+        ptsTier: u.ptsTier || ""
+      }))
+    };
+  }
+  function exportList(id) {
+    const list = (id && listById(id)) || activeList();
+    return {
+      v: 1,
+      kind: LIST_KIND,
+      app: "proxy-table",
+      game: "wh40k",
+      exportedAt: new Date().toISOString(),
+      list: snapshotList(list)
+    };
+  }
+  function exportAllLists() {
+    const st = loadArmyStore();
+    return {
+      v: 1,
+      kind: LISTS_KIND,
+      app: "proxy-table",
+      game: "wh40k",
+      exportedAt: new Date().toISOString(),
+      lists: (st.lists || []).map(snapshotList)
+    };
+  }
+  function incomingLists(raw) {
+    if (!raw || typeof raw !== "object") return [];
+    if (raw.kind === LISTS_KIND && Array.isArray(raw.lists)) return raw.lists;
+    if (raw.kind === LIST_KIND && raw.list) return [raw.list];
+    if (raw.v >= 2 && Array.isArray(raw.lists)) return raw.lists;
+    if (raw.list && Array.isArray(raw.list.units)) return [raw.list];
+    if (Array.isArray(raw.units) || raw.sizeId) return [raw];
+    return [];
+  }
+  function importLists(raw) {
+    const incoming = incomingLists(raw);
+    if (!incoming.length) return { ok: false, added: 0, message: "Not a Proxy Table list file." };
+    const st = loadArmyStore();
+    const added = [];
+    incoming.forEach((src, n) => {
+      const l = {
+        id: nid(),
+        name: src.name || ("Imported " + (st.lists.length + 1)),
+        faction: src.faction || "",
+        sizeId: src.sizeId || "strike-force",
+        detachments: Array.isArray(src.detachments) ? src.detachments.slice() : [],
+        enhancementCount: src.enhancementCount || 0,
+        units: (src.units || []).map((u, i) => ({
+          id: "au_" + Date.now().toString(36) + n.toString(36) + i.toString(36),
+          sheetKey: u.sheetKey,
+          sheetId: u.sheetId,
+          name: u.name,
+          count: Math.max(1, u.count || 1),
+          gear: (u.gear || []).map(g => ({ name: g.name, count: g.count || 0 })),
+          pts: u.pts,
+          ptsSource: u.ptsSource || "",
+          copyIndex: u.copyIndex || 0,
+          ptsTier: u.ptsTier || ""
+        }))
+      };
+      repriceList(l);
+      st.lists.push(l);
+      added.push(l);
+    });
+    if (added.length) st.activeId = added[0].id;
+    saveArmyStore(st);
+    return {
+      ok: true,
+      added: added.length,
+      lists: added,
+      message: added.length === 1 ? ("Imported " + added[0].name) : ("Imported " + added.length + " lists")
+    };
   }
   function sizeById(id) { return BATTLE_SIZES.find(s => s.id === id) || null; }
   function parseTier(tier) {
@@ -396,6 +539,16 @@
     };
   }
 
+  function wepHasTag(w, tag) {
+    const want = String(tag || "").toUpperCase().replace(/\s+/g, "-");
+    return ((w && w.tags) || []).some(t => String(t).toUpperCase().replace(/\s+/g, "-") === want);
+  }
+  function isCloseQuarters(w) {
+    return wepHasTag(w, "CLOSE-QUARTERS") || wepHasTag(w, "PISTOL");
+  }
+  function isSidearm(w) {
+    return !!(w && (isCloseQuarters(w) || /pistol|slugga/i.test(w.name || "")));
+  }
   function defaultGear(sheet, count) {
     count = Math.max(1, count || (sheet.composition && sheet.composition.defaultCount) || 1);
     const gear = (sheet.weapons || []).map(w => ({ name: w.name, count: 0 }));
@@ -410,16 +563,19 @@
       set("Kustom shoota", count >= 1 ? 1 : 0);
       set("Big choppa", count >= 1 ? 1 : 0);
     } else {
-      const r = (sheet.weapons || []).find(w => w.kind === "ranged");
-      const m = (sheet.weapons || []).find(w => w.kind === "melee");
-      if (r) set(r.name, count);
-      if (m) set(m.name, count);
+      const ranged = (sheet.weapons || []).filter(w => w.kind === "ranged");
+      const melee = (sheet.weapons || []).filter(w => w.kind === "melee");
+      const main = ranged.find(w => !isSidearm(w)) || ranged[0];
+      if (main) set(main.name, count);
+      ranged.filter(isSidearm).forEach(w => set(w.name, count));
+      if (melee[0]) set(melee[0].name, count);
     }
     return gear;
   }
   function weaponsForIndex(sheet, gear, index) {
-    const names = (gear || []).filter(g => index < (g.count || 0)).map(g => g.name);
-    return (sheet.weapons || []).filter(w => names.indexOf(w.name) >= 0);
+    const used = (gear && gear.length) ? gear : defaultGear(sheet, (sheet.composition && sheet.composition.defaultCount) || 1);
+    const names = used.filter(g => index < (g.count || 0)).map(g => g.name);
+    return (sheet.weapons || []).filter(w => names.indexOf(w.name) >= 0).map(normalizeWeapon);
   }
   function profileForIndex(sheet, index, total) {
     const list = (sheet && sheet.profiles) || [];
@@ -427,13 +583,6 @@
     const leader = list[0];
     if (index === 0 && leader) return leader;
     return list[1] || leader || { name: sheet.name, W: sheet.W };
-  }
-  function wepHasTag(w, tag) {
-    const want = String(tag || "").toUpperCase().replace(/\s+/g, "-");
-    return ((w && w.tags) || []).some(t => String(t).toUpperCase().replace(/\s+/g, "-") === want);
-  }
-  function isCloseQuarters(w) {
-    return wepHasTag(w, "CLOSE-QUARTERS") || wepHasTag(w, "PISTOL");
   }
 
   const live = { lib: currentLib(), sheets: currentSheets() };
@@ -496,6 +645,11 @@
     setActiveList,
     addList,
     deleteList,
+    LIST_KIND,
+    LISTS_KIND,
+    exportList,
+    exportAllLists,
+    importLists,
     ptsForCount,
     parseTier,
     bandFor,
@@ -510,8 +664,10 @@
     defaultGear,
     weaponsForIndex,
     profileForIndex,
+    normalizeWeapon,
     wepHasTag,
     isCloseQuarters,
+    isSidearm,
     addAbility(name, extra) {
       const id = slug(name);
       if (!live.lib[id]) {

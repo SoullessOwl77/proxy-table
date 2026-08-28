@@ -150,6 +150,7 @@ canvas.dragging{cursor:grabbing;}
 .guide .dont{color:#d4a0a0;}
 .guide .do li,.guide .dont li{margin-bottom:3px;}
 .guide .nextwhen{font-size:12px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:4px;}
+.guide .about{font-size:11px;line-height:1.4;color:var(--parchment-dim);border-top:1px solid #0006;padding-top:8px;margin-top:8px;}
 .guide .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--parchment-dim);margin:0 0 4px;}
 .devpanel{position:fixed;top:40px;left:calc(var(--rail-l) + var(--edge-l) + 8px);z-index:6;width:min(280px,34vw);
   background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;
@@ -237,6 +238,7 @@ canvas.dragging{cursor:grabbing;}
   <div class="label">Don’t</div>
   <ul class="dont" id="guideDont"></ul>
   <div class="nextwhen" id="guideNext"></div>
+  <div class="about" id="guideAbout"></div>
 </aside>
 <aside class="devpanel" id="devpanel">
   <div class="gbar">
@@ -318,6 +320,7 @@ canvas.dragging{cursor:grabbing;}
     <span class="hint" id="terrainLiveHint" style="display:none">Terrain is locked for battle (real 40K doesn’t move scenery mid-game). Reset practice to re-place.</span>
   </div>
   <div class="row" id="rowUnits" style="display:none">
+    <select id="placeSeat" title="Which edge to drop on" style="max-width:140px;background:#1b2825;color:#e9e3d4;border:1px solid #0006;border-radius:6px;padding:6px;display:none"></select>
     <button class="btn gold" id="btnDemo">Demo forces</button>
     <button class="btn" data-drop="inf">Infantry</button>
     <button class="btn" data-drop="cmd">Commander</button>
@@ -327,7 +330,10 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn gold" id="btnArmyDrop">Drop saved</button>
     <button class="btn" id="btnReserve">Reserves</button>
     <button class="btn" id="btnDeepStrike">Deep Strike</button>
-    <span class="hint" id="reserveSetupHint">Reserves = off the table until Ingress in Movement.</span>
+    <button class="btn gold" id="btnBeginDrops">Begin drops</button>
+    <button class="btn gold" id="btnDeployUnit">Deploy unit</button>
+    <button class="btn" id="btnScoutMove">Scout move</button>
+    <span class="hint" id="reserveSetupHint">Formation first: mark Reserves, then Begin drops. Defender places first.</span>
   </div>
   <div class="row" id="rowReserves" style="display:none">
     <span class="act-kicker">Reserves</span>
@@ -366,11 +372,21 @@ canvas.dragging{cursor:grabbing;}
       <option value="strike-force">Strike Force — 2,000 pts · 3 DP</option>
       <option value="onslaught">Onslaught — 3,000 pts · 4 DP (house)</option>
     </select>
-    <label for="lobbyArmy">Your army</label>
+    <label for="lobbyArmy" id="lobbyArmyLabel">Your army</label>
     <select id="lobbyArmy"></select>
+    <div id="lobbyArmy2Wrap" style="display:none">
+      <label for="lobbyArmy2" id="lobbyArmy2Label">Seat 2 army</label>
+      <select id="lobbyArmy2"></select>
+    </div>
     <p class="hint" id="lobbyArmyHint"><a href="./army.html">Army generator</a> · costs from the <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a></p>
     <label for="lobbyFirst">Who goes first</label>
     <select id="lobbyFirst"></select>
+    <label for="lobbyMission">Mission</label>
+    <select id="lobbyMission">
+      <option value="takehold">Take and Hold — 5 objectives, score at the end of your turn</option>
+      <option value="sweep">Sweeping Engagement — 2 in each DZ + center</option>
+    </select>
+    <p class="hint">Force disposition is Dawn of War (12″ long-edge DZs). Defender deploys first, then alternate.</p>
     <div class="side">
       <div class="seatcard" id="lobbyMine"></div>
       <div class="seatcard" id="lobbyTheirs"></div>
@@ -387,21 +403,47 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.14-demo-list";
+const BUILD = "v2.16.20-deploy-mission";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
+const MISSIONS = {
+  takehold: {
+    id: "takehold",
+    name: "Take and Hold",
+    blurb: "End of your turn: 5 VP if you hold 1+, 5 if you hold 2+, 5 if you hold more than the opponent.",
+    objectives: [
+      { id:"A", x:30, y:22 },
+      { id:"B", x:16, y:16 },
+      { id:"C", x:44, y:16 },
+      { id:"D", x:16, y:28 },
+      { id:"E", x:44, y:28 }
+    ]
+  },
+  sweep: {
+    id: "sweep",
+    name: "Sweeping Engagement",
+    blurb: "Two markers in each DZ and one in the centre. Same scoring as Take and Hold.",
+    objectives: [
+      { id:"A", x:30, y:22 },
+      { id:"B", x:22, y:6 },
+      { id:"C", x:38, y:6 },
+      { id:"D", x:22, y:38 },
+      { id:"E", x:38, y:38 }
+    ]
+  }
+};
 const PHASES = ["command","movement","shooting","charge","fight"];
 const TIPS = {
   setup: {
     title:"Setup",
     short:"Place terrain and units. Start battle when the board is ready. You do not come back here with Next.",
-    more:"Generate or drop terrain, Demo forces or drop units, and drag anything into place.\n\nStart battle locks terrain and opens Command. Next never returns to Setup — use the Setup button (or Practice Reset) if you need to change the board."
+    more:"Lobby first: battle size, mission, who goes first, and an army for each edge. Force disposition is Dawn of War (12″ long-edge DZs). The player who does not go first is the Defender and places first.\n\nArmies come in as a battle formation (off the table). Mark Strategic Reserves before Begin drops — you cannot skip a later drop into Reserves. Alternate units. Titanic counts as two. Infiltrators set up after everyone else. Scout moves after first turn is known.\n\nObjectives score at the end of your turn: 5 VP for holding 1+, 5 for 2+, 5 if you hold more than the opponent.\n\nStart battle locks terrain and opens Command."
   },
   command: {
     title:"Command phase",
-    short:"Start of this player’s turn. Optional: Battle-shock on damaged models. CP +1 at turn start (placeholder for Stratagems).",
-    more:"At the start of your Command this table refreshes that seat’s unit flags and adds 1 Command Point (building block for Stratagems).\n\nBattle-shock: select a damaged model → Optional → Announce (2D6 vs Leadership). Fail flags the token BS.\n\nStratagems are not spendable yet — tip only."
+    short:"Start of this player’s turn. Battle-shock on damaged units. CP +1. Stratagems spend CP.",
+    more:"At the start of your Command this table refreshes that seat’s unit flags and adds 1 Command Point (building block for Stratagems).\n\nBattle-shock is a real Command step: each damaged unit on this seat must test. Select it → Optional → Battle-shock → Announce. 2D6 vs Leadership (Synapse units roll 3D6). Fail = token marked BS and OC 0 until this seat’s next Command.\n\nStratagems: Command Re-roll, Grenade, and Armor of Contempt each cost 1 CP, once per your turn."
   },
   movement: {
     title:"Movement phase",
@@ -416,7 +458,7 @@ const TIPS = {
   charge: {
     title:"Charge phase",
     short:"Try to close to 2″ of an enemy. Success is a 2D6 vs the remaining distance.",
-    more:"Eligible units that did not Advance or Fall Back can charge. Select the model, tap Roll charge for 2D6, then move so the base ends within 2″ ER of an enemy and not beyond the gold ring (base edge + roll). Fighting is the Fight phase."
+    more:"Eligible units that did not Advance or Fall Back can charge. Select the model, tap Roll charge for 2D6. If the roll cannot reach 2″ ER of any enemy, the charge fails and the model stays put. If it can, gold ring = that many inches from the start; end inside the ring and in ER. Drop short or outside the ring and the charge fails — model snaps back. Fighting is the Fight phase."
   },
   fight: {
     title:"Fight phase",
@@ -460,8 +502,8 @@ const TIPS = {
   },
   guide: {
     title:"Guide",
-    short:"Phase walkthrough: what to do and what to avoid this step.",
-    more:"On by default in Practice, off in PVP. Toggle any time. Content is phase-based now; later it can highlight steps for the models on the table."
+    short:"Phase walkthrough plus the same teaching notes as Army help.",
+    more:"On by default in Practice, off in PVP. Toggle any time.\n\nThis table is a teaching proxy, not tournament-legal. One faction per list. Normal names = official pack or card. Purple = fan (Wahapedia) — check the app if a fight depends on it. Red = points only, no stat line; those tokens will not shoot. Onslaught 3000 pts / 4 DP is a house rule; Core only prints Incursion and Strike Force.\n\nLists live on this device. Export / import is on the Army page."
   },
   rolls: {
     title:"Dice math",
@@ -489,18 +531,28 @@ const TIPS = {
 const ACTIONS = {
   battleShock: {
     id:"battleShock", phase:"command", label:"Battle-shock", announce:true, roll:"2d6",
-    short:"Damaged models test 2D6 vs Leadership. Fail = Battle-shocked this turn.",
-    more:"Select a damaged model (wounds below starting W), then Announce.\n\nRoll 2D6. If the result is less than Leadership, the test fails — token marked BS. Clears at the start of this seat’s next Command."
+    short:"Damaged units test 2D6 vs Leadership. Fail = BS this turn, OC 0.",
+    more:"Command step, not optional flavor. Damaged = any model in the unit below starting Wounds.\n\nSelect the unit, Announce. 2D6 vs Leadership (fail if the total is less than Ld). Synapse units roll 3D6. Fail marks every model in the unit BS and sets OC to 0 until this seat’s next Command. Pass still counts as tested.\n\nNext will remind you if someone still needs a test."
   },
   cp: {
-    id:"cp", phase:"command", label:"Command points", announce:false, placeholder:true,
-    short:"CP pool is tracked. +1 at the start of your Command. Spending comes later.",
-    more:"Building block: each seat has a CP total. Stratagems will spend from this pool — nothing spends CP in this slice."
+    id:"cp", phases:["command","movement","shooting","charge","fight"], label:"Command points", announce:false, placeholder:false,
+    short:"Each seat has a CP pool. +1 at the start of your Command. Stratagems spend from it.",
+    more:"You start the battle with 1 CP on the first seat. Each Command adds 1 more. Command Re-roll, Grenade, and Armor of Contempt each cost 1 CP and can be used once per your turn.\n\nBattle-shocked units cannot be the target of these stratagems. Rapid Ingress / Overwatch still wait."
   },
-  stratagem: {
-    id:"stratagem", phase:"command", label:"Stratagems", announce:false, placeholder:true,
-    short:"Not playable yet. The hook is Command points + this button.",
-    more:"Later: pick a Stratagem, pay CP, apply a flag or modifier. Core loop first: Advance / Fall Back / Charge / Battle-shock."
+  commandReroll: {
+    id:"commandReroll", phases:["command","movement","shooting","charge","fight"], label:"Command Re-roll", announce:true, cp:1,
+    short:"1 CP — re-roll one die from the last Advance, Charge, Battle-shock, or Attack.",
+    more:"Announce after a roll. Spends 1 CP. Re-rolls one die from the last result in Rolls.\n\nAdvance / Charge / Battle-shock: re-rolls the lowest die and the result is applied again (a failed charge can succeed if the new total reaches ER).\n\nAttack: re-rolls the first missed hit. If that now hits, the table resolves that one attack’s wound and save. Does not undo damage already dealt.\n\nOnce per your turn."
+  },
+  grenade: {
+    id:"grenade", phase:"shooting", label:"Grenade", announce:true, cp:1,
+    short:"1 CP — GRENADES / EXPLOSIVES unit, enemy within 8″. 6 dice, 4+ = 1 mortal wound.",
+    more:"Shooting phase. Select your unit (needs GRENADES or EXPLOSIVES), pick an enemy in Combat or the nearest one within 8″, then Announce.\n\nRoll 6 D6. Each 4+ inflicts 1 mortal wound on that unit (allocation + FnP still apply). Teaching Core slice — not a Codex grenade profile.\n\nOnce per your turn. Shocked units cannot throw."
+  },
+  armorOfContempt: {
+    id:"armorOfContempt", phases:["shooting","fight"], label:"Armor of Contempt", announce:true, cp:1,
+    short:"1 CP — your selected unit: worsen AP by 1 against it this phase.",
+    more:"Select one of your units that is being shot or fought, then Announce. Until this phase ends, attacks against that unit treat AP as 1 worse (AP−2 becomes AP−1; AP0 stays 0).\n\nOnce per your turn. Shocked units cannot receive it."
   },
   advance: {
     id:"advance", phase:"movement", label:"Advance", announce:true, roll:"d6",
@@ -561,12 +613,16 @@ const GUIDE = {
   setup: {
     title: "Setup",
     do: [
-      "Generate or place terrain (Terrain tool).",
-      "Drop Demo forces or individual units (Units tool) and drag them into deployment zones.",
+      "Lobby: size, mission, who goes first, army on each edge. Dawn of War 12″ DZs. Defender deploys first.",
+      "Formation: armies start in Reserves. Mark who stays off the table, then Begin drops. Alternate. Titanic = two drops for the opponent.",
+      "Infiltrators after normal drops (>8″ from enemy DZ and units). Scouts after first turn is known.",
+      "Generate or place terrain. Objectives score at the end of your turn.",
+      "Same colors as Army help: normal = official pack/card, purple = fan, red = points only.",
       "Tap Start battle when the board is ready."
     ],
     dont: [
-      "Don’t start the battle until both forces and terrain are where you want them.",
+      "Don’t mix factions on one list — Tyranids stay with Tyranids, Marines with Marines.",
+      "Don’t drop a red (points-only) unit and expect guns to work.",
       "Don’t expect Next to bring you back here — use Setup or Reset."
     ],
     next: "Start battle → Command. Terrain locks. Unit dragging waits for Movement / Charge / Fight."
@@ -574,11 +630,14 @@ const GUIDE = {
   command: {
     title: "Command phase",
     do: [
-      "Note whose turn it is (P0 / P1) and the battle round (R#).",
-      "Optional: Battle-shock on damaged models. CP +1 already applied at turn start.",
-      "Plan the turn: who will move, shoot, or charge."
+      "Note whose turn it is and the battle round. CP +1 already applied.",
+      "Battle-shock: each damaged unit on this seat tests 2D6 vs Ld (Announce).",
+      "Failed tests mark BS and drop that unit’s OC to 0 until its next Command.",
+      "Spend CP here or later this turn: Command Re-roll, Grenade (Shooting), Armor of Contempt (Shooting/Fight)."
     ],
     dont: [
+      "Don’t skip Battle-shock on a wounded unit — Next will remind you.",
+      "Don’t spend CP you don’t have — each of those three is 1 CP, once per your turn.",
       "Don’t move models or shoot — Command is not a movement phase.",
       "Don’t move terrain — it locked when the battle started."
     ],
@@ -616,13 +675,13 @@ const GUIDE = {
     title: "Charge phase",
     do: [
       "Select an active-player model, then tap Roll charge (2D6).",
-      "Gold ring = that roll in inches from the base edge; move so you end in the red 2″ ER of an enemy.",
-      "Only charge with models that still need to reach combat (usually those that did not Advance)."
+      "If the roll cannot reach 2″ ER of any enemy, it fails and the model stays.",
+      "If it can: gold ring from the start point — end inside it and in the red 2″ ER."
     ],
     dont: [
-      "Don’t move farther than the gold ring from this roll.",
-      "Don’t resolve fights yet — that is the Fight phase.",
-      "Don’t leave charged models stranded mid-table with no plan."
+      "Don’t move farther than the gold ring — that’s a failed charge, snap-back.",
+      "Don’t stop short of ER — that’s also a failed charge.",
+      "Don’t resolve fights yet — that is the Fight phase."
     ],
     next: "When charges are done, Next → Fight."
   },
@@ -718,6 +777,7 @@ if (matchId && !who){
   location.href = "./index.html?match=" + encodeURIComponent(matchId) + "&game=wh40k";
 }
 let mySeat = 0;
+let placeSeat = 0;
 let tool = "terrain";
 let selected = null;
 let attackerId = null, targetId = null, preferAllocId = null;
@@ -752,7 +812,9 @@ function emptyBoard(){
     chargeRolls:{},
     ready:{ "0":false, "1":false },
     resetAsk:{ "0":false, "1":false },
-    lobby: emptyLobby()
+    lobby: emptyLobby(),
+    deploy: emptyDeploy(),
+    mission: emptyMission("takehold")
   };
 }
 function emptyLobby(){
@@ -762,8 +824,28 @@ function emptyLobby(){
     size: { "0":"", "1":"" },
     first: { "0":"", "1":"" },
     army: { "0":null, "1":null },
+    mission: "takehold",
     chat: [],
     ready: { "0":false, "1":false }
+  };
+}
+function emptyDeploy(){
+  return {
+    on: false,
+    step: "formation",
+    attacker: 0,
+    defender: 1,
+    dropSeat: 1,
+    extra: 0
+  };
+}
+function emptyMission(id){
+  const src = MISSIONS[id] || MISSIONS.takehold;
+  return {
+    id: src.id,
+    name: src.name,
+    vp: { "0":0, "1":0 },
+    objectives: src.objectives.map(o => Object.assign({}, o))
   };
 }
 let S = emptyBoard();
@@ -781,6 +863,8 @@ if (!S.players) S.players = { "0": practice ? who : "", "1": "" };
 if (!S.ready) S.ready = { "0":false, "1":false };
 if (!S.resetAsk) S.resetAsk = { "0":false, "1":false };
 if (!S.lobby) S.lobby = emptyLobby();
+if (!S.deploy) S.deploy = emptyDeploy();
+if (!S.mission) S.mission = emptyMission((S.lobby && S.lobby.mission) || "takehold");
 if (S.turn && S.turn.deploymentDone){ S.lobby.committed = true; S.lobby.open = false; }
 function bumpIds(){
   nid = 1; uidn = 1;
@@ -834,22 +918,55 @@ function myLobbyArmyOver(){
   if (rec.unknown) return { over:false, unknown:true, pts: rec.pts||0, cap: sz.pts };
   return { over: (rec.pts||0) > sz.pts, unknown:false, pts: rec.pts||0, cap: sz.pts };
 }
+function lobbyArmyOptionsHtml(){
+  const st = window.PTSheets.loadArmyStore();
+  return `<option value="">Choose a list…</option>` +
+    `<option value="__demo__">Demo Forces — teaching tokens</option>` +
+    (st.lists||[]).map(l => {
+      const tot = PTSheets.listTotal(l);
+      return `<option value="${esc(l.id)}">${esc(l.name)} — ${esc(PTSheets.formatPts(tot.pts, tot.unknown))}</option>`;
+    }).join("");
+}
+function setLobbyArmyFromId(seat, armyId){
+  if (armyId === "__demo__"){
+    S.lobby.army[String(seat)] = { id: "__demo__", name: "Demo Forces", pts: 0, unknown: false };
+    return;
+  }
+  if (armyId && PTSheets.listById){
+    const list = PTSheets.listById(armyId);
+    if (list){
+      const tot = PTSheets.listTotal(list);
+      S.lobby.army[String(seat)] = { id: list.id, name: list.name, pts: tot.pts, unknown: tot.unknown };
+      return;
+    }
+  }
+  S.lobby.army[String(seat)] = null;
+}
 function fillLobbySelects(){
   const first = document.getElementById("lobbyFirst");
   const cur = (S.lobby.first && S.lobby.first[String(mySeat)]) || "";
   first.innerHTML = `<option value="">Choose…</option><option value="0">${esc(seatName(0))}</option><option value="1">${esc(seatName(1))}</option>`;
   first.value = cur;
+  const opts = lobbyArmyOptionsHtml();
   const armySel = document.getElementById("lobbyArmy");
-  const st = window.PTSheets.loadArmyStore();
   const rec = S.lobby.army && S.lobby.army[String(mySeat)];
-  armySel.innerHTML = `<option value="">Choose a list…</option>` +
-    `<option value="__demo__">Demo Forces — teaching tokens</option>` +
-    (st.lists||[]).map(l => {
-    const tot = PTSheets.listTotal(l);
-    return `<option value="${esc(l.id)}">${esc(l.name)} — ${esc(PTSheets.formatPts(tot.pts, tot.unknown))}</option>`;
-  }).join("");
+  armySel.innerHTML = opts;
   if (rec && rec.id) armySel.value = rec.id;
+  const wrap2 = document.getElementById("lobbyArmy2Wrap");
+  const army2 = document.getElementById("lobbyArmy2");
+  if (wrap2 && army2){
+    wrap2.style.display = practice ? "" : "none";
+    army2.innerHTML = opts;
+    const rec2 = S.lobby.army && S.lobby.army["1"];
+    if (rec2 && rec2.id) army2.value = rec2.id;
+  }
+  const lab = document.getElementById("lobbyArmyLabel");
+  const lab2 = document.getElementById("lobbyArmy2Label");
+  if (lab) lab.textContent = practice ? (seatName(0) + " army") : "Your army";
+  if (lab2) lab2.textContent = seatName(1) + " army";
   document.getElementById("lobbySize").value = (S.lobby.size && S.lobby.size[String(mySeat)]) || "";
+  const mis = document.getElementById("lobbyMission");
+  if (mis) mis.value = S.lobby.mission || "takehold";
 }
 function seatLobbyCard(seat){
   const L = S.lobby;
@@ -890,6 +1007,7 @@ function renderLobby(){
   }
   const go = document.getElementById("btnLobbyGo");
   const armyPicked = !!(S.lobby.army && S.lobby.army[String(mySeat)] && S.lobby.army[String(mySeat)].id);
+  const army2Picked = !!(S.lobby.army && S.lobby.army["1"] && S.lobby.army["1"].id);
   const iReady = !!(S.lobby.ready && S.lobby.ready[String(mySeat)]);
   if (iReady && !S.lobby.committed){
     go.textContent = "Waiting…";
@@ -897,7 +1015,7 @@ function renderLobby(){
   } else {
     go.textContent = "Enter table";
     if (practice){
-      go.disabled = !S.lobby.size[String(mySeat)] || !S.lobby.first[String(mySeat)] || !armyPicked;
+      go.disabled = !S.lobby.size[String(mySeat)] || !S.lobby.first[String(mySeat)] || !armyPicked || !army2Picked;
       go.title = over.over ? ("Over points — Practice can continue.") : "";
     } else {
       go.disabled = !agree || !armyPicked || over.over || over.unknown;
@@ -905,8 +1023,8 @@ function renderLobby(){
     }
   }
   document.getElementById("lobbySub").textContent = practice
-    ? "Pick size, your army, and who starts. Over-points warns but Practice can continue."
-    : "Agree battle size and who goes first. Armies do not have to match. Over-points blocks start.";
+    ? "Pick size, mission, an army for each edge, and who starts. Defender deploys first. Over-points warns but Practice can continue."
+    : "Agree battle size, mission, and who goes first. Defender deploys first. Armies do not have to match. Over-points blocks start.";
 }
 function writeMyLobby(){
   if (!S.lobby) S.lobby = emptyLobby();
@@ -915,20 +1033,17 @@ function writeMyLobby(){
   const armyId = document.getElementById("lobbyArmy").value;
   S.lobby.size[String(mySeat)] = size;
   S.lobby.first[String(mySeat)] = first;
+  const missionId = (document.getElementById("lobbyMission") || {}).value || "takehold";
+  S.lobby.mission = missionId;
   if (practice){
     S.lobby.size["0"] = S.lobby.size["1"] = size;
     S.lobby.first["0"] = S.lobby.first["1"] = first;
   }
-  if (armyId === "__demo__"){
-    S.lobby.army[String(mySeat)] = { id: "__demo__", name: "Demo Forces", pts: 0, unknown: false };
-    if (practice) S.lobby.army["1"] = { id: "__demo__", name: "Demo Forces", pts: 0, unknown: false };
-  } else if (armyId && PTSheets.listById){
-    const list = PTSheets.listById(armyId);
-    if (list){
-      const tot = PTSheets.listTotal(list);
-      S.lobby.army[String(mySeat)] = { id: list.id, name: list.name, pts: tot.pts, unknown: tot.unknown };
-    } else S.lobby.army[String(mySeat)] = null;
-  } else S.lobby.army[String(mySeat)] = null;
+  setLobbyArmyFromId(practice ? 0 : mySeat, armyId);
+  if (practice){
+    const army2 = document.getElementById("lobbyArmy2");
+    setLobbyArmyFromId(1, army2 ? army2.value : "");
+  }
   if (lobbyAgree()) S.lobby.chat = [];
   save();
   renderLobby();
@@ -938,7 +1053,7 @@ function spawnSeatArmy(seat){
   if (!rec || !rec.id) return;
   if (rec.id === "__demo__"){
     placeDemoSeat(seat);
-    if (practice) placeDemoSeat(seat === 0 ? 1 : 0);
+    markFormation(seat);
     return;
   }
   if (!PTSheets.listById) return;
@@ -946,23 +1061,38 @@ function spawnSeatArmy(seat){
   if (!list) return;
   S.units = (S.units || []).filter(u => u.seat !== seat);
   (list.units || []).forEach(entry => dropArmyEntry(entry, seat, true));
+  markFormation(seat);
 }
 function commitLobby(){
   if (!S.lobby) return;
   const over = myLobbyArmyOver();
   if (!practice && (over.over || over.unknown || !lobbyAgree())){ renderLobby(); return; }
+  if (practice){
+    const a0 = S.lobby.army && S.lobby.army["0"] && S.lobby.army["0"].id;
+    const a1 = S.lobby.army && S.lobby.army["1"] && S.lobby.army["1"].id;
+    if (!a0 || !a1){ renderLobby(); return; }
+  }
   if (practice && over.over){
     showWarn("<strong>Over points:</strong> " + over.pts.toLocaleString() + " / " + over.cap.toLocaleString() + ". Practice can continue.");
   }
   const first = Number(S.lobby.first[String(mySeat)]);
   if (first === 0 || first === 1) S.turn.activeSeat = first;
   spawnSeatArmy(mySeat);
+  if (practice) spawnSeatArmy(mySeat === 0 ? 1 : 0);
+  const atk = (first === 0 || first === 1) ? first : 0;
+  const def = atk === 0 ? 1 : 0;
+  S.deploy = { on:true, step:"formation", attacker: atk, defender: def, dropSeat: def, extra: 0 };
+  S.mission = emptyMission(S.lobby.mission || "takehold");
   S.lobby.ready = S.lobby.ready || { "0":false, "1":false };
   S.lobby.ready[String(mySeat)] = true;
   if (practice){ S.lobby.ready["0"] = S.lobby.ready["1"] = true; }
   const both = S.lobby.ready["0"] && S.lobby.ready["1"];
   if (both){ S.lobby.committed = true; S.lobby.open = false; S.lobby.chat = []; }
-  logLine("Army: " + ((S.lobby.army[String(mySeat)] && S.lobby.army[String(mySeat)].name) || "list") + (both ? " — table open" : " — waiting for the other player"));
+  const n0 = (S.lobby.army["0"] && S.lobby.army["0"].name) || "list";
+  const n1 = (S.lobby.army["1"] && S.lobby.army["1"].name) || "list";
+  logLine(practice
+    ? ("Armies: " + n0 + " vs " + n1 + " · " + S.mission.name + " — mark Reserves, then Begin drops. Defender "+seatName(def)+" places first")
+    : ("Army: " + ((S.lobby.army[String(mySeat)] && S.lobby.army[String(mySeat)].name) || "list") + (both ? " · "+S.mission.name+" — table open" : " — waiting for the other player")));
   refreshArmyPick();
   save();
   renderLobby();
@@ -970,7 +1100,11 @@ function commitLobby(){
 }
 document.getElementById("lobbySize").onchange = writeMyLobby;
 document.getElementById("lobbyArmy").onchange = writeMyLobby;
+const lobbyArmy2El = document.getElementById("lobbyArmy2");
+if (lobbyArmy2El) lobbyArmy2El.onchange = writeMyLobby;
 document.getElementById("lobbyFirst").onchange = writeMyLobby;
+const lobbyMissionEl = document.getElementById("lobbyMission");
+if (lobbyMissionEl) lobbyMissionEl.onchange = writeMyLobby;
 document.getElementById("lobbyChatIn").onkeydown = e => {
   if (e.key !== "Enter") return;
   const line = e.target.value.trim();
@@ -1018,7 +1152,7 @@ function renderPhases(){
   el.innerHTML = PHASES.map(p => {
     const tip = (TIPS[p] && TIPS[p].short) || p;
     return `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}" ${mine?"":"disabled"} title="${mine?tip.replace(/"/g,"&quot;"):(seatName(S.turn.activeSeat)+"'s turn")}">${p}</button>`;
-  }).join("") + `<span class="sub" title="Battle round · whose turn">${"R"+S.turn.battleRound+" · "+seatName(S.turn.activeSeat)}</span>`;
+  }).join("") + `<span class="sub" title="Battle round · whose turn · VP">${"R"+S.turn.battleRound+" · "+seatName(S.turn.activeSeat)+(S.mission?" · VP "+((S.mission.vp&&S.mission.vp["0"])||0)+"–"+((S.mission.vp&&S.mission.vp["1"])||0):"")}</span>`;
   el.querySelectorAll("[data-phase]").forEach(b => {
     b.onclick = () => setPhase(b.dataset.phase);
     b.addEventListener("pointerenter", () => { if (TIPS[b.dataset.phase]) showTip(TIPS[b.dataset.phase]); });
@@ -1033,8 +1167,152 @@ function clearCombatPair(){
   if (dice) dice.textContent = "";
   updateChargeRow();
 }
-function chargeFor(unitId){
+function chargeRecord(unitId){
   return unitId && S.chargeRolls && S.chargeRolls[unitId] ? S.chargeRolls[unitId] : null;
+}
+function chargeFor(unitId){
+  const r = chargeRecord(unitId);
+  return r && !r.failed ? r : null;
+}
+function enemiesOf(u){
+  return (S.units || []).filter(o => o && !o.reserved && u && o.seat !== u.seat);
+}
+function minChargeNeed(u){
+  let need = Infinity;
+  enemiesOf(u).forEach(o => {
+    const d = Math.max(0, edgeDist(u, o) - 2.01);
+    if (d < need) need = d;
+  });
+  return need;
+}
+function failCharge(u, why){
+  if (!u) return;
+  const cr = chargeRecord(u.id);
+  if (cr && cr.x != null){ u.x = cr.x; u.y = cr.y; }
+  if (!S.chargeRolls) S.chargeRolls = {};
+  if (!cr) S.chargeRolls[u.id] = { d1:0, d2:0, total:0, x:u.x, y:u.y, failed:true };
+  else cr.failed = true;
+  const f = flagsOf(u);
+  f.charged = true;
+  f.chargeFailed = true;
+  logLine(u.name + " charge failed — " + why);
+  showWarn("<strong>Charge failed:</strong> " + u.name + " — " + why);
+  document.getElementById("dice").textContent = u.name + " charge failed — " + why;
+}
+function resolveOpenCharges(){
+  const rolls = S.chargeRolls || {};
+  Object.keys(rolls).forEach(id => {
+    const cr = rolls[id];
+    if (!cr || cr.failed) return;
+    const u = (S.units || []).find(x => x.id === id);
+    if (!u){ cr.failed = true; return; }
+    if (!inEngagement(u)) failCharge(u, "did not end in 2″ Engagement Range");
+  });
+}
+function unitDamaged(u){
+  return unitGroup(u).some(m => (m.wounds ?? m.W) < m.W);
+}
+function shockPending(seat){
+  const seen = new Set();
+  const out = [];
+  (S.units || []).forEach(u => {
+    if (!u || u.reserved || u.seat !== seat) return;
+    const key = u.groupId || u.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (!unitDamaged(u)) return;
+    if (unitGroup(u).some(m => flagsOf(m).shockTested)) return;
+    out.push(u);
+  });
+  return out;
+}
+function promptBattleShock(){
+  if (!S.turn || S.turn.phase !== "command") return;
+  const pending = shockPending(S.turn.activeSeat);
+  if (!pending.length) return;
+  const names = pending.slice(0, 4).map(u => u.name).join(", ");
+  const extra = pending.length > 4 ? " +"+(pending.length-4)+" more" : "";
+  showWarn("<strong>Battle-shock:</strong> "+pending.length+" damaged unit"+(pending.length===1?"":"s")+" must test this Command — "+names+extra+". Select → Optional → Battle-shock → Announce.");
+}
+function effectiveOC(u){
+  if (!u) return 0;
+  if (flagsOf(u).battleShock) return 0;
+  return u.OC || 0;
+}
+function actionPhases(a){
+  if (!a) return [];
+  if (a.phases) return a.phases;
+  return a.phase ? [a.phase] : [];
+}
+function actionLive(a){
+  return actionPhases(a).indexOf(S.turn && S.turn.phase) >= 0;
+}
+function stratUsedOf(seat){
+  if (!S.stratUsed) S.stratUsed = { "0":{}, "1":{} };
+  const k = String(seat);
+  if (!S.stratUsed[k]) S.stratUsed[k] = {};
+  return S.stratUsed[k];
+}
+function spendCP(n, why, seat){
+  seat = (seat == null) ? S.turn.activeSeat : seat;
+  if (!S.cp) S.cp = { "0":0, "1":0 };
+  if ((S.cp[seat] || 0) < n){
+    showWarn("<strong>CP:</strong> "+seatName(seat)+" need "+n+", have "+(S.cp[seat]||0)+".");
+    return false;
+  }
+  S.cp[seat] -= n;
+  logLine(seatName(seat)+" spends "+n+" CP — "+why+" (now "+S.cp[seat]+")");
+  return true;
+}
+function canUseStrat(id, onUnit, seat){
+  seat = (seat == null) ? S.turn.activeSeat : seat;
+  if (stratUsedOf(seat)[id]){
+    showWarn("<strong>Stratagem:</strong> already used this turn.");
+    return false;
+  }
+  if (onUnit && flagsOf(onUnit).battleShock){
+    showWarn("<strong>Stratagem:</strong> Battle-shocked units cannot be affected.");
+    return false;
+  }
+  if ((S.cp[seat] || 0) < 1){
+    showWarn("<strong>CP:</strong> "+seatName(seat)+" need 1, have "+(S.cp[seat]||0)+".");
+    return false;
+  }
+  return true;
+}
+function markStratUsed(id, seat){
+  stratUsedOf(seat == null ? S.turn.activeSeat : seat)[id] = true;
+}
+function hasGrenades(u){
+  return unitHasKw(u, "GRENADES") || unitHasKw(u, "EXPLOSIVES");
+}
+function applyMortals(tgt, n, label){
+  let dealt = 0;
+  const killed = [];
+  for (let i = 0; i < n; i++){
+    const rec = pickRecipient(unitModels(tgt), preferAllocId);
+    if (!rec) break;
+    let deal = 1;
+    const fnp = fnpOf(rec);
+    if (fnp){
+      const fr = d6();
+      if (fr >= fnp) deal = 0;
+    }
+    if (!deal) continue;
+    rec.wounds = (rec.wounds ?? rec.W) - 1;
+    dealt++;
+    if (rec.wounds <= 0){
+      killed.push(rec.name);
+      S.units = S.units.filter(x => x.id !== rec.id);
+      if (preferAllocId === rec.id) preferAllocId = null;
+    }
+  }
+  if (!S.units.some(x => x.id === targetId)) targetId = ((unitModels(tgt)[0]) || {}).id || null;
+  let line = label + " — "+dealt+" mortal wound"+(dealt===1?"":"s");
+  if (killed.length) line += " — removed "+killed.join(", ");
+  if (!unitModels(tgt).length) line += " — unit destroyed";
+  logLine(line);
+  return dealt;
 }
 function updateChargeRow(){
   const row = document.getElementById("rowCharge");
@@ -1044,13 +1322,15 @@ function updateChargeRow(){
   const hint = document.getElementById("chargeHint");
   if (!hint || !onCharge) return;
   const u = selected && selected.kind === "u" ? S.units.find(x => x.id === selected.id) : null;
-  const roll = u ? chargeFor(u.id) : null;
-  if (roll && u){
-    hint.textContent = u.name + " charged " + roll.total + "″ (" + roll.d1 + "+" + roll.d2 + "). Select another model to roll its charge in this same phase.";
+  const rec = u ? chargeRecord(u.id) : null;
+  if (rec && rec.failed && u){
+    hint.textContent = u.name + " charge failed (" + rec.d1 + "+" + rec.d2 + " = " + rec.total + "″). That model stays put.";
+  } else if (rec && u){
+    hint.textContent = u.name + " charged " + rec.total + "″ (" + rec.d1 + "+" + rec.d2 + "). End in 2″ ER inside the gold ring, or the charge fails.";
   } else if (u && canControlUnit(u)){
-    hint.textContent = "Roll charge for " + u.name + " (2D6). Each model can roll in this phase — no need to leave Charge.";
+    hint.textContent = "Roll charge for " + u.name + " (2D6). Short of ER = fail. Each model rolls in this phase.";
   } else {
-    hint.textContent = "Select your model, then Roll charge (2D6). Repeat for each charger in this phase.";
+    hint.textContent = "Select your model, then Roll charge (2D6). A short roll fails — the model does not move.";
   }
 }
 function rollCharge(){
@@ -1063,7 +1343,7 @@ function rollCharge(){
     document.getElementById("dice").textContent = "Select an active-player model first, then Roll charge.";
     return;
   }
-  if (chargeFor(u.id) && !devOpenGates()){
+  if (chargeRecord(u.id) && !devOpenGates()){
     showWarn("<strong>Charge:</strong> this model already rolled this phase.");
     return;
   }
@@ -1072,13 +1352,20 @@ function rollCharge(){
   if (inEngagement(u) && !devOpenGates()){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
   const d1 = d6(), d2 = d6(), total = d1 + d2;
   if (!S.chargeRolls) S.chargeRolls = {};
-  S.chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y };
+  S.chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y, failed: false };
   const f = flagsOf(u);
   f.charged = true;
   f.chargeInches = total;
+  f.chargeFailed = false;
+  const need = minChargeNeed(u);
   logLine(u.name + " charge roll " + d1 + "+" + d2 + " = " + total + "″");
   document.getElementById("dice").textContent = "Charge [" + d1 + "] [" + d2 + "] = " + total + "″ from base edge";
-  setSimpleRoll("Charge", u.name, [d1, d2], d1+"+"+d2+" = "+total+"″ from base edge");
+  setSimpleRoll("Charge", u.name, [d1, d2], d1+"+"+d2+" = "+total+"″ from base edge", { unitId: u.id });
+  if (need === Infinity){
+    failCharge(u, "no enemy on the table");
+  } else if (total + 0.05 < need && !devOpenGates()){
+    failCharge(u, "rolled "+total+"″, needed "+need.toFixed(1)+"″ to reach 2″ ER");
+  }
   updateChargeRow();
   draw();
   refreshTip();
@@ -1105,7 +1392,14 @@ function canControlUnit(u){
 }
 function canDragUnit(u){
   if (!u || u.reserved || !canControlUnit(u)) return false;
-  if (inSetup()) return true;
+  if (inSetup()){
+    if (S.deploy && S.deploy.on && (S.deploy.step === "drops" || S.deploy.step === "infiltrate" || S.deploy.step === "scouts")){
+      if (u.reserved) return false;
+      if (S.deploy.step !== "scouts" && u.seat !== S.deploy.dropSeat && flagsOf(u).deployed) return false;
+      if (S.deploy.step !== "scouts" && u.seat !== S.deploy.dropSeat) return false;
+    }
+    return true;
+  }
   const p = S.turn.phase;
   if (p !== "movement" && p !== "charge" && p !== "fight") return false;
   if (p === "movement" && dragLocked(u)) return false;
@@ -1114,10 +1408,10 @@ function canDragUnit(u){
 }
 function defaultFlags(){
   return {
-    battleShock:false, advanced:false, fellBack:false, remainedStationary:false,
-    moved:false, shot:false, charged:false, fought:false,
+    battleShock:false, shockTested:false, aoc:false, advanced:false, fellBack:false, remainedStationary:false,
+    moved:false, shot:false, charged:false, chargeFailed:false, fought:false,
     advanceInches:0, chargeInches:0, fightsFirst:false,
-    ingressed:false, deepStrike:false
+    ingressed:false, deepStrike:false, stayReserve:false, deployed:false, scouted:false
   };
 }
 function ensureFlags(u){
@@ -1140,12 +1434,16 @@ function selectedUnit(){
 function beginSeatTurn(seat){
   if (!S.cp) S.cp = { "0":0, "1":0 };
   S.cp[seat] = (S.cp[seat]||0) + 1;
+  if (!S.stratUsed) S.stratUsed = { "0":{}, "1":{} };
+  S.stratUsed[String(seat)] = {};
   S.units.forEach(u => {
     if (u.seat !== seat) return;
     const f = flagsOf(u);
     f.battleShock = false;
+    f.shockTested = false;
+    f.aoc = false;
     f.advanced = false; f.fellBack = false; f.remainedStationary = false;
-    f.moved = false; f.shot = false; f.charged = false; f.fought = false;
+    f.moved = false; f.shot = false; f.charged = false; f.chargeFailed = false; f.fought = false;
     f.advanceInches = 0; f.chargeInches = 0;
     f.ingressed = false;
     delete u.revert;
@@ -1240,8 +1538,275 @@ function ingressIssues(u){
 function reservedUnits(seat){
   return (S.units||[]).filter(u => u.reserved && (seat==null || u.seat===seat));
 }
+function kwHas(u, frag){
+  return !!(u && (u.keywords||[]).some(k => String(k).toUpperCase().includes(String(frag).toUpperCase())));
+}
+function isTitanic(u){ return unitHasKw(u, "TITANIC"); }
+function isInfiltrator(u){ return unitHasKw(u, "INFILTRATORS") || kwHas(u, "INFILTRATOR"); }
+function scoutInches(u){
+  if (!u) return 0;
+  const a = (u.abilities||[]).find(x => /scout/i.test(String((x && (x.id||x.name)) || "")));
+  if (a && a.x != null) return Number(a.x) || 6;
+  if (unitHasKw(u, "SCOUTS") || kwHas(u, "SCOUT")) return 6;
+  return 0;
+}
+function markFormation(seat){
+  (S.units||[]).forEach(u => {
+    if (seat != null && u.seat !== seat) return;
+    u.reserved = true;
+    flagsOf(u).stayReserve = false;
+    flagsOf(u).deployed = false;
+    flagsOf(u).scouted = false;
+  });
+}
+function deployOn(){ return !!(S.deploy && S.deploy.on && inSetup()); }
+function formationUnits(seat){
+  return (S.units||[]).filter(u => u.reserved && !flagsOf(u).stayReserve && (seat==null || u.seat===seat));
+}
+function dropQueue(seat){
+  const step = S.deploy && S.deploy.step;
+  return formationUnits(seat).filter(u => {
+    if (step === "infiltrate") return isInfiltrator(u);
+    if (step === "drops") return !isInfiltrator(u);
+    return true;
+  });
+}
+function whollyInDz(u){
+  const r = unitR(u);
+  if (u.seat === 0) return (u.y + r) <= ZONE + 0.05;
+  return (u.y - r) >= (H - ZONE - 0.05);
+}
+function inEnemyDeployment(u){
+  const r = unitR(u);
+  if (u.seat === 0) return (u.y + r) > (H - ZONE);
+  return (u.y - r) < ZONE;
+}
+function awayFromEnemyDz(u, inches){
+  if (u.seat === 0) return u.y + unitR(u) <= (H - ZONE - inches);
+  return u.y - unitR(u) >= (ZONE + inches);
+}
+function nearestEnemyDist(u){
+  let d = Infinity;
+  enemiesOf(u).forEach(o => { d = Math.min(d, edgeDist(u, o)); });
+  return d;
+}
+function deployIssues(u){
+  const issues = [];
+  if (!u || u.reserved) return issues;
+  const step = S.deploy && S.deploy.step;
+  if (step === "infiltrate" && isInfiltrator(u)){
+    if (inEnemyDeployment(u)) issues.push("not in the enemy deployment zone");
+    if (!awayFromEnemyDz(u, 8)) issues.push("more than 8″ from the enemy DZ");
+    const nd = nearestEnemyDist(u);
+    if (nd <= 8.01) issues.push("more than 8″ from enemy units (now "+nd.toFixed(1)+"″)");
+  } else if (!whollyInDz(u)){
+    issues.push("wholly within your 12″ deployment zone");
+  }
+  if (u.groupId){
+    const co = coherencyCheck(u.groupId);
+    if (co && !co.ok) issues.push(co.reason || "coherency");
+  }
+  return issues;
+}
+function pointDist(u, p){
+  return Math.max(0, Math.hypot(u.x - p.x, u.y - p.y) - unitR(u));
+}
+function ocOnObjective(obj, seat){
+  return (S.units||[]).filter(u => !u.reserved && u.seat === seat && pointDist(u, obj) <= 3.01)
+    .reduce((n, u) => n + effectiveOC(u), 0);
+}
+function controllerOf(obj){
+  const a = ocOnObjective(obj, 0), b = ocOnObjective(obj, 1);
+  if (a > b) return 0;
+  if (b > a) return 1;
+  return null;
+}
+function scoreMission(seat){
+  if (!S.mission || !S.mission.objectives) return;
+  const held = S.mission.objectives.filter(o => controllerOf(o) === seat).length;
+  const other = S.mission.objectives.filter(o => controllerOf(o) === (seat===0?1:0)).length;
+  let gain = 0;
+  if (held >= 1) gain += 5;
+  if (held >= 2) gain += 5;
+  if (held > other) gain += 5;
+  S.mission.vp[String(seat)] = (S.mission.vp[String(seat)] || 0) + gain;
+  logLine(seatName(seat)+" scores "+gain+" VP (hold "+held+", "+S.mission.name+") · "+S.mission.vp["0"]+"–"+S.mission.vp["1"]);
+  if ((S.turn.battleRound||1) >= 5){
+    const a = S.mission.vp["0"]||0, b = S.mission.vp["1"]||0;
+    if (a !== b) logLine("Battle round 5 — "+(a>b?seatName(0):seatName(1))+" leads "+Math.max(a,b)+"–"+Math.min(a,b));
+    else logLine("Battle round 5 — draw "+a+"–"+b);
+  }
+}
+function reservesPts(seat){
+  const rec = S.lobby && S.lobby.army && S.lobby.army[String(seat)];
+  const cap = rec && rec.pts ? rec.pts * 0.5 : 0;
+  const reserved = (S.units||[]).filter(u => u.seat===seat && (u.reserved || flagsOf(u).stayReserve));
+  /* Teaching cap uses model count vs list unit count when pts are missing. */
+  return { n: reserved.length, capPts: cap, armyPts: rec && rec.pts || 0 };
+}
+function passDropSeat(){
+  if (!S.deploy) return;
+  if (S.deploy.extra > 0){
+    S.deploy.extra -= 1;
+    return;
+  }
+  S.deploy.dropSeat = S.deploy.dropSeat === 0 ? 1 : 0;
+}
+function maybeAdvanceDeployStep(){
+  if (!S.deploy || !S.deploy.on) return;
+  if (S.deploy.step === "drops"){
+    const left = dropQueue(0).length + dropQueue(1).length;
+    if (!left){
+      const inf = formationUnits().filter(isInfiltrator);
+      S.deploy.step = inf.length ? "infiltrate" : "scouts";
+      S.deploy.dropSeat = S.deploy.defender;
+      S.deploy.extra = 0;
+      logLine(inf.length ? "Infiltrators may set up outside their DZ (>8″ from enemy DZ and units)" : "Scout moves — select a Scout unit, then Scout move");
+    }
+  } else if (S.deploy.step === "infiltrate"){
+    if (!dropQueue(0).length && !dropQueue(1).length){
+      S.deploy.step = "scouts";
+      logLine("Scout moves — after first turn is known. 6″ from your DZ, stay 8″ from enemies — or pull a reserved Scout into your DZ");
+    }
+  }
+}
+function beginDrops(){
+  if (!inSetup() || !S.deploy){ showWarn("<strong>Drops:</strong> finish the lobby first."); return; }
+  if (S.deploy.step !== "formation"){ showWarn("<strong>Drops:</strong> already started."); return; }
+  (S.units||[]).forEach(u => {
+    if (u.reserved && flagsOf(u).stayReserve) return;
+    /* still in formation */
+  });
+  S.deploy.step = "drops";
+  S.deploy.dropSeat = S.deploy.defender;
+  S.deploy.extra = 0;
+  const capNote = [0,1].map(seat => {
+    const r = reservesPts(seat);
+    if (r.armyPts && r.n) return seatName(seat)+" Reserves "+r.n+" models (soft cap 50% of "+r.armyPts+" pts)";
+    return "";
+  }).filter(Boolean).join(" · ");
+  logLine("Drops start — Defender "+seatName(S.deploy.defender)+" first. Dawn of War 12″ DZ."+(capNote?" "+capNote:""));
+  showWarn("<strong>Drops:</strong> "+seatName(S.deploy.dropSeat)+" places one unit (Titanic counts as two). Select it in Reserves, then Deploy unit.");
+  renderReserveRow(); save(); draw();
+}
+function deploySelectedUnit(){
+  if (!inSetup() || !S.deploy || !S.deploy.on) return;
+  if (S.deploy.step !== "drops" && S.deploy.step !== "infiltrate"){
+    showWarn("<strong>Deploy:</strong> Begin drops first.");
+    return;
+  }
+  const u = selectedUnit();
+  if (!u || !u.reserved){ showWarn("<strong>Deploy:</strong> pick a unit from the Reserves row."); return; }
+  if (flagsOf(u).stayReserve){ showWarn("<strong>Deploy:</strong> that unit is staying in Strategic Reserves."); return; }
+  if (!practice && u.seat !== mySeat){ showWarn("<strong>Deploy:</strong> that is the other player’s unit."); return; }
+  if (u.seat !== S.deploy.dropSeat){
+    showWarn("<strong>Deploy:</strong> it is "+seatName(S.deploy.dropSeat)+"’s drop.");
+    return;
+  }
+  if (S.deploy.step === "drops" && isInfiltrator(u)){
+    showWarn("<strong>Deploy:</strong> Infiltrators wait until the Infiltrate step.");
+    return;
+  }
+  if (S.deploy.step === "infiltrate" && !isInfiltrator(u)){
+    showWarn("<strong>Deploy:</strong> only Infiltrators in this step.");
+    return;
+  }
+  const y = u.seat===0 ? 6 : H-6;
+  unitGroup(u).forEach((m, i) => {
+    m.reserved = false;
+    flagsOf(m).deployed = false;
+    m.x = Math.max(unitR(m), Math.min(W-unitR(m), 18 + i*1.5));
+    m.y = y;
+  });
+  selectObj("u", u);
+  logLine("Placing "+u.name+" — drag wholly into the DZ, then the drop passes");
+  showWarn("<strong>Place:</strong> drag "+u.name+" into "+seatName(u.seat)+"’s 12″ zone"+(S.deploy.step==="infiltrate"?" (Infiltrators may sit outside, >8″ from enemy DZ/units)":"")+".");
+  save(); draw(); renderReserveRow();
+}
+function commitPlacedUnit(u){
+  if (!u || !S.deploy || !S.deploy.on) return;
+  if (S.deploy.step !== "drops" && S.deploy.step !== "infiltrate") return;
+  if (u.reserved) return;
+  if (flagsOf(u).deployed) return;
+  const bad = deployIssues(u);
+  if (bad.length){
+    showWarn("<strong>Deploy:</strong> "+bad.join("; ")+".");
+    return;
+  }
+  unitGroup(u).forEach(m => { flagsOf(m).deployed = true; });
+  if (isTitanic(u) && S.deploy.step === "drops"){
+    S.deploy.dropSeat = u.seat === 0 ? 1 : 0;
+    S.deploy.extra = 1;
+    logLine(u.name+" is Titanic — "+seatName(S.deploy.dropSeat)+" places two units");
+  } else {
+    passDropSeat();
+  }
+  maybeAdvanceDeployStep();
+  if (S.deploy.step === "scouts"){
+    showWarn("<strong>Scouts:</strong> select a Scout unit and tap Scout move, or Start battle when you are done.");
+  } else {
+    showWarn("<strong>Next drop:</strong> "+seatName(S.deploy.dropSeat)+".");
+  }
+  logLine(u.name+" deployed · next "+seatName(S.deploy.dropSeat));
+  save(); draw(); renderReserveRow(); renderActions();
+}
+function doScoutMove(){
+  if (!inSetup() || !S.deploy || S.deploy.step !== "scouts"){
+    showWarn("<strong>Scouts:</strong> finish drops first.");
+    return;
+  }
+  const u = selectedUnit();
+  if (!u){ showWarn("<strong>Scouts:</strong> select a Scout unit."); return; }
+  const x = scoutInches(u);
+  if (!x){ showWarn("<strong>Scouts:</strong> that unit has no Scout move."); return; }
+  if (flagsOf(u).scouted){ showWarn("<strong>Scouts:</strong> already moved."); return; }
+  if (u.reserved){
+    const y = u.seat===0 ? 6 : H-6;
+    unitGroup(u).forEach((m, i) => {
+      m.reserved = false;
+      m.x = Math.max(unitR(m), Math.min(W-unitR(m), 20 + i*1.5));
+      m.y = y;
+      flagsOf(m).scouted = true;
+    });
+    logLine(u.name+" Scout — pulled from Reserves into own DZ");
+  } else {
+    unitGroup(u).forEach(m => { flagsOf(m).scouted = true; });
+    logLine(u.name+" Scout "+x+"″ — drag from your DZ, stay more than 8″ from enemies");
+    showWarn("<strong>Scout "+x+"″:</strong> move from your DZ, end more than 8″ from enemy models.");
+  }
+  save(); draw(); renderReserveRow();
+}
+function finishDeployIfReady(){
+  if (!S.deploy || !S.deploy.on) return true;
+  const leftover = formationUnits().filter(u => S.deploy.step !== "scouts" || !isInfiltrator(u) && !flagsOf(u).stayReserve);
+  if (S.deploy.step === "formation"){
+    showWarn("<strong>Start battle:</strong> mark Reserves, then Begin drops and place units.");
+    return false;
+  }
+  if (S.deploy.step === "drops" || S.deploy.step === "infiltrate"){
+    if (dropQueue(0).length || dropQueue(1).length){
+      showWarn("<strong>Start battle:</strong> "+seatName(S.deploy.dropSeat)+" still has units to place.");
+      return false;
+    }
+  }
+  S.deploy.step = "ready";
+  S.deploy.on = false;
+  logLine("Deployment done · Redeploys are honor-system · "+S.mission.name);
+  return true;
+}
 function toggleReserved(u){
   if (!u || !inSetup()) return;
+  if (S.deploy && S.deploy.on && S.deploy.step !== "formation"){
+    showWarn("<strong>Reserves:</strong> declare them before Begin drops. You cannot skip a drop into Reserves.");
+    return;
+  }
+  if (S.deploy && S.deploy.on && S.deploy.step === "formation"){
+    const on = !flagsOf(u).stayReserve;
+    unitGroup(u).forEach(m => { flagsOf(m).stayReserve = on; m.reserved = true; });
+    logLine((on?"Strategic Reserves: ":"Will deploy: ")+u.name);
+    save(); draw(); refreshTip(); renderActions(); renderReserveRow();
+    return;
+  }
   const on = !u.reserved;
   unitGroup(u).forEach(m => { m.reserved = on; });
   logLine((on?"Reserves: ":"On table: ")+u.name+(unitGroup(u).length>1?" unit":""));
@@ -1281,7 +1846,9 @@ function renderReserveRow(){
     box.appendChild(b);
   });
   if (hint){
-    if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
+    if (inSetup() && S.deploy && S.deploy.on && S.deploy.step === "formation") hint.textContent = "Formation: tap a unit, Reserves = stays off the table. Then Begin drops.";
+    else if (inSetup() && S.deploy && S.deploy.on) hint.textContent = S.deploy.step+" · "+seatName(S.deploy.dropSeat)+" places next. Select a unit here, then Deploy unit.";
+    else if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
     else hint.textContent = "Movement: select one, Optional → Ingress → Announce.";
   }
 }
@@ -1310,13 +1877,13 @@ function renderActions(){
   const u = selectedUnit();
   const moveLock = phase === "movement" && u && groupMoveState(u).declared;
   const MOVE_ACTS = { advance:1, fallBack:1, remain:1, ingress:1 };
-  const list = Object.values(ACTIONS).filter(a => a.phase === phase);
+  const list = Object.values(ACTIONS).filter(a => actionLive(a));
   if (kicker) kicker.textContent = "Optional · "+phase;
   box.innerHTML = "";
   list.forEach(a => {
     const b = document.createElement("button");
     b.className = "btn sm" + (a.placeholder ? " placeholder" : "") + (selectedAction===a.id ? " on" : "");
-    b.textContent = a.label;
+    b.textContent = a.cp ? (a.label + " · "+a.cp+"CP") : a.label;
     b.title = a.short;
     const reserved = !!(u && (u.reserved || unitGroup(u).some(m => m.reserved)));
     if (a.id === "ingress"){
@@ -1333,9 +1900,11 @@ function renderActions(){
     box.appendChild(b);
   });
   const act = selectedAction && ACTIONS[selectedAction];
-  if (act && act.phase === phase && act.announce && !act.placeholder && !(MOVE_ACTS[act.id] && moveLock)){
+  if (act && actionLive(act) && act.announce && !act.placeholder && !(MOVE_ACTS[act.id] && moveLock)){
     ann.style.display = "";
-    ann.textContent = act.roll ? ("Announce "+act.label+" ("+act.roll+")") : ("Announce "+act.label);
+    ann.textContent = act.cp
+      ? ("Spend "+act.cp+" CP · "+act.label)
+      : (act.roll ? ("Announce "+act.label+" ("+act.roll+")") : ("Announce "+act.label));
   } else {
     ann.style.display = "none";
   }
@@ -1343,7 +1912,10 @@ function renderActions(){
   renderReserveRow();
   const cp = (S.cp && S.cp[S.turn.activeSeat]) || 0;
   if (!hint) return;
-  if (phase === "command") hint.textContent = "P"+S.turn.activeSeat+" CP: "+cp+(u ? " · "+u.name : "");
+  if (phase === "command"){
+    const pend = shockPending(S.turn.activeSeat);
+    hint.textContent = "P"+S.turn.activeSeat+" CP: "+cp+(u ? " · "+u.name : "")+(pend.length ? " · "+pend.length+" Battle-shock test"+(pend.length===1?"":"s")+" due" : "");
+  }
   else if (u){
     const f = flagsOf(u);
     const bits = [];
@@ -1354,10 +1926,12 @@ function renderActions(){
     if (f.fellBack) bits.push("FB");
     if (f.remainedStationary) bits.push("Remain");
     if (f.moved) bits.push("Moved");
-    if (f.charged || chargeFor(u.id)) bits.push("Chg "+(f.chargeInches || (chargeFor(u.id)||{}).total || "")+"″");
+    if (f.chargeFailed) bits.push("Chg fail");
+    else if (f.charged || chargeFor(u.id)) bits.push("Chg "+(f.chargeInches || (chargeFor(u.id)||{}).total || "")+"″");
     if (f.shot) bits.push("Shot");
     if (f.fought) bits.push("Fought");
     if (f.battleShock) bits.push("Shocked");
+    if (f.aoc) bits.push("AoC");
     hint.textContent = u.name + (bits.length ? " · "+bits.join(" · ") : " · no flags yet");
   } else hint.textContent = "Select a model, tap an action for rules (More), then Announce if it is a declare.";
 }
@@ -1368,14 +1942,148 @@ function pickAction(id){
   showTip({ title:a.label, short:a.short, more:a.more });
   renderActions();
 }
+function doCommandReroll(u){
+  if (!canUseStrat("commandReroll", u)) return false;
+  if (!lastRoll){
+    showWarn("<strong>Command Re-roll:</strong> no roll to change. Make an Advance, Charge, Battle-shock, or Attack first.");
+    return false;
+  }
+  if (lastRoll.rerolled){
+    showWarn("<strong>Command Re-roll:</strong> that roll was already re-rolled.");
+    return false;
+  }
+  if (!spendCP(1, "Command Re-roll")) return false;
+  markStratUsed("commandReroll");
+  lastRoll.rerolled = true;
+  if (lastRoll.kind === "simple"){
+    const rolls = (lastRoll.rolls || []).slice();
+    if (!rolls.length){ showWarn("<strong>Command Re-roll:</strong> that roll has no dice."); return true; }
+    let idx = 0;
+    for (let i = 1; i < rolls.length; i++) if (rolls[i] < rolls[idx]) idx = i;
+    const old = rolls[idx];
+    const neu = d6();
+    rolls[idx] = neu;
+    lastRoll.rolls = rolls;
+    const unit = (lastRoll.unitId && (S.units||[]).find(x => x.id === lastRoll.unitId)) || u;
+    if (lastRoll.title === "Charge" && unit){
+      const cr = chargeRecord(unit.id) || { x: unit.x, y: unit.y };
+      const total = rolls.reduce((s,n) => s+n, 0);
+      S.chargeRolls[unit.id] = { d1: rolls[0], d2: rolls[1] || 0, total, x: cr.x, y: cr.y, failed: false };
+      const f = flagsOf(unit);
+      f.chargeInches = total;
+      f.charged = true;
+      unit.x = cr.x; unit.y = cr.y;
+      const ghost = { x: cr.x, y: cr.y, baseMm: unit.baseMm };
+      let need = Infinity;
+      enemiesOf(unit).forEach(o => {
+        const d = Math.max(0, edgeDist(ghost, o) - 2.01);
+        if (d < need) need = d;
+      });
+      if (need === Infinity || total + 0.05 < need){
+        failCharge(unit, "re-roll "+old+"→"+neu+", still short ("+total+"″)");
+      } else {
+        f.chargeFailed = false;
+        logLine(unit.name+" Command Re-roll charge "+old+"→"+neu+" = "+total+"″");
+        hideWarn();
+      }
+      lastRoll.note = rolls.join("+")+" = "+total+"″ after re-roll";
+    } else if (lastRoll.title === "Advance" && unit){
+      const d = rolls[0];
+      unitGroup(unit).forEach(m => { flagsOf(m).advanceInches = d; });
+      const cap = (unit.M||6)+d;
+      lastRoll.note = "M"+(unit.M||6)+" + "+d+" = "+cap+"″ after re-roll";
+      logLine(unit.name+" Command Re-roll Advance "+old+"→"+d+" (now "+cap+"″)");
+    } else if (lastRoll.title === "Battle-shock" && unit){
+      const tot = rolls.reduce((s,n) => s+n, 0);
+      const ld = unit.Ld || 6;
+      const fail = tot < ld;
+      unitGroup(unit).forEach(m => { flagsOf(m).battleShock = fail; flagsOf(m).shockTested = true; });
+      lastRoll.note = tot+" vs Ld "+ld+" — "+(fail?"failed · OC 0":"passed")+" after re-roll";
+      logLine(unit.name+" Command Re-roll Battle-shock "+old+"→"+neu+" = "+tot+" vs Ld "+ld+" → "+(fail?"FAILED":"passed"));
+    } else {
+      lastRoll.note = (lastRoll.note || "")+" · re-roll "+old+"→"+neu;
+      logLine("Command Re-roll "+old+"→"+neu);
+    }
+    document.getElementById("dice").textContent = "Re-roll "+old+" → "+neu;
+    renderRollPanel();
+    return true;
+  }
+  const dice = lastRoll.dice || [];
+  const miss = dice.find(d => d.hit && !d.hit.ok);
+  if (!miss){
+    showWarn("<strong>Command Re-roll:</strong> no missed hit on that attack to change. Does not undo wounds already dealt.");
+    return true;
+  }
+  const old = miss.hit.roll;
+  const neu = d6();
+  const need = miss.hit.need;
+  miss.hit.roll = neu;
+  miss.hit.ok = (neu === 1) ? false : (neu === 6 || neu >= need);
+  miss.hit.modNote = (miss.hit.modNote || "")+" · re-roll "+old+"→"+neu;
+  logLine("Command Re-roll hit "+old+"→"+neu+(miss.hit.ok?" HIT":" miss"));
+  document.getElementById("dice").textContent = "Re-roll hit "+old+" → "+neu+(miss.hit.ok?" — now a hit":" — still a miss");
+  if (miss.hit.ok){
+    const tgt = (lastRoll.tgtId && (S.units||[]).find(x => x.id === lastRoll.tgtId)) || (targetId && (S.units||[]).find(x => x.id === targetId));
+    if (tgt){
+      const rec = pickRecipient(unitModels(tgt), preferAllocId);
+      if (rec){
+        const wr = d6();
+        const needW = woundNeed(lastRoll.S, rec.T);
+        const wounded = wr !== 1 && (wr === 6 || wr >= needW);
+        miss.wound = { roll: wr, need: needW, ok: wounded };
+        if (wounded){
+          lastRoll.woundN = (lastRoll.woundN || 0) + 1;
+          const armourNeed = Math.max(2, Math.min(7, rec.Sv - (lastRoll.AP || 0)));
+          const sv = d6();
+          let saved = false;
+          if (sv === 1) saved = false;
+          else if (rec.Inv && sv >= rec.Inv) saved = true;
+          else saved = sv >= armourNeed;
+          miss.save = { roll: sv, ok: saved, how: saved && rec.Inv && sv >= rec.Inv ? ("Inv "+rec.Inv+"+") : ("Sv "+armourNeed+"+") };
+          if (!saved){
+            const deal = Math.min(rollExpr(lastRoll.D), rec.wounds ?? rec.W);
+            rec.wounds = (rec.wounds ?? rec.W) - deal;
+            lastRoll.dmg = (lastRoll.dmg || 0) + deal;
+            lastRoll.unsaved = (lastRoll.unsaved || 0) + 1;
+            if (rec.wounds <= 0){
+              S.units = S.units.filter(x => x.id !== rec.id);
+              logLine(rec.name+" removed after re-roll");
+            }
+          }
+        }
+      }
+    }
+  }
+  lastRoll.hitN = (lastRoll.dice || []).filter(d => d.hit && d.hit.ok).length;
+  renderRollPanel();
+  return true;
+}
 function announceAction(){
   const a = selectedAction && ACTIONS[selectedAction];
   if (!a || !a.announce || a.placeholder) return;
-  if (a.phase !== S.turn.phase){
+  if (!actionLive(a)){
     document.getElementById("dice").textContent = "That action is for the "+a.phase+" phase.";
     return;
   }
   const u = selectedUnit();
+  if (a.id === "armorOfContempt"){
+    if (!u){
+      document.getElementById("dice").textContent = "Select the unit that is being attacked, then Spend CP.";
+      return;
+    }
+    if (!practice && u.seat !== mySeat){
+      showWarn("<strong>Armor of Contempt:</strong> only on your own unit.");
+      return;
+    }
+    if (!canUseStrat("armorOfContempt", u, u.seat)) return;
+    if (!spendCP(1, "Armor of Contempt", u.seat)) return;
+    markStratUsed("armorOfContempt", u.seat);
+    unitGroup(u).forEach(m => { flagsOf(m).aoc = true; });
+    logLine(u.name+" Armor of Contempt — AP worsened by 1 against this unit this phase");
+    document.getElementById("dice").textContent = u.name+" AoC — AP −1 against it this phase";
+    save(); draw(); refreshTip(); renderActions();
+    return;
+  }
   if (!u){
     document.getElementById("dice").textContent = "Select a model first, then Announce.";
     return;
@@ -1386,6 +2094,39 @@ function announceAction(){
   }
   const group = unitGroup(u);
   const st = groupMoveState(u);
+  if (a.id === "commandReroll"){
+    doCommandReroll(u);
+    save(); draw(); refreshTip(); renderActions();
+    return;
+  } else if (a.id === "grenade"){
+    if (!hasGrenades(u)){
+      showWarn("<strong>Grenade:</strong> that unit needs GRENADES or EXPLOSIVES.");
+      return;
+    }
+    if (!canUseStrat("grenade", u)) return;
+    let tgt = targetId && S.units.find(x => x.id === targetId);
+    if (tgt && tgt.seat === u.seat) tgt = null;
+    if (!tgt){
+      const near = closestModel(u, enemiesOf(u));
+      tgt = near;
+    }
+    if (!tgt){ showWarn("<strong>Grenade:</strong> no enemy on the table."); return; }
+    const dist = edgeDist(u, tgt);
+    if (dist > 8.05 && !devOpenGates()){
+      showWarn("<strong>Grenade:</strong> "+tgt.name+" is "+dist.toFixed(1)+"″ away — need 8″.");
+      return;
+    }
+    if (!spendCP(1, "Grenade")) return;
+    markStratUsed("grenade");
+    const dice = [d6(),d6(),d6(),d6(),d6(),d6()];
+    const hits = dice.filter(n => n >= 4).length;
+    setSimpleRoll("Grenade", u.name, dice, hits+" mortal wound"+(hits===1?"":"s")+" on "+tgt.name+" (4+)", { unitId: u.id });
+    document.getElementById("dice").textContent = "Grenade ["+dice.join(" ")+"] → "+hits+" MW";
+    applyMortals(tgt, hits, u.name+" Grenade → "+tgt.name);
+    flagsOf(u).shot = true;
+    save(); draw(); refreshTip(); renderActions();
+    return;
+  }
   if (a.id === "advance"){
     if (st.declared && !devOpenGates()){
       showWarn("<strong>Advance:</strong> this unit already chose a move. Revert first.");
@@ -1397,7 +2138,7 @@ function announceAction(){
     const cap = (u.M||6)+d;
     logLine(u.name+(group.length>1?" unit":"")+" Advances "+d+"″ (M+"+d+" = "+cap+"″)");
     document.getElementById("dice").textContent = "Advance [ "+d+" ] → move up to "+cap+"″ from base edge";
-    setSimpleRoll("Advance", u.name, [d], "M"+(u.M||6)+" + "+d+" = "+cap+"″ from base edge");
+    setSimpleRoll("Advance", u.name, [d], "M"+(u.M||6)+" + "+d+" = "+cap+"″ from base edge", { unitId: u.id });
   } else if (a.id === "fallBack"){
     if (st.declared && !devOpenGates()){
       showWarn("<strong>Fall Back:</strong> this unit already chose a move. Revert first.");
@@ -1454,20 +2195,28 @@ function announceAction(){
     if (bad.length) showWarn("<strong>Ingress:</strong> "+bad.join("; ")+".");
     else hideWarn();
   } else if (a.id === "battleShock"){
-    if ((u.wounds??u.W) >= u.W){
-      showWarn("<strong>Battle-shock:</strong> this model is undamaged — tests are for damaged units.");
+    if (!unitDamaged(u)){
+      showWarn("<strong>Battle-shock:</strong> this unit is at starting Wounds — tests are for damaged units.");
+      return;
+    }
+    if (unitGroup(u).some(m => flagsOf(m).shockTested) && !devOpenGates()){
+      showWarn("<strong>Battle-shock:</strong> this unit already tested this Command.");
       return;
     }
     const syn = inSynapseRange(u);
     const d1=d6(), d2=d6(), d3 = syn ? d6() : 0;
     const tot = d1+d2+(syn?d3:0), ld=u.Ld||6;
     const fail = tot < ld;
-    flagsOf(u).battleShock = fail;
+    unitGroup(u).forEach(m => {
+      const fl = flagsOf(m);
+      fl.shockTested = true;
+      fl.battleShock = fail;
+    });
     const shown = syn ? [d1,d2,d3] : [d1,d2];
-    logLine(u.name+" Battle-shock "+shown.join("+")+"="+tot+" vs Ld "+ld+(syn?" (Synapse 3D6)":"")+" → "+(fail?"FAILED":"passed"));
-    document.getElementById("dice").textContent = "Battle-shock ["+shown.join("] [")+"] = "+tot+" vs Ld "+ld+" — "+(fail?"failed":"passed")+(syn?" (Synapse)":"");
-    setSimpleRoll("Battle-shock", u.name, shown, tot+" vs Ld "+ld+" — "+(fail?"failed":"passed")+(syn?" · Synapse 3D6":""));
-    if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed ("+(syn?"3D6":"2D6")+" &lt; Ld). Flagged this turn.");
+    logLine(u.name+" Battle-shock "+shown.join("+")+"="+tot+" vs Ld "+ld+(syn?" (Synapse 3D6)":"")+" → "+(fail?"FAILED · OC 0":"passed"));
+    document.getElementById("dice").textContent = "Battle-shock ["+shown.join("] [")+"] = "+tot+" vs Ld "+ld+" — "+(fail?"failed · OC 0":"passed")+(syn?" (Synapse)":"");
+    setSimpleRoll("Battle-shock", u.name, shown, tot+" vs Ld "+ld+" — "+(fail?"failed · OC 0":"passed")+(syn?" · Synapse 3D6":""), { unitId: u.id });
+    if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed ("+(syn?"3D6":"2D6")+" &lt; Ld). OC 0 until this seat’s next Command.");
     else hideWarn();
   } else if (a.id === "pileIn"){
     logLine(u.name+" Pile-in (honor 3″ toward nearest enemy)");
@@ -1504,6 +2253,7 @@ function chargeGate(atk){
   const f = flagsOf(atk);
   if (f.advanced) return "This unit Advanced — it cannot charge.";
   if (f.fellBack) return "This unit Fell Back — it cannot charge.";
+  if (f.chargeFailed) return "This model already failed a charge this phase.";
   return null;
 }
 function lockAllTerrain(reason){
@@ -1534,6 +2284,7 @@ function requestStartBattle(){
       showWarn("<strong>Start battle:</strong> place units for both seats first (Demo forces, or drop each side).");
       return false;
     }
+    if (!finishDeployIfReady()) return false;
     startBattle();
     return true;
   }
@@ -1548,6 +2299,7 @@ function requestStartBattle(){
     showWarn("<strong>Ready.</strong> Waiting for the other player to press Start battle.");
     return true;
   }
+  if (!finishDeployIfReady()) return false;
   startBattle();
   S.ready = { "0":false, "1":false };
   return true;
@@ -1566,12 +2318,14 @@ function startBattle(){
   (S.units||[]).forEach(u => {
     const f = flagsOf(u);
     f.advanced = false; f.fellBack = false; f.remainedStationary = false;
-    f.moved = false; f.shot = false; f.charged = false; f.fought = false;
+    f.moved = false; f.shot = false; f.charged = false; f.chargeFailed = false; f.fought = false;
     f.advanceInches = 0; f.chargeInches = 0; f.ingressed = false;
+    f.battleShock = false; f.shockTested = false;
     delete u.revert;
   });
   logLine("Battle started · Command · " + seatName(S.turn.activeSeat) + "'s turn");
   setTool("unit");
+  promptBattleShock();
 }
 function enterSetup(){
   S.turn.deploymentDone = false;
@@ -1630,6 +2384,10 @@ function setPhase(p){
   }
   if (inSetup()) return;
   const prev = S.turn.phase;
+  if (prev === "charge" && p !== "charge") resolveOpenCharges();
+  if (prev !== p){
+    (S.units || []).forEach(u => { if (flagsOf(u).aoc) flagsOf(u).aoc = false; });
+  }
   S.turn.phase = p;
   selectedAction = null;
   clearCombatPair();
@@ -1649,11 +2407,20 @@ document.getElementById("btnNext").onclick = () => {
     return;
   }
   const i = PHASES.indexOf(S.turn.phase);
+  if (S.turn.phase === "command"){
+    const pending = shockPending(S.turn.activeSeat);
+    if (pending.length){
+      promptBattleShock();
+    }
+  }
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
     const prev = S.turn.phase;
+    if (prev === "charge") resolveOpenCharges();
+    const scoringSeat = S.turn.activeSeat;
     if (S.turn.activeSeat === 0) S.turn.activeSeat = 1;
     else { S.turn.activeSeat = 0; S.turn.battleRound++; destroyLateReserves(); }
+    scoreMission(scoringSeat);
     beginSeatTurn(S.turn.activeSeat);
     S.turn.phase = "command";
     selectedAction = null;
@@ -1661,6 +2428,7 @@ document.getElementById("btnNext").onclick = () => {
     logLine("Battle round " + S.turn.battleRound + " · " + seatName(S.turn.activeSeat) + "'s turn · CP "+((S.cp&&S.cp[S.turn.activeSeat])||0));
     applyPhaseTool(prev);
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+    promptBattleShock();
   }
 };
 
@@ -1686,9 +2454,13 @@ function tipKey(){
 }
 function fmtWep(w, kind){
   if (!w) return "none";
-  if (kind === "ranged")
-    return w.name+": A"+w.A+", BS "+w.skill+"+, S"+w.S+", AP"+w.AP+", D"+w.D+", Range "+w.rng+"″";
-  return w.name+": A"+w.A+", WS "+w.skill+"+, S"+w.S+", AP"+w.AP+", D"+w.D;
+  const k = kind || w.kind || (w.rng ? "ranged" : "melee");
+  const skillBit = (w.skill == null)
+    ? (k === "ranged" ? "BS N/A" : "WS N/A")
+    : ((k === "ranged" ? "BS " : "WS ") + w.skill + "+");
+  if (k === "ranged")
+    return w.name+": A"+w.A+", "+skillBit+", S"+w.S+", AP"+w.AP+", D"+w.D+", Range "+w.rng+"″"+(w.tags&&w.tags.length?" ["+w.tags.join(", ")+"]":"");
+  return w.name+": A"+w.A+", "+skillBit+", S"+w.S+", AP"+w.AP+", D"+w.D+(w.tags&&w.tags.length?" ["+w.tags.join(", ")+"]":"");
 }
 function unitTip(u){
   const inv = u.Inv
@@ -1718,7 +2490,7 @@ function unitTip(u){
   }
   return {
     title: u.name,
-    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+(fnpOf(u)?" · FnP "+fnpOf(u)+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · base "+(u.baseMm||32)+"mm. "+ringNote,
+    short: "M "+u.M+"″ · T "+u.T+" · Sv "+u.Sv+"+"+(u.Inv?" · Inv "+u.Inv+"+":"")+(fnpOf(u)?" · FnP "+fnpOf(u)+"+":"")+" · W "+(u.wounds??u.W)+"/"+u.W+" · OC "+effectiveOC(u)+(flagsOf(u).battleShock?" (Battle-shocked)":"")+" · base "+(u.baseMm||32)+"mm. "+ringNote,
     more:
       "Move (M): up to "+u.M+"″. Rings are from the base edge — keep the edge on or inside the gold ring.\n"+
       "Toughness (T): "+u.T+" — compared to weapon Strength on the wound roll (equal Strength needs 4+).\n"+
@@ -1726,8 +2498,9 @@ function unitTip(u){
       inv+"\n"+
       "Wounds (W): "+(u.wounds??u.W)+" remaining of "+u.W+". Removed at 0.\n"+
       "Keywords: "+kw+".\n"+
-      "Ranged — "+fmtWep(u.ranged, "ranged")+".\n"+
-      "Melee — "+fmtWep(u.melee, "melee")+"."+
+      ((u.weapons && u.weapons.length)
+        ? ("Weapons:\n"+u.weapons.map(w => fmtWep(w)).join("\n")+".")
+        : ("Ranged — "+fmtWep(u.ranged, "ranged")+".\nMelee — "+fmtWep(u.melee, "melee")+"."))+
       coNote+
       "\n\nCoherency detail: models that share a unit must form one chain (each within 2″ of another) and every pair within 9″. Not a pile-on — a linked group. Walker alone = no check."
   };
@@ -1780,6 +2553,8 @@ function refreshGuide(){
   document.getElementById("guideDo").innerHTML = (block.do || []).map(t => "<li>"+t+"</li>").join("");
   document.getElementById("guideDont").innerHTML = (block.dont || []).map(t => "<li>"+t+"</li>").join("");
   document.getElementById("guideNext").textContent = block.next || "";
+  const about = document.getElementById("guideAbout");
+  if (about) about.textContent = "Teaching proxy. One faction per list. Normal = official pack/card. Purple = fan (Wahapedia) — check the app if a fight depends on it. Red = points only, no shooting. Onslaught 3000 / 4 DP is a house rule.";
 }
 function setGuide(on){
   guideOn = !!on;
@@ -1801,8 +2576,8 @@ function setRolls(on){
   btn.classList.toggle("gold", rollsOn);
   if (rollsOn) renderRollPanel();
 }
-function setSimpleRoll(title, name, rolls, note){
-  lastRoll = { kind:"simple", title, name, rolls, note };
+function setSimpleRoll(title, name, rolls, note, extra){
+  lastRoll = Object.assign({ kind:"simple", title, name, rolls, note, rerolled:false }, extra || {});
   renderRollPanel();
 }
 function renderRollPanel(){
@@ -2160,8 +2935,20 @@ function draw(){
   ctx.strokeStyle = "#c39a4e88"; ctx.lineWidth = 2; ctx.strokeRect(x0,y0,bw,bh);
   ctx.fillStyle = "#c39a4e99"; ctx.font = "600 11px Archivo,sans-serif"; ctx.textAlign="center";
   const midX = x0+bw/2;
-  ctx.fillText("SEAT 0  ·  12\"", midX, z0.y - 6);
-  ctx.fillText("SEAT 1  ·  12\"", midX, z1.y + 14);
+  ctx.fillText("SEAT 0  ·  12\" DZ", midX, z0.y - 6);
+  ctx.fillText("SEAT 1  ·  12\" DZ", midX, z1.y + 14);
+  (S.mission && S.mission.objectives || []).forEach(o => {
+    const p = toScreen(o.x, o.y);
+    const r = 0.79 * cam.scale;
+    const whoH = controllerOf(o);
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+    ctx.fillStyle = whoH===0 ? "#6b8fbf66" : whoH===1 ? "#bf6b6b66" : "#c39a4e44";
+    ctx.fill();
+    ctx.strokeStyle = "#c39a4ecc"; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.fillStyle = "#e9e3d4"; ctx.font = "700 11px Archivo,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(o.id, p.x, p.y);
+  });
 
   (S.terrain || []).forEach(t => drawPiece(t, selected && selected.kind==="t" && selected.id===t.id));
   const selU = selected && selected.kind==="u" ? S.units.find(u=>u.id===selected.id) : null;
@@ -2298,6 +3085,10 @@ function drawUnit(u){
   ctx.fillText((u.name||"?")[0], p.x, p.y);
   ctx.fillStyle="#e9e3d4"; ctx.font="10px Archivo,sans-serif"; ctx.textBaseline="alphabetic";
   ctx.fillText((u.wounds??u.W)+"/"+u.W, p.x, p.y+r+11);
+  if (flagsOf(u).battleShock){
+    ctx.fillStyle="#e0a060";
+    ctx.fillText("BS", p.x, p.y+r+22);
+  }
 }
 
 function selectObj(kind, obj){
@@ -2331,7 +3122,7 @@ function selectObj(kind, obj){
       document.getElementById("selName").textContent = obj.name;
       const inv = obj.Inv ? (" Inv"+obj.Inv+"+") : "";
       const fnp = fnpOf(obj) ? (" FnP"+fnpOf(obj)+"+") : "";
-      document.getElementById("selMeta").textContent = "M"+obj.M+" T"+obj.T+" Sv"+obj.Sv+"+"+inv+fnp+" W "+(obj.wounds??obj.W)+"/"+obj.W;
+      document.getElementById("selMeta").textContent = "M"+obj.M+" T"+obj.T+" Sv"+obj.Sv+"+"+inv+fnp+" W "+(obj.wounds??obj.W)+"/"+obj.W+" OC "+effectiveOC(obj)+(flagsOf(obj).battleShock?" (BS)":"");
       lock.style.display = "none";
       if (rotL) rotL.style.display = "";
       if (rotR) rotR.style.display = "";
@@ -2395,53 +3186,66 @@ function isDemoLobby(seat){
   const rec = S.lobby && S.lobby.army && S.lobby.army[String(seat == null ? mySeat : seat)];
   return !!(rec && rec.id === "__demo__");
 }
+function dropSeat(){
+  return practice ? placeSeat : mySeat;
+}
 function demoForces(){
   if (!inSetup()){ logLine("Demo forces — return to Setup first"); return; }
-  const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(mySeat)];
+  const seat = dropSeat();
+  const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(seat)];
   if (rec && rec.id && rec.id !== "__demo__"){
     const list = window.PTSheets.listById ? PTSheets.listById(rec.id) : null;
     if (list && list.units && list.units.length){
-      showWarn("<strong>Saved army:</strong> Demo is off while this list is loaded. Pick Demo Forces in the lobby to use teaching tokens.");
+      showWarn("<strong>Saved army:</strong> Demo is off on " + seatName(seat) + " while that list is loaded. Switch edge or pick Demo Forces for that seat in the lobby.");
       return;
     }
   }
-  if (!practice){
-    placeDemoSeat(mySeat);
-    selectObj(null); logLine("Demo forces — " + seatName(mySeat)); save(); draw();
-    return;
-  }
-  placeDemoSeat(0);
-  placeDemoSeat(1);
-  selectObj(null); logLine("Demo forces deployed"); save(); draw();
+  placeDemoSeat(seat);
+  selectObj(null); logLine("Demo forces — " + seatName(seat)); save(); draw();
 }
 function addDrop(key){
   if (!inSetup()){ logLine("Place units in Setup"); return; }
-  const y = mySeat===0 ? 6 : H-6;
-  const u = dropUnit(key, mySeat, W/2, y, key==="inf"?"solo"+uidn:null);
-  selectObj("u", u); logLine("Placed "+u.name); save(); draw();
+  const seat = dropSeat();
+  const y = seat===0 ? 6 : H-6;
+  const u = dropUnit(key, seat, W/2, y, key==="inf"?"solo"+uidn:null);
+  selectObj("u", u); logLine("Placed "+u.name+" — "+seatName(seat)); save(); draw();
 }
 function wepCopy(w){
   if (!w) return null;
+  const n = (window.PTSheets && PTSheets.normalizeWeapon) ? PTSheets.normalizeWeapon(w) : null;
+  if (n) return n;
   const d = (typeof w.D === "number") ? w.D : 1;
-  return { name:w.name, A:w.A||1, skill:w.skill||4, S:w.S||4, AP:w.AP||0, D:d, rng:w.rng||0, tags:(w.tags||[]).slice() };
+  return { name:w.name, kind:w.kind, A:w.A||1, skill:w.skill||4, S:w.S||4, AP:w.AP||0, D:d, rng:w.rng||0, tags:(w.tags||[]).slice() };
+}
+function sheetKeyOf(entry){
+  if (entry && entry.sheetKey && sheetOf(entry.sheetKey)) return entry.sheetKey;
+  const sheets = DATASHEETS || {};
+  const hit = Object.keys(sheets).find(k => {
+    const s = sheets[k];
+    return s && ((entry && entry.sheetId && s.id === entry.sheetId) || (entry && entry.name && s.name === entry.name));
+  });
+  return hit || (entry && entry.sheetKey) || null;
 }
 function dropArmyEntry(entry, seat, quiet){
   if (!entry) return;
-  const sheet = sheetOf(entry.sheetKey) || Object.keys(DATASHEETS).map(k => DATASHEETS[k]).find(s => s && s.id === entry.sheetId);
+  const key = sheetKeyOf(entry);
+  const sheet = sheetOf(key) || Object.keys(DATASHEETS).map(k => DATASHEETS[k]).find(s => s && s.id === entry.sheetId);
   if (!sheet){ logLine("Saved unit sheet missing"); return; }
   const n = Math.max(1, entry.count || 1);
+  const gear = (entry.gear && entry.gear.length) ? entry.gear : (window.PTSheets.defaultGear ? PTSheets.defaultGear(sheet, n) : []);
   const g = "g" + seat + "_" + uidn;
   const y = seat === 0 ? 6 : H - 6;
   const startX = 14;
   for (let i = 0; i < n; i++){
-    const u = dropUnit(entry.sheetKey, seat, startX + i * 1.45, y, g);
+    const u = dropUnit(key, seat, startX + i * 1.45, y, g);
     if (!u) continue;
     u.armyId = entry.id;
-    const weps = window.PTSheets.weaponsForIndex(sheet, entry.gear, i);
-    u.weapons = weps.map(w => Object.assign({ kind: w.kind }, wepCopy(w), { kind: w.kind, tags: (w.tags || []).slice() }));
-    const ranged = weps.find(w => w.kind === "ranged");
+    const weps = window.PTSheets.weaponsForIndex(sheet, gear, i);
+    u.weapons = weps.map(w => wepCopy(w)).filter(Boolean);
+    const ranged = weps.filter(w => w.kind === "ranged");
     const melee = weps.find(w => w.kind === "melee");
-    if (ranged) u.ranged = wepCopy(ranged);
+    const main = ranged.find(w => window.PTSheets.isSidearm ? !PTSheets.isSidearm(w) : true) || ranged[0];
+    if (main) u.ranged = wepCopy(main);
     if (melee) u.melee = wepCopy(melee);
     const prof = window.PTSheets.profileForIndex(sheet, i, n);
     u.name = prof.name || entry.name || sheet.name;
@@ -2459,8 +3263,9 @@ function dropArmyEntry(entry, seat, quiet){
 function refreshArmyPick(){
   const sel = document.getElementById("armyPick");
   if (!sel || !window.PTSheets || !PTSheets.loadArmy) return;
-  const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(mySeat)];
-  const list = rec && rec.id && PTSheets.listById ? PTSheets.listById(rec.id) : PTSheets.loadArmy();
+  const seat = dropSeat();
+  const rec = S.lobby && S.lobby.committed && S.lobby.army && S.lobby.army[String(seat)];
+  const list = rec && rec.id && rec.id !== "__demo__" && PTSheets.listById ? PTSheets.listById(rec.id) : null;
   const units = (list && list.units) || [];
   sel.innerHTML = '<option value="">Army units…</option>' + units.map(u =>
     `<option value="${u.id}">${u.name} ×${u.count}${u.pts != null ? " · "+u.pts : ""}</option>`
@@ -2469,6 +3274,14 @@ function refreshArmyPick(){
   document.querySelectorAll("#rowUnits [data-drop], #btnDemo").forEach(b => {
     if (b) b.style.display = showDemo ? "" : "none";
   });
+  const ps = document.getElementById("placeSeat");
+  if (ps){
+    ps.style.display = practice ? "" : "none";
+    if (practice){
+      ps.innerHTML = `<option value="0">${esc(seatName(0))} edge</option><option value="1">${esc(seatName(1))} edge</option>`;
+      ps.value = String(placeSeat);
+    }
+  }
 }
 
 document.getElementById("btnMenu").onclick = () => { location.href = "./index.html"; };
@@ -2569,10 +3382,17 @@ document.getElementById("btnArmyDrop").onclick = () => {
   if (!inSetup()){ logLine("Place units in Setup"); return; }
   const id = document.getElementById("armyPick").value;
   if (!id){ logLine("Pick a saved unit first (Army generator)"); return; }
-  const rec = S.lobby && S.lobby.army && S.lobby.army[String(mySeat)];
-  const list = rec && rec.id && PTSheets.listById ? PTSheets.listById(rec.id) : PTSheets.loadArmy();
+  const seat = dropSeat();
+  const rec = S.lobby && S.lobby.army && S.lobby.army[String(seat)];
+  const list = rec && rec.id && rec.id !== "__demo__" && PTSheets.listById ? PTSheets.listById(rec.id) : null;
   const entry = ((list && list.units) || []).find(u => u.id === id);
-  dropArmyEntry(entry, mySeat);
+  if (!entry){ logLine("That unit is not on " + seatName(seat) + "’s list"); return; }
+  dropArmyEntry(entry, seat);
+};
+const placeSeatEl = document.getElementById("placeSeat");
+if (placeSeatEl) placeSeatEl.onchange = () => {
+  placeSeat = placeSeatEl.value === "1" ? 1 : 0;
+  refreshArmyPick();
 };
 refreshArmyPick();
 renderLobby();
@@ -2586,6 +3406,12 @@ document.getElementById("btnDeepStrike").onclick = () => {
   if (!u){ document.getElementById("dice").textContent = "Select a unit, then Deep Strike."; return; }
   toggleDeepStrike(u);
 };
+const btnBeginDrops = document.getElementById("btnBeginDrops");
+if (btnBeginDrops) btnBeginDrops.onclick = beginDrops;
+const btnDeployUnit = document.getElementById("btnDeployUnit");
+if (btnDeployUnit) btnDeployUnit.onclick = deploySelectedUnit;
+const btnScoutMove = document.getElementById("btnScoutMove");
+if (btnScoutMove) btnScoutMove.onclick = doScoutMove;
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
 document.getElementById("btnChargeRoll").onclick = rollCharge;
 document.getElementById("btnAnnounce").onclick = announceAction;
@@ -2696,7 +3522,8 @@ function pickWeapon(atk, tgt){
       const cq = guns.find(w => window.PTSheets.isCloseQuarters(w));
       if (cq) return { kind:"ranged", w: cq, dist, er, cq: true };
     }
-    return { kind:"ranged", w: guns[0] || atk.ranged, dist, er };
+    const main = guns.find(w => window.PTSheets.isSidearm ? !PTSheets.isSidearm(w) : !window.PTSheets.isCloseQuarters(w)) || guns[0] || atk.ranged;
+    return { kind:"ranged", w: main, dist, er };
   }
   if (er) return { kind:"melee", w: atk.melee, dist, er };
   return { kind:"ranged", w: atk.ranged, dist, er };
@@ -2715,7 +3542,7 @@ function renderCombatBar(){
   const bits = [
     pw.w.name,
     "A"+pw.w.A,
-    (pw.kind==="ranged"?"BS":"WS")+pw.w.skill+"+",
+    (pw.w.skill == null) ? ((pw.kind==="ranged"?"BS":"WS")+" N/A") : ((pw.kind==="ranged"?"BS":"WS")+pw.w.skill+"+"),
     "S"+pw.w.S+" AP"+pw.w.AP+" D"+pw.w.D,
     pw.kind==="ranged" ? (pw.w.rng+"\" / "+pw.dist.toFixed(1)+"\"") : (pw.er ? "ER" : pw.dist.toFixed(1)+"\""),
     cov ? ("Cover "+cov+" −1 hit") : "no cover"
@@ -2747,6 +3574,8 @@ function resolveAttack(){
   const measure = closestModel(atk, mates) || tgt;
   const pw = pickWeapon(atk, measure);
   const w = pw.w;
+  const tgtAoc = unitGroup(tgt).some(m => flagsOf(m).aoc);
+  const atkAP = tgtAoc ? Math.min(0, (Number(w.AP)||0) + 1) : (w.AP||0);
   if (pw.kind === "ranged"){
     if (unitInER(atk, mates) && S.turn.phase === "shooting" && !devOpenGates()){
       if (!window.PTSheets.isCloseQuarters(w)){
@@ -2766,32 +3595,34 @@ function resolveAttack(){
   }
   const cov = inCover(measure, atk);
   const hitMod = cov ? -1 : 0;
-  const hitNeed = Math.max(2, Math.min(7, w.skill - hitMod));
+  const torrent = wepTag(w, "TORRENT") || w.skill == null;
+  const hitNeed = torrent ? null : Math.max(2, Math.min(7, (w.skill || 4) - hitMod));
   const firstRec = pickRecipient(mates, preferAllocId) || measure;
   const synMelee = pw.kind === "melee" && inSynapseRange(atk);
   const atkS = (Number(w.S) || 0) + (synMelee ? 1 : 0);
   const wn = woundNeed(atkS, firstRec.T);
-  const armourNeed0 = Math.max(2, Math.min(7, firstRec.Sv - (w.AP||0)));
+  const armourNeed0 = Math.max(2, Math.min(7, firstRec.Sv - atkAP));
   const saveLabel = firstRec.Inv
-    ? `Inv ${firstRec.Inv}+ or Sv ${armourNeed0}+ (AP${w.AP})`
-    : `Sv ${armourNeed0}+ (AP${w.AP})`;
+    ? `Inv ${firstRec.Inv}+ or Sv ${armourNeed0}+ (AP${atkAP})`
+    : `Sv ${armourNeed0}+ (AP${atkAP})`;
   const hits=[], wounds=[], saves=[];
   const dice = [];
   let hitN=0, woundN=0, unsaved=0, dmg=0;
   const killed = [];
-  for (let i=0;i<w.A;i++){
+  const attacks = rollExpr(w.A);
+  for (let i=0;i<attacks;i++){
     const entry = { hit: null, wound: null, save: null, dmg: 0, onto: null };
     const rec = pickRecipient(unitModels(tgt), preferAllocId);
     if (!rec){ dice.push(entry); break; }
-    const h = d6();
-    const hit = (h===1) ? false : (h===6 || h>=hitNeed);
+    const h = torrent ? 6 : d6();
+    const hit = torrent ? true : ((h===1) ? false : (h===6 || h>=hitNeed));
     entry.hit = {
       roll: h,
       need: hitNeed,
       ok: hit,
-      modNote: hitMod ? ` (skill ${w.skill}+, cover ${hitMod})` : ` (skill ${w.skill}+)`
+      modNote: torrent ? " (Torrent auto-hit)" : (hitMod ? ` (skill ${w.skill}+, cover ${hitMod})` : ` (skill ${w.skill}+)`)
     };
-    hits.push(h+(hit?"":"×"));
+    hits.push(torrent ? "auto" : (h+(hit?"":"×")));
     if (!hit){ dice.push(entry); continue; }
     hitN++;
     const wr = d6();
@@ -2838,7 +3669,7 @@ function resolveAttack(){
       }
       continue;
     }
-    const armourNeed = Math.max(2, Math.min(7, rec.Sv - (w.AP||0)));
+    const armourNeed = Math.max(2, Math.min(7, rec.Sv - atkAP));
     const sv = d6();
     let saved = false, how = "Sv "+armourNeed+"+";
     if (sv === 1) saved = false;
@@ -2852,7 +3683,7 @@ function resolveAttack(){
     saves.push(sv+(saved?(" "+how):" fail")+" → "+rec.name);
     if (saved){ dice.push(entry); continue; }
     unsaved++;
-    let deal = Math.min(w.D, rec.wounds ?? rec.W);
+    let deal = Math.min(rollExpr(w.D), rec.wounds ?? rec.W);
     const fnp = fnpOf(rec);
     const fnpDice = [];
     if (fnp && deal > 0){
@@ -2889,13 +3720,15 @@ function resolveAttack(){
   if (destroyed) targetId = null;
   else if (!S.units.some(u => u.id === targetId)) targetId = left[0].id;
   lastRoll = {
+    atkId: atk.id,
+    tgtId: tgt.id,
     atkName: atk.name + " (" + seatName(atk.seat) + ")",
     tgtName: unitLabel(tgt),
     wepName: w.name,
     kind: pw.kind,
-    attacks: w.A,
+    attacks: attacks,
     skill: w.skill,
-    S: atkS, AP: w.AP, D: w.D, T: firstRec.T, synapse: synMelee,
+    S: atkS, AP: atkAP, D: w.D, T: firstRec.T, synapse: synMelee,
     cover: cov,
     hitNeed, woundNeed: wn, saveLabel,
     hitN, woundN, unsaved, dmg,
@@ -2904,7 +3737,7 @@ function resolveAttack(){
     tgtWoundsLeft: left.reduce((n,m) => n + Math.max(0, m.wounds ?? m.W), 0),
     dice
   };
-  let line = atk.name+" → "+unitLabel(tgt)+" "+w.name+": hit "+hitN+"/"+w.A+" wound "+woundN+" dmg "+dmg;
+  let line = atk.name+" → "+unitLabel(tgt)+" "+w.name+": hit "+hitN+"/"+attacks+" wound "+woundN+" dmg "+dmg;
   if (cov) line += " (cover −1)";
   if (killed.length) line += " — removed "+killed.join(", ");
   if (destroyed) line += " — unit destroyed";
@@ -3084,6 +3917,13 @@ function endPtr(e){
         if (dist > 0.2){
           if (inSetup()){
             logLine("Placed "+u.name);
+            if (S.deploy && S.deploy.on && (S.deploy.step === "drops" || S.deploy.step === "infiltrate")){
+              commitPlacedUnit(u);
+            }
+            if (S.deploy && S.deploy.step === "scouts" && flagsOf(u).scouted){
+              const nd = nearestEnemyDist(u);
+              if (nd <= 8.01) showWarn("<strong>Scouts:</strong> end more than 8″ from enemies (now "+nd.toFixed(1)+"″).");
+            }
           } else {
             const f = flagsOf(u);
             if (f.remainedStationary){
@@ -3104,13 +3944,13 @@ function endPtr(e){
             if (bad.length) showWarn("<strong>Ingress:</strong> "+bad.join("; ")+".");
           }
           if (S.turn.phase === "charge"){
-            const cr = chargeFor(u.id);
-            if (cr && cr.x != null){
+            const cr = chargeRecord(u.id);
+            if (cr && !cr.failed && cr.x != null){
               const travelled = Math.hypot(u.x-cr.x, u.y-cr.y);
               if (travelled > cr.total + 0.15){
-                showWarn("<strong>Charge:</strong> moved "+travelled.toFixed(1)+"″ — roll was "+cr.total+"″. End inside the gold ring.");
+                failCharge(u, "moved "+travelled.toFixed(1)+"″ on a "+cr.total+"″ roll");
               } else if (!inEngagement(u)){
-                showWarn("<strong>Charge:</strong> must end within 2″ Engagement Range of an enemy.");
+                failCharge(u, "ended "+edgeDist(u, closestModel(u, enemiesOf(u)) || u).toFixed(1)+"″ from the nearest enemy");
               }
             }
           }

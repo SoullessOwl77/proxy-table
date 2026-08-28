@@ -86,6 +86,10 @@ td input{width:72px;}
       <select id="listPick"></select>
       <button class="btn" type="button" id="btnNewList">New list</button>
       <button class="btn danger" type="button" id="btnDelList">Delete list</button>
+      <button class="btn" type="button" id="btnExportList">Export list</button>
+      <button class="btn" type="button" id="btnExportAll">Export all</button>
+      <button class="btn" type="button" id="btnImportList">Import</button>
+      <input type="file" id="listFile" accept="application/json,.json" hidden>
     </div>
     <label class="field">List name</label>
     <input id="listName">
@@ -142,7 +146,7 @@ td input{width:72px;}
         <details><summary>Salamanders starter</summary>
           <p>Search “salamanders” or open Space Marines. Useful pieces: Vulkan He’stan (official card, points still review), Adrax Agatone, Infernus, Aggressors, Eradicators, Firestrike. Detachment: Forgefather’s Seekers (2 DP) or Firestorm Assault Force (2 DP). Land Raider Redeemer is not in the catalog yet.</p></details>
         <details><summary>Where does this list go?</summary>
-          <p>Saved on this device. Load it from the 40K table when you start a game — only that army’s units should appear, not Demo, once the list has models. Need the same list on a second PC? Export is not built yet; rebuild or copy the device.</p></details>
+          <p>Saved on this device. Load it from the 40K table when you start a game — only that army’s units should appear, not Demo, once the list has models. Second PC or a friend: Export list (one JSON) or Export all. Import adds a new list; it does not overwrite the one you already have.</p></details>
         <details><summary>Official links</summary>
           <p><a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a> · <a href="https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" target="_blank" rel="noopener">Core Rules and Faction Packs</a>. Points here are a snapshot, not a live scrape.</p></details>
       </div>
@@ -363,6 +367,52 @@ document.getElementById("listName").onchange = persistListMeta;
 document.getElementById("listSize").onchange = persistListMeta;
 document.getElementById("fEnh").onchange = persistListMeta;
 document.getElementById("detBody").onchange = persistListMeta;
+function downloadJson(filename, obj){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+document.getElementById("btnExportList").onclick = () => {
+  persistListMeta();
+  const payload = PT.exportList(army.id);
+  const name = PT.slug((payload.list && payload.list.name) || "list") + ".pt40k.json";
+  downloadJson(name, payload);
+  document.getElementById("saveMsg").textContent = "Exported " + ((payload.list && payload.list.name) || "list") + ".";
+};
+document.getElementById("btnExportAll").onclick = () => {
+  persistListMeta();
+  downloadJson("proxy-table-lists.pt40k.json", PT.exportAllLists());
+  document.getElementById("saveMsg").textContent = "Exported all lists on this device.";
+};
+document.getElementById("btnImportList").onclick = () => document.getElementById("listFile").click();
+document.getElementById("listFile").onchange = () => {
+  const file = document.getElementById("listFile").files && document.getElementById("listFile").files[0];
+  document.getElementById("listFile").value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let raw;
+    try { raw = JSON.parse(String(reader.result || "")); }
+    catch (_) {
+      document.getElementById("saveMsg").textContent = "That file is not JSON.";
+      return;
+    }
+    const result = PT.importLists(raw);
+    document.getElementById("saveMsg").textContent = result.message;
+    if (!result.ok) return;
+    army = PT.loadArmy();
+    faction = army.faction || listFactionFromUnits()[0] || faction;
+    const nk = firstKeyForFaction(faction);
+    if (nk) key = nk;
+    renderLists();
+    renderSaved();
+    loadSheet();
+  };
+  reader.readAsText(file);
+};
 document.getElementById("btnNewList").onclick = () => {
   const name = prompt("List name", "Strike Force");
   if (name == null) return;
