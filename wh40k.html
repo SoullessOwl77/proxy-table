@@ -332,8 +332,9 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn" id="btnDeepStrike">Deep Strike</button>
     <button class="btn gold" id="btnBeginDrops">Begin drops</button>
     <button class="btn gold" id="btnDeployUnit">Deploy unit</button>
+    <button class="btn gold" id="btnPassDrop">Next player</button>
     <button class="btn" id="btnScoutMove">Scout move</button>
-    <span class="hint" id="reserveSetupHint">Formation first: mark Reserves, then Begin drops. Defender places first.</span>
+    <span class="hint" id="reserveSetupHint">Formation first: mark Reserves, then Begin drops. Place, then Next player — that locks the drop.</span>
   </div>
   <div class="row" id="rowReserves" style="display:none">
     <span class="act-kicker">Reserves</span>
@@ -403,7 +404,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.20-deploy-mission";
+const BUILD = "v2.16.21-drop-pass";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -1395,7 +1396,7 @@ function canDragUnit(u){
   if (inSetup()){
     if (S.deploy && S.deploy.on && (S.deploy.step === "drops" || S.deploy.step === "infiltrate" || S.deploy.step === "scouts")){
       if (u.reserved) return false;
-      if (S.deploy.step !== "scouts" && u.seat !== S.deploy.dropSeat && flagsOf(u).deployed) return false;
+      if (S.deploy.step !== "scouts" && flagsOf(u).deployed) return false;
       if (S.deploy.step !== "scouts" && u.seat !== S.deploy.dropSeat) return false;
     }
     return true;
@@ -1651,6 +1652,25 @@ function passDropSeat(){
     return;
   }
   S.deploy.dropSeat = S.deploy.dropSeat === 0 ? 1 : 0;
+  if (practice) placeSeat = S.deploy.dropSeat;
+}
+function uniqueUnits(list){
+  const seen = new Set();
+  return (list || []).filter(u => {
+    const k = u.groupId || u.id;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+function placingUnits(seat){
+  return uniqueUnits((S.units || []).filter(u =>
+    !u.reserved && u.seat === seat && !flagsOf(u).stayReserve && !flagsOf(u).deployed
+  ));
+}
+function reserveViewSeat(){
+  if (S.deploy && S.deploy.on && S.deploy.step !== "formation") return S.deploy.dropSeat;
+  return practice ? placeSeat : mySeat;
 }
 function maybeAdvanceDeployStep(){
   if (!S.deploy || !S.deploy.on) return;
@@ -1680,6 +1700,7 @@ function beginDrops(){
   S.deploy.step = "drops";
   S.deploy.dropSeat = S.deploy.defender;
   S.deploy.extra = 0;
+  if (practice) placeSeat = S.deploy.dropSeat;
   const capNote = [0,1].map(seat => {
     const r = reservesPts(seat);
     if (r.armyPts && r.n) return seatName(seat)+" Reserves "+r.n+" models (soft cap 50% of "+r.armyPts+" pts)";
@@ -1719,25 +1740,51 @@ function deploySelectedUnit(){
     m.y = y;
   });
   selectObj("u", u);
-  logLine("Placing "+u.name+" — drag wholly into the DZ, then the drop passes");
-  showWarn("<strong>Place:</strong> drag "+u.name+" into "+seatName(u.seat)+"’s 12″ zone"+(S.deploy.step==="infiltrate"?" (Infiltrators may sit outside, >8″ from enemy DZ/units)":"")+".");
+  logLine("Placing "+u.name+" — drag in the DZ, then Next player to lock and pass");
+  showWarn("<strong>Place:</strong> drag "+u.name+" into "+seatName(u.seat)+"’s 12″ zone, then Next player. Not locked until you pass."+(S.deploy.step==="infiltrate"?" Infiltrators may sit outside, >8″ from enemy DZ/units.":""));
   save(); draw(); renderReserveRow();
 }
-function commitPlacedUnit(u){
-  if (!u || !S.deploy || !S.deploy.on) return;
-  if (S.deploy.step !== "drops" && S.deploy.step !== "infiltrate") return;
-  if (u.reserved) return;
-  if (flagsOf(u).deployed) return;
-  const bad = deployIssues(u);
-  if (bad.length){
-    showWarn("<strong>Deploy:</strong> "+bad.join("; ")+".");
+function passDeployPriority(){
+  if (!inSetup() || !S.deploy || !S.deploy.on) return;
+  if (S.deploy.step !== "drops" && S.deploy.step !== "infiltrate"){
+    showWarn("<strong>Next player:</strong> only during drops / Infiltrators.");
     return;
   }
-  unitGroup(u).forEach(m => { flagsOf(m).deployed = true; });
-  if (isTitanic(u) && S.deploy.step === "drops"){
-    S.deploy.dropSeat = u.seat === 0 ? 1 : 0;
+  const seat = S.deploy.dropSeat;
+  if (!practice && mySeat !== seat){
+    showWarn("<strong>Next player:</strong> wait — "+seatName(seat)+"’s drop.");
+    return;
+  }
+  const placing = placingUnits(seat);
+  if (!placing.length){
+    if (dropQueue(seat).length){
+      showWarn("<strong>Next player:</strong> "+seatName(seat)+" still has a unit to Deploy, or mark it Reserves before Begin drops.");
+      return;
+    }
+    passDropSeat();
+    maybeAdvanceDeployStep();
+    renderReserveRow(); refreshArmyPick(); save(); draw();
+    showWarn("<strong>Next:</strong> "+seatName(S.deploy.dropSeat)+".");
+    return;
+  }
+  for (const u of placing){
+    const bad = deployIssues(u);
+    if (bad.length){
+      showWarn("<strong>Next player:</strong> "+u.name+" — "+bad.join("; ")+".");
+      return;
+    }
+  }
+  let titanic = false;
+  placing.forEach(u => {
+    unitGroup(u).forEach(m => { flagsOf(m).deployed = true; });
+    if (isTitanic(u) && S.deploy.step === "drops") titanic = true;
+    logLine(u.name+" drop locked");
+  });
+  if (titanic){
+    S.deploy.dropSeat = seat === 0 ? 1 : 0;
     S.deploy.extra = 1;
-    logLine(u.name+" is Titanic — "+seatName(S.deploy.dropSeat)+" places two units");
+    if (practice) placeSeat = S.deploy.dropSeat;
+    logLine("Titanic — "+seatName(S.deploy.dropSeat)+" places two units");
   } else {
     passDropSeat();
   }
@@ -1745,10 +1792,9 @@ function commitPlacedUnit(u){
   if (S.deploy.step === "scouts"){
     showWarn("<strong>Scouts:</strong> select a Scout unit and tap Scout move, or Start battle when you are done.");
   } else {
-    showWarn("<strong>Next drop:</strong> "+seatName(S.deploy.dropSeat)+".");
+    showWarn("<strong>Next player:</strong> "+seatName(S.deploy.dropSeat)+" places.");
   }
-  logLine(u.name+" deployed · next "+seatName(S.deploy.dropSeat));
-  save(); draw(); renderReserveRow(); renderActions();
+  renderReserveRow(); refreshArmyPick(); save(); draw(); renderActions();
 }
 function doScoutMove(){
   if (!inSetup() || !S.deploy || S.deploy.step !== "scouts"){
@@ -1778,14 +1824,22 @@ function doScoutMove(){
 }
 function finishDeployIfReady(){
   if (!S.deploy || !S.deploy.on) return true;
-  const leftover = formationUnits().filter(u => S.deploy.step !== "scouts" || !isInfiltrator(u) && !flagsOf(u).stayReserve);
   if (S.deploy.step === "formation"){
     showWarn("<strong>Start battle:</strong> mark Reserves, then Begin drops and place units.");
     return false;
   }
   if (S.deploy.step === "drops" || S.deploy.step === "infiltrate"){
-    if (dropQueue(0).length || dropQueue(1).length){
-      showWarn("<strong>Start battle:</strong> "+seatName(S.deploy.dropSeat)+" still has units to place.");
+    const left0 = uniqueUnits(dropQueue(0));
+    const left1 = uniqueUnits(dropQueue(1));
+    const placing = placingUnits(0).concat(placingUnits(1));
+    if (placing.length){
+      showWarn("<strong>Start battle:</strong> lock the current drop with Next player first.");
+      return false;
+    }
+    if (left0.length || left1.length){
+      const who = left0.length ? 0 : 1;
+      const names = uniqueUnits(left0.concat(left1)).slice(0, 3).map(u => u.name).join(", ");
+      showWarn("<strong>Start battle:</strong> "+seatName(who)+" still has units to place ("+names+"). Units marked Strategic Reserves can stay off the table.");
       return false;
     }
   }
@@ -1835,19 +1889,34 @@ function renderReserveRow(){
   const box = document.getElementById("reserveBtns");
   const hint = document.getElementById("reserveLiveHint");
   if (!row || !box) return;
-  const list = reservedUnits();
+  const view = reserveViewSeat();
+  const step = S.deploy && S.deploy.on ? S.deploy.step : "";
+  let list;
+  let kicker = "Reserves";
+  if (inSetup() && step === "formation"){
+    list = uniqueUnits(reservedUnits(view));
+    kicker = seatName(view)+" formation";
+  } else if (inSetup() && (step === "drops" || step === "infiltrate")){
+    list = uniqueUnits(dropQueue(view));
+    kicker = seatName(view)+" to place";
+  } else {
+    list = uniqueUnits(reservedUnits(inSetup() && practice ? view : (inSetup() ? mySeat : null)));
+  }
+  const kickEl = row.querySelector(".act-kicker");
+  if (kickEl) kickEl.textContent = kicker;
   row.style.display = list.length ? "" : "none";
   box.innerHTML = "";
   list.forEach(u => {
     const b = document.createElement("button");
     b.className = "btn sm" + (selected && selected.id===u.id ? " on" : "");
-    b.textContent = u.name+" P"+u.seat+(hasDeepStrike(u)?" DS":"");
+    const sr = flagsOf(u).stayReserve;
+    b.textContent = u.name+(sr?" · SR":"")+(hasDeepStrike(u)?" DS":"");
     b.onclick = () => { selectObj("u", u); renderReserveRow(); renderActions(); refreshTip(); };
     box.appendChild(b);
   });
   if (hint){
-    if (inSetup() && S.deploy && S.deploy.on && S.deploy.step === "formation") hint.textContent = "Formation: tap a unit, Reserves = stays off the table. Then Begin drops.";
-    else if (inSetup() && S.deploy && S.deploy.on) hint.textContent = S.deploy.step+" · "+seatName(S.deploy.dropSeat)+" places next. Select a unit here, then Deploy unit.";
+    if (inSetup() && step === "formation") hint.textContent = "Only "+seatName(view)+" is listed. Reserves = stays off the table. Switch edge to see the other list. Then Begin drops.";
+    else if (inSetup() && (step === "drops" || step === "infiltrate")) hint.textContent = seatName(view)+" places. Select one → Deploy unit → drag → Next player to lock.";
     else if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
     else hint.textContent = "Movement: select one, Optional → Ingress → Announce.";
   }
@@ -2275,21 +2344,25 @@ function requestStartBattle(){
   const mine = seatUnitsOnTable(mySeat);
   const otherSeat = mySeat === 0 ? 1 : 0;
   const theirs = seatUnitsOnTable(otherSeat);
-  if (!mine.length){
-    showWarn("<strong>Start battle:</strong> deploy at least one of your units first.");
+  if (!mine.length && !((S.units||[]).some(u => u.seat === mySeat && flagsOf(u).stayReserve))){
+    showWarn("<strong>Start battle:</strong> deploy at least one of your units, or mark the rest Strategic Reserves before Begin drops.");
     return false;
   }
   if (practice){
-    if (!theirs.length){
-      showWarn("<strong>Start battle:</strong> place units for both seats first (Demo forces, or drop each side).");
+    if (!theirs.length && !((S.units||[]).some(u => u.seat === otherSeat && flagsOf(u).stayReserve))){
+      showWarn("<strong>Start battle:</strong> the other seat needs units on the table or marked Strategic Reserves.");
+      return false;
+    }
+    if (!mine.length && !theirs.length){
+      showWarn("<strong>Start battle:</strong> at least one unit must be on the table.");
       return false;
     }
     if (!finishDeployIfReady()) return false;
     startBattle();
     return true;
   }
-  if (!theirs.length){
-    showWarn("<strong>Start battle:</strong> wait until your opponent has at least one unit on the table.");
+  if (!theirs.length && !((S.units||[]).some(u => u.seat === otherSeat && flagsOf(u).stayReserve))){
+    showWarn("<strong>Start battle:</strong> wait until your opponent has a unit on the table or in Strategic Reserves.");
     return false;
   }
   if (!S.ready) S.ready = { "0":false, "1":false };
@@ -3278,6 +3351,7 @@ function refreshArmyPick(){
   if (ps){
     ps.style.display = practice ? "" : "none";
     if (practice){
+      if (S.deploy && S.deploy.on && S.deploy.step !== "formation") placeSeat = S.deploy.dropSeat;
       ps.innerHTML = `<option value="0">${esc(seatName(0))} edge</option><option value="1">${esc(seatName(1))} edge</option>`;
       ps.value = String(placeSeat);
     }
@@ -3393,6 +3467,7 @@ const placeSeatEl = document.getElementById("placeSeat");
 if (placeSeatEl) placeSeatEl.onchange = () => {
   placeSeat = placeSeatEl.value === "1" ? 1 : 0;
   refreshArmyPick();
+  renderReserveRow();
 };
 refreshArmyPick();
 renderLobby();
@@ -3410,6 +3485,8 @@ const btnBeginDrops = document.getElementById("btnBeginDrops");
 if (btnBeginDrops) btnBeginDrops.onclick = beginDrops;
 const btnDeployUnit = document.getElementById("btnDeployUnit");
 if (btnDeployUnit) btnDeployUnit.onclick = deploySelectedUnit;
+const btnPassDrop = document.getElementById("btnPassDrop");
+if (btnPassDrop) btnPassDrop.onclick = passDeployPriority;
 const btnScoutMove = document.getElementById("btnScoutMove");
 if (btnScoutMove) btnScoutMove.onclick = doScoutMove;
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
@@ -3918,7 +3995,9 @@ function endPtr(e){
           if (inSetup()){
             logLine("Placed "+u.name);
             if (S.deploy && S.deploy.on && (S.deploy.step === "drops" || S.deploy.step === "infiltrate")){
-              commitPlacedUnit(u);
+              const bad = deployIssues(u);
+              if (bad.length) showWarn("<strong>Place:</strong> "+bad.join("; ")+". Fix it, then Next player.");
+              else showWarn("<strong>Place:</strong> "+u.name+" looks legal. Next player locks this drop.");
             }
             if (S.deploy && S.deploy.step === "scouts" && flagsOf(u).scouted){
               const nd = nearestEnemyDist(u);
