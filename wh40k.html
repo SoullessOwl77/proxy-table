@@ -326,15 +326,14 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn" data-drop="cmd">Commander</button>
     <button class="btn" data-drop="wlk">Walker</button>
     <button class="btn ghost" id="btnClearU">Clear units</button>
-    <select id="armyPick" title="Saved army units" style="max-width:160px;background:#1b2825;color:#e9e3d4;border:1px solid #0006;border-radius:6px;padding:6px;"></select>
-    <button class="btn gold" id="btnArmyDrop">Drop saved</button>
+    <select id="armyPick" title="Saved army units" style="max-width:160px;background:#1b2825;color:#e9e3d4;border:1px solid #0006;border-radius:6px;padding:6px;display:none"></select>
     <button class="btn" id="btnReserve">Reserves</button>
     <button class="btn" id="btnDeepStrike">Deep Strike</button>
     <button class="btn gold" id="btnBeginDrops">Begin drops</button>
     <button class="btn gold" id="btnDeployUnit">Deploy unit</button>
     <button class="btn gold" id="btnPassDrop">Next player</button>
     <button class="btn" id="btnScoutMove">Scout move</button>
-    <span class="hint" id="reserveSetupHint">Formation first: mark Reserves, then Begin drops. Place, then Next player — that locks the drop.</span>
+    <span class="hint" id="reserveSetupHint" style="display:none">Off the table first: mark Strategic Reserves, then Begin drops. Place, then Next player — that locks the drop.</span>
   </div>
   <div class="row" id="rowReserves" style="display:none">
     <span class="act-kicker">Reserves</span>
@@ -380,7 +379,7 @@ canvas.dragging{cursor:grabbing;}
       <select id="lobbyArmy2"></select>
     </div>
     <p class="hint" id="lobbyArmyHint"><a href="./army.html">Army generator</a> · costs from the <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a></p>
-    <label for="lobbyFirst">Who goes first</label>
+    <label for="lobbyFirst">Who goes first (Attacker)</label>
     <select id="lobbyFirst"></select>
     <label for="lobbyMission">Mission</label>
     <select id="lobbyMission">
@@ -404,7 +403,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.24-army-kit";
+const BUILD = "v2.16.25-cleanup";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -615,7 +614,7 @@ const GUIDE = {
     title: "Setup",
     do: [
       "Lobby: size, mission, who goes first, army on each edge. Dawn of War 12″ DZs. Defender deploys first.",
-      "Formation: armies start in Reserves. Mark who stays off the table, then Begin drops. Alternate. Titanic = two drops for the opponent.",
+      "Formation: armies start off the table. Mark who stays in Strategic Reserves, then Begin drops. Alternate. Titanic = two drops for the opponent.",
       "Infiltrators after normal drops (>8″ from enemy DZ and units). Scouts after first turn is known.",
       "Generate or place terrain. Objectives score at the end of your turn.",
       "Same colors as Army help: normal = official pack/card, purple = fan, red = points only.",
@@ -963,7 +962,7 @@ function fillLobbySelects(){
   }
   const lab = document.getElementById("lobbyArmyLabel");
   const lab2 = document.getElementById("lobbyArmy2Label");
-  if (lab) lab.textContent = practice ? (seatName(0) + " army") : "Your army";
+  if (lab) lab.textContent = practice ? (seatName(0) + " army") : "Your list (this device)";
   if (lab2) lab2.textContent = seatName(1) + " army";
   document.getElementById("lobbySize").value = (S.lobby.size && S.lobby.size[String(mySeat)]) || "";
   const mis = document.getElementById("lobbyMission");
@@ -1024,8 +1023,8 @@ function renderLobby(){
     }
   }
   document.getElementById("lobbySub").textContent = practice
-    ? "Pick size, mission, an army for each edge, and who starts. Defender deploys first. Over-points warns but Practice can continue."
-    : "Agree battle size, mission, and who goes first. Defender deploys first. Armies do not have to match. Over-points blocks start.";
+    ? "Pick size, mission, an army for each edge, and who starts. First player is the Attacker; the other is the Defender and places first. Over-points warns but Practice can continue."
+    : "Agree battle size, mission, and who goes first. First player is the Attacker; the other is the Defender and places first. Armies do not have to match. Over-points blocks start.";
 }
 function writeMyLobby(){
   if (!S.lobby) S.lobby = emptyLobby();
@@ -1092,7 +1091,7 @@ function commitLobby(){
   const n0 = (S.lobby.army["0"] && S.lobby.army["0"].name) || "list";
   const n1 = (S.lobby.army["1"] && S.lobby.army["1"].name) || "list";
   logLine(practice
-    ? ("Armies: " + n0 + " vs " + n1 + " · " + S.mission.name + " — mark Reserves, then Begin drops. Defender "+seatName(def)+" places first")
+    ? ("Armies: " + n0 + " vs " + n1 + " · " + S.mission.name + " — mark Strategic Reserves, then Begin drops. Defender "+seatName(def)+" places first")
     : ("Army: " + ((S.lobby.army[String(mySeat)] && S.lobby.army[String(mySeat)].name) || "list") + (both ? " · "+S.mission.name+" — table open" : " — waiting for the other player")));
   refreshArmyPick();
   save();
@@ -1708,7 +1707,7 @@ function beginDrops(){
     return "";
   }).filter(Boolean).join(" · ");
   logLine("Drops start — Defender "+seatName(S.deploy.defender)+" first. Dawn of War 12″ DZ."+(capNote?" "+capNote:""));
-  showWarn("<strong>Drops:</strong> "+seatName(S.deploy.dropSeat)+" places one unit (Titanic counts as two). Select it in Reserves, then Deploy unit.");
+  showWarn("<strong>Drops:</strong> "+seatName(S.deploy.dropSeat)+" places one unit (Titanic counts as two). Select it in the to-place list, then Deploy unit.");
   renderReserveRow(); save(); draw();
 }
 function deploySelectedUnit(){
@@ -1926,7 +1925,7 @@ function renderReserveRow(){
     box.appendChild(b);
   });
   if (hint){
-    if (inSetup() && step === "formation") hint.textContent = "Only "+seatName(view)+" is listed. Reserves = stays off the table. Switch edge to see the other list. Then Begin drops.";
+    if (inSetup() && step === "formation") hint.textContent = "Only "+seatName(view)+" is listed. Strategic Reserves = stays off the table. Switch edge to see the other list. Then Begin drops.";
     else if (inSetup() && (step === "drops" || step === "infiltrate")) hint.textContent = seatName(view)+" places. Select one → Deploy unit → drag → Next player to lock.";
     else if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
     else hint.textContent = "Movement: select one, Optional → Ingress → Announce. Usually battle round 2+.";
@@ -3477,17 +3476,6 @@ document.getElementById("btnClearU").onclick = () => {
   S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw();
 };
 document.getElementById("btnDemo").onclick = demoForces;
-document.getElementById("btnArmyDrop").onclick = () => {
-  if (!inSetup()){ logLine("Place units in Setup"); return; }
-  const id = document.getElementById("armyPick").value;
-  if (!id){ logLine("Pick a saved unit first (Army generator)"); return; }
-  const seat = dropSeat();
-  const rec = S.lobby && S.lobby.army && S.lobby.army[String(seat)];
-  const list = rec && rec.id && rec.id !== "__demo__" && PTSheets.listById ? PTSheets.listById(rec.id) : null;
-  const entry = ((list && list.units) || []).find(u => u.id === id);
-  if (!entry){ logLine("That unit is not on " + seatName(seat) + "’s list"); return; }
-  dropArmyEntry(entry, seat);
-};
 const placeSeatEl = document.getElementById("placeSeat");
 if (placeSeatEl) placeSeatEl.onchange = () => {
   placeSeat = placeSeatEl.value === "1" ? 1 : 0;

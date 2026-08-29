@@ -17,7 +17,7 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 | Piece | File |
 |---|---|
 | Hub + MTG + Your Matches | `index.html` (`v2.7.9-army`) |
-| 40K table | `wh40k.html` (`v2.16.24-army-kit`) |
+| 40K table | `wh40k.html` (`v2.16.25-cleanup`) |
 | Army builder | `army.html` |
 | Datasheet editor | `datasheet.html` |
 | Catalog | `datasheets/load.js` + `index.js` + faction packs + `mfm-seed.js` + `demo.js` |
@@ -32,9 +32,9 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | File | Version |
 |---|---|
-| `wh40k.html` | `v2.16.24-army-kit` |
+| `wh40k.html` | `v2.16.25-cleanup` |
 | `index.html` | `v2.7.9-army` |
-| `sw.js` | `pt-shell-v28` |
+| `sw.js` | `pt-shell-v29` |
 
 If live is older, files were not copied or title-tap did not run.
 
@@ -72,6 +72,7 @@ Recent slices in this chat thread:
 - `v2.16.21-drop-pass` — Next player locks the drop (drag no longer auto-commits). Reserves row is current seat only. Strategic Reserves (`· SR`) do not block Start battle.
 - `v2.16.22-reserve-bar` — after Start battle the formation row hides; it returns in Movement if that seat still has units off the table.
 - `v2.16.23-demo-kit` — Demo Infantry / Commander / Walker carry the teaching abilities (FnP, DS, Scout, Fights First, GRENADES). Role keywords stay split so deploy still has a normal drop, an Infiltrator, and a Titanic.
+- `v2.16.25-cleanup` — §6 build 1: removed **Drop saved** (one drop path), honest names (off the table / to place / Strategic Reserves), lobby copy (Attacker/Defender reminder, PVP label **Your list (this device)**), single reserve-voice hint during drops. §6 item 4 (grey phase Next in Setup) already satisfied — phase buttons disabled in Setup, Next reads **Start battle**. Still open: §6 item 3 (dev on/off active-seat lock) and item 5 (two resets + snapshot-at-Start-battle).
 - `v2.16.24-army-kit` — enhancement **cards** UI (count box gone), Seekers `chapter: SALAMANDERS` lock, He’stan **95** / Apothecary **40** / Redeemer **260/280** pts-only red sheet, unit-aware Guide.
 
 `datasheets/index.js` was **wiped to 0 bytes mid-edit on 2026-08-29** and rebuilt from the APIs `army.html` / `datasheet.html` / `wh40k.html` call. It works. If points bands or list persist look off versus memory, diff behavior against `WORKFLOW2` tests before rewriting it again.
