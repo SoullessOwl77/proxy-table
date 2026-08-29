@@ -200,8 +200,9 @@ canvas.dragging{cursor:grabbing;}
   <a class="btn sm" id="btnMenu" href="./index.html" title="Back to the game chooser and your matches">Menu</a>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
-  <button class="btn sm" id="btnDev" title="Practice only — queue the next dice" style="display:none">Dev</button>
-  <button class="btn sm danger" id="btnReset" title="Reset">Reset</button>
+  <button class="btn sm" id="btnDev" title="Practice: Dev off plays like a match (rules enforced, real dice). Dev on skips gates and queues dice." style="display:none">Dev</button>
+  <button class="btn sm danger" id="btnReset" title="Reset">Full Reset</button>
+  <button class="btn sm danger" id="btnResetMatch" title="Restore the board to the Start-battle snapshot (BR1, terrain locked)" style="display:none">Reset match</button>
   <button class="btn sm" id="btnSetup" title="Return to setup — place terrain and units. Battle phases do not come back here.">Setup</button>
   <div class="rail-label">Tools</div>
   <button class="btn sm on" data-tool="terrain">Terrain</button>
@@ -307,7 +308,7 @@ canvas.dragging{cursor:grabbing;}
     <span class="act-kicker" id="actKicker">Optional</span>
     <div id="actBtns"></div>
     <button class="btn gold" id="btnAnnounce" style="display:none">Announce</button>
-    <button class="btn sm" id="btnRevert" style="display:none" title="Put this unit back and unlock its Movement choices">Revert move</button>
+    <button class="btn sm" id="btnRevert" style="display:none" title="Undo the last model drag (or the selected unit's declared move)">Undo</button>
     <span class="hint" id="actHint"></span>
   </div>
   <div class="row" id="rowTerrain">
@@ -403,7 +404,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.25-cleanup";
+const BUILD = "v2.16.27-vp-undo";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -796,6 +797,7 @@ let rollsOn = false;
 let lastRoll = null;
 /* While dragging a unit, rings stay on the start position until drop. */
 let moveOrigin = null;
+let lastDragId = null;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -1130,6 +1132,7 @@ function renderPhases(){
   const el = document.getElementById("phases");
   const nextBtn = document.getElementById("btnNext");
   if (!el) return;
+  const rm = document.getElementById("btnResetMatch"); if (rm) rm.style.display = S.matchSnapshot ? "" : "none";
   if (nextBtn){
     if (!inSetup()){
       nextBtn.textContent = "Next";
@@ -1152,7 +1155,7 @@ function renderPhases(){
   el.innerHTML = PHASES.map(p => {
     const tip = (TIPS[p] && TIPS[p].short) || p;
     return `<button class="btn ${S.turn.phase===p?'on':''}" data-phase="${p}" ${mine?"":"disabled"} title="${mine?tip.replace(/"/g,"&quot;"):(seatName(S.turn.activeSeat)+"'s turn")}">${p}</button>`;
-  }).join("") + `<span class="sub" title="Battle round · whose turn · VP">${"R"+S.turn.battleRound+" · "+seatName(S.turn.activeSeat)+(S.mission?" · VP "+((S.mission.vp&&S.mission.vp["0"])||0)+"–"+((S.mission.vp&&S.mission.vp["1"])||0):"")}</span>`;
+  }).join("") + `<span class="sub" title="Battle round · whose turn · VP">${"R"+S.turn.battleRound+" · "+seatName(S.turn.activeSeat)+(S.mission?" · VP "+((S.mission.vp&&S.mission.vp["0"])||0)+"–"+((S.mission.vp&&S.mission.vp["1"])||0)+((S.mission.objectives&&S.mission.objectives.length)?" · obj "+objHeld(0)+"/"+objHeld(1):""):"")}</span>`;
   el.querySelectorAll("[data-phase]").forEach(b => {
     b.onclick = () => setPhase(b.dataset.phase);
     b.addEventListener("pointerenter", () => { if (TIPS[b.dataset.phase]) showTip(TIPS[b.dataset.phase]); });
@@ -1479,10 +1482,27 @@ function snapshotGroup(u, fromId, fromPos){
     else m.revert = { x:m.x, y:m.y };
   });
 }
+function unitWideDeclared(m){
+  const st = groupMoveState(m);
+  return st.advanced || st.fellBack || st.remain || st.ingressed;
+}
 function revertMove(){
+  if (lastDragId){
+    const lm = S.units.find(x => x.id === lastDragId);
+    if (lm && canControlUnit(lm) && lm.revert && !unitWideDeclared(lm)){
+      lm.x = lm.revert.x; lm.y = lm.revert.y;
+      delete lm.revert;
+      const lf = flagsOf(lm); lf.moved = false; lf.advanceInches = 0;
+      lastDragId = null;
+      logLine(lm.name + " drag undone");
+      document.getElementById("dice").textContent = "Undid the last model drag.";
+      hideWarn(); save(); draw(); refreshTip(); renderActions();
+      return;
+    }
+  }
   const u = selectedUnit();
   if (!u){
-    document.getElementById("dice").textContent = "Select a model first, then Revert.";
+    document.getElementById("dice").textContent = "Select a model first, then Undo.";
     return;
   }
   if (!canControlUnit(u)){
@@ -1500,8 +1520,9 @@ function revertMove(){
       f.ingressed = false;
     }
   });
-  logLine(u.name+(unitGroup(u).length>1?" unit":"")+" move reverted");
-  document.getElementById("dice").textContent = "Move reverted — declare or drag again.";
+  lastDragId = null;
+  logLine(u.name+(unitGroup(u).length>1?" unit":"")+" move undone");
+  document.getElementById("dice").textContent = "Move undone — declare or drag again.";
   hideWarn();
   save(); draw(); refreshTip(); renderActions();
 }
@@ -1622,6 +1643,10 @@ function controllerOf(obj){
   if (b > a) return 1;
   return null;
 }
+function objHeld(seat){
+  if (!S.mission || !S.mission.objectives) return 0;
+  return S.mission.objectives.filter(o => controllerOf(o) === seat).length;
+}
 function scoreMission(seat){
   if (!S.mission || !S.mission.objectives) return;
   const held = S.mission.objectives.filter(o => controllerOf(o) === seat).length;
@@ -1631,6 +1656,7 @@ function scoreMission(seat){
   if (held >= 2) gain += 5;
   if (held > other) gain += 5;
   S.mission.vp[String(seat)] = (S.mission.vp[String(seat)] || 0) + gain;
+  logLine("Objectives held: "+seatName(0)+" "+objHeld(0)+", "+seatName(1)+" "+objHeld(1)+" ("+S.mission.name+")");
   logLine(seatName(seat)+" scores "+gain+" VP (hold "+held+", "+S.mission.name+") · "+S.mission.vp["0"]+"–"+S.mission.vp["1"]);
   if ((S.turn.battleRound||1) >= 5){
     const a = S.mission.vp["0"]||0, b = S.mission.vp["1"]||0;
@@ -1968,11 +1994,11 @@ function renderActions(){
     if (a.id === "ingress"){
       if (!u || !reserved || !canControlUnit(u) || moveLock){
         b.disabled = true;
-        b.title = reserved ? "Already declared a move — Revert first." : "Select a reserved unit first.";
+        b.title = reserved ? "Already declared a move — Undo first." : "Select a reserved unit first.";
       } else b.onclick = () => pickAction(a.id);
     } else if (MOVE_ACTS[a.id] && (moveLock || reserved)){
       b.disabled = true;
-      b.title = reserved ? "That unit is in Reserves — Ingress first." : "Move already declared — Revert to change it.";
+      b.title = reserved ? "That unit is in Reserves — Ingress first." : "Move already declared — Undo to change it.";
     } else {
       b.onclick = () => pickAction(a.id);
     }
@@ -2208,7 +2234,7 @@ function announceAction(){
   }
   if (a.id === "advance"){
     if (st.declared && !devOpenGates()){
-      showWarn("<strong>Advance:</strong> this unit already chose a move. Revert first.");
+      showWarn("<strong>Advance:</strong> this unit already chose a move. Undo first.");
       return;
     }
     snapshotGroup(u);
@@ -2220,7 +2246,7 @@ function announceAction(){
     setSimpleRoll("Advance", u.name, [d], "M"+(u.M||6)+" + "+d+" = "+cap+"″ from base edge", { unitId: u.id });
   } else if (a.id === "fallBack"){
     if (st.declared && !devOpenGates()){
-      showWarn("<strong>Fall Back:</strong> this unit already chose a move. Revert first.");
+      showWarn("<strong>Fall Back:</strong> this unit already chose a move. Undo first.");
       return;
     }
     if (!inEngagement(u) && !group.some(inEngagement)){
@@ -2233,7 +2259,7 @@ function announceAction(){
     document.getElementById("dice").textContent = "Fell Back — leave ER; usually cannot shoot or charge.";
   } else if (a.id === "remain"){
     if (st.declared && !devOpenGates()){
-      showWarn("<strong>Remain Stationary:</strong> this unit already chose a move. Revert first.");
+      showWarn("<strong>Remain Stationary:</strong> this unit already chose a move. Undo first.");
       return;
     }
     snapshotGroup(u);
@@ -2251,7 +2277,7 @@ function announceAction(){
       return;
     }
     if (st.declared){
-      showWarn("<strong>Ingress:</strong> this unit already chose a move. Revert first.");
+      showWarn("<strong>Ingress:</strong> this unit already chose a move. Undo first.");
       return;
     }
     const ds = hasDeepStrike(u);
@@ -2407,6 +2433,7 @@ function startBattle(){
     delete u.revert;
   });
   logLine("Battle started · Command · " + seatName(S.turn.activeSeat) + "'s turn");
+  snapshotStartBattle();
   setTool("unit");
   renderReserveRow();
   promptBattleShock();
@@ -3438,7 +3465,53 @@ function resetPractice(){
   refreshGuide();
   updateTerrainTools();
 }
+function snapshotStartBattle(){
+  try{
+    S.matchSnapshot = JSON.stringify({
+      units: S.units, terrain: S.terrain, turn: S.turn,
+      cp: S.cp, mission: S.mission, deploy: S.deploy, zones: S.zones
+    });
+  }catch(_){ S.matchSnapshot = null; }
+}
+function applyMatchReset(){
+  if (!S.matchSnapshot){ logLine("No Start-battle snapshot yet"); return; }
+  let snap; try{ snap = JSON.parse(S.matchSnapshot); }catch(_){ logLine("Snapshot unreadable"); return; }
+  S.units = snap.units || [];
+  S.terrain = snap.terrain || [];
+  S.turn = snap.turn || S.turn;
+  S.cp = snap.cp || S.cp;
+  S.mission = snap.mission || S.mission;
+  S.deploy = snap.deploy || S.deploy;
+  S.zones = snap.zones || S.zones;
+  S.ready = { "0":false, "1":false };
+  S.resetAsk = { "0":false, "1":false };
+  selected = null; clearCombatPair(); tape = null; moveOrigin = null; selectedAction = null;
+  logLine("Reset to the Start-battle snapshot — back to BR1 Command");
+}
+function requestSnapReset(){
+  if (!S.matchSnapshot){ logLine("No Start-battle snapshot yet"); return; }
+  if (!S.snapAsk) S.snapAsk = { "0":false, "1":false };
+  S.snapAsk[String(mySeat)] = true;
+  if (!(S.snapAsk["0"] && S.snapAsk["1"])){
+    logLine(seatName(mySeat)+" wants to reset the match — "+seatName(mySeat===0?1:0)+" must press Reset match too");
+    showWarn("<strong>Reset match:</strong> waiting for "+seatName(mySeat===0?1:0)+". Restores the Start-battle board.");
+    save(); renderPhases(); return;
+  }
+  S.snapAsk = { "0":false, "1":false };
+  applyMatchReset();
+  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+}
 document.getElementById("btnReset").onclick = () => practice ? resetPractice() : requestMatchReset();
+document.getElementById("btnResetMatch").onclick = () => {
+  if (!S.matchSnapshot){ logLine("No Start-battle snapshot yet — press Start battle first"); return; }
+  if (practice){
+    if (!confirm("Reset the match to the Start-battle snapshot?\nUnits return to where drops finished, terrain locked, back to BR1 Command.")) return;
+    applyMatchReset();
+    save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+  } else {
+    requestSnapReset();
+  }
+};
 document.getElementById("btnSetup").onclick = () => {
   if (!practice){
     document.getElementById("dice").textContent = "Setup return is practice-only.";
@@ -3450,8 +3523,8 @@ document.getElementById("btnSetup").onclick = () => {
 };
 document.getElementById("btnReset").style.display = "";
 document.getElementById("btnReset").title = practice
-  ? "Clear the practice table and start over"
-  : "Both players press Reset to return to setup (units stay)";
+  ? "Full Reset — clear the table and return to the lobby / army pick"
+  : "Full Reset — both players press to return to setup (units stay)";
 if (!practice){
   const su = document.getElementById("btnSetup");
   if (su) su.style.display = "none";
@@ -3560,7 +3633,7 @@ function rotSel(d){
 }
 
 /* ---------- combat ---------- */
-function devOpenGates(){ return !!(practice && devSkipGates); }
+function devOpenGates(){ return !!(practice && devOn && devSkipGates); }
 function renderDevQueue(){
   const el = document.getElementById("devQueue");
   if (!el) return;
@@ -3574,7 +3647,7 @@ function enqueueDice(){
   renderDevQueue();
 }
 function d6(){
-  if (practice && devQueue.length){
+  if (practice && devOn && devQueue.length){
     const n = devQueue.shift();
     renderDevQueue();
     return n;
@@ -3933,8 +4006,8 @@ canvas.addEventListener("pointerdown", e => {
       drag={cx:cam.x,cy:cam.y,sx:pt.x,sy:pt.y};
       moveOrigin = null;
       const f = flagsOf(hu);
-      if (f.remainedStationary) showWarn("<strong>Remain Stationary:</strong> this unit will not move. Revert to take it back.");
-      else showWarn("<strong>Move committed:</strong> Revert to place this unit again.");
+      if (f.remainedStationary) showWarn("<strong>Remain Stationary:</strong> this unit will not move. Undo to take it back.");
+      else showWarn("<strong>Move committed:</strong> Undo to place this unit again.");
     } else {
       if (canControlUnit(hu) && !inSetup() && S.turn.phase !== "charge" && S.turn.phase !== "fight" && S.turn.phase !== "movement"){
         showWarn("<strong>No move:</strong> models only drag in Movement, Charge, or Fight (or Setup).");
@@ -4023,6 +4096,7 @@ function endPtr(e){
             } else {
               snapshotGroup(u, u.id, from);
               flagsOf(u).moved = true;
+              lastDragId = u.id;
             }
             logLine("Moved "+u.name+" "+dist.toFixed(1)+"\"");
           }
