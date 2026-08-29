@@ -404,7 +404,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.27-vp-undo";
+const BUILD = "v2.16.28-demo-drop-fix";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -3303,7 +3303,7 @@ function placeDemoSeat(seat){
   const yCmd = seat===0 ? 8.5 : 35.5;
   const yWlk = seat===0 ? 7 : 37;
   for (let i=0;i<5;i++) dropUnit("inf", seat, 18+i*1.6, yInf, g);
-  dropUnit("cmd", seat, 22, yCmd, g);
+  dropUnit("cmd", seat, 22, yCmd, "c"+seat);
   dropUnit("wlk", seat, 40, yWlk, "w"+seat);
 }
 function isDemoLobby(seat){
@@ -3394,7 +3394,7 @@ function refreshArmyPick(){
   sel.innerHTML = '<option value="">Army units…</option>' + units.map(u =>
     `<option value="${u.id}">${u.name} ×${u.count}${u.pts != null ? " · "+u.pts : ""}</option>`
   ).join("");
-  const showDemo = !rec || !rec.id || rec.id === "__demo__" || !units.length;
+  const showDemo = !rec || !rec.id;
   document.querySelectorAll("#rowUnits [data-drop], #btnDemo").forEach(b => {
     if (b) b.style.display = showDemo ? "" : "none";
   });

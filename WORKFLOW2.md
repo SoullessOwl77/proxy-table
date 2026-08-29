@@ -2,7 +2,7 @@
 
 Check items off with `[x]` as they land. Add notes under any item freely.
 
-**Current build:** `v2.16.27-vp-undo` (`wh40k.html`) · hub `v2.7.9-army` (`index.html`) · SW `pt-shell-v31`  
+**Current build:** `v2.16.28-demo-drop-fix` (`wh40k.html`) · hub `v2.7.9-army` (`index.html`) · SW `pt-shell-v32`  
 **Handoff:** `artifacts/PROXY_TABLE_HANDOFF.md` (2026-08-29) — agreed cleanup in §6 is **not coded yet**.  
 **Baseline:** 11th edition Core Rules · skill `wh40k-rules`  
 **Constraint:** Do not change MTG game structure except for bug fixes. 40K stays in `wh40k.html`.
@@ -54,6 +54,7 @@ Shipped: list-drop weapons `v2.16.15` · charge fail + Battle-shock `v2.16.18` �
 - [ ] Demo hides only on the edge that loaded a real list
 
 ### Need to build
+- [ ] **Rapid Ingress + Fire Overwatch** — build spec in `COMBAT_PLAN.md`. 11th-ed: both react at the end of the opponent's Movement phase; Overwatch is Snap Shooting (hits on 6s). Practice first, PVP later. Awaiting go + answers to the 5 open questions.
 - [ ] Overwatch resolve
 - [ ] Fights First / fight order
 - [ ] Rapid Ingress as a 1 CP stratagem (button is still a label)

@@ -17,7 +17,7 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 | Piece | File |
 |---|---|
 | Hub + MTG + Your Matches | `index.html` (`v2.7.9-army`) |
-| 40K table | `wh40k.html` (`v2.16.27-vp-undo`) |
+| 40K table | `wh40k.html` (`v2.16.28-demo-drop-fix`) |
 | Army builder | `army.html` |
 | Datasheet editor | `datasheet.html` |
 | Catalog | `datasheets/load.js` + `index.js` + faction packs + `mfm-seed.js` + `demo.js` |
@@ -32,9 +32,9 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | File | Version |
 |---|---|
-| `wh40k.html` | `v2.16.27-vp-undo` |
+| `wh40k.html` | `v2.16.28-demo-drop-fix` |
 | `index.html` | `v2.7.9-army` |
-| `sw.js` | `pt-shell-v31` |
+| `sw.js` | `pt-shell-v32` |
 
 If live is older, files were not copied or title-tap did not run.
 
@@ -72,6 +72,7 @@ Recent slices in this chat thread:
 - `v2.16.21-drop-pass` — Next player locks the drop (drag no longer auto-commits). Reserves row is current seat only. Strategic Reserves (`· SR`) do not block Start battle.
 - `v2.16.22-reserve-bar` — after Start battle the formation row hides; it returns in Movement if that seat still has units off the table.
 - `v2.16.23-demo-kit` — Demo Infantry / Commander / Walker carry the teaching abilities (FnP, DS, Scout, Fights First, GRENADES). Role keywords stay split so deploy still has a normal drop, an Infiltrator, and a Titanic.
+- `v2.16.28-demo-drop-fix` — bugfix from Practice testing: with a committed lobby army (incl Demo), the manual quick-add buttons (Demo forces / Infantry / Commander / Walker) now hide — they placed **non-reserved** units and the gold Demo-forces button wiped the spawned formation, emptying the drop queue so Begin drops had nothing to place. Root cause: `demoForces()`/`addDrop()` bypass `markFormation`; `showDemo` showed them for a committed `__demo__` army. Also split the demo Commander into its own group id (`c`+seat) so it deploys as a distinct **Infiltrator** instead of bundled with the Infantry squad. Manual buttons still available in free play (no committed army). Fix if a game is already stuck: Full Reset to respawn the formation.
 - `v2.16.27-vp-undo` — §6 agreed-after-cleanup done: **VP ticker** — phases sub now shows live `obj P1/P2` objective count; on turn change the log prints an objectives-held mission line beside the existing score line (display only — still the one `scoreMission`, no second scorer). **Revert → Undo** — button renamed; Undo now reverts the last single **model drag** first, and falls back to the whole-unit one-step undo for declared Advance / Fall Back / Charge / Ingress. Tracks `lastDragId`; all UI 'Revert' text now reads 'Undo'. NOT changed: scoring still fires only at end of turn (Next past Fight), not on mid-turn phase-button navigation. §6 now fully complete.
 - `v2.16.26-resets` — §6 build 2 (must-do complete): Dev toggle now real — **Dev off = match-like** (gates enforced, real dice, active-seat only); Dev on = skip gates + queue dice. Two resets: **Full Reset** (practice wipes to lobby/army pick; PVP two-press to setup) and **Reset match** (restores a snapshot cloned at `startBattle()` — units where drops finished, terrain locked, back to BR1 Command; practice confirm, PVP two-press). Additive board fields `matchSnapshot` / `snapAsk` — no worker change. §6 §Must-do items 1–7 all done. Next: §6 §Agreed — VP ticker (wire to existing `scoreMission`) + rename Revert → Undo (last model drag).
 - `v2.16.25-cleanup` — §6 build 1: removed **Drop saved** (one drop path), honest names (off the table / to place / Strategic Reserves), lobby copy (Attacker/Defender reminder, PVP label **Your list (this device)**), single reserve-voice hint during drops. §6 item 4 (grey phase Next in Setup) already satisfied — phase buttons disabled in Setup, Next reads **Start battle**. Still open: §6 item 3 (dev on/off active-seat lock) and item 5 (two resets + snapshot-at-Start-battle).
