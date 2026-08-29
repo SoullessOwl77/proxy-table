@@ -20,6 +20,10 @@ Note: the current in-app placeholder text for Overwatch still says "charge phase
 
 ---
 
+## 1c. Armor of Contempt (also a reaction — folds into this build)
+
+Currently AoC is an active-seat action offered in your own Shooting/Fight phase. That's the wrong timing: it's a **1 CP defender reaction** used *when a unit from your army is selected as the target of an attack* (opponent's Shooting phase, or either player's Fight phase), giving that unit AP−1 against attacks this phase. The AP−1 mechanic already exists (the `aoc` flag read during attack resolution); what's wrong is *who* triggers it and *when*. Hook: unlike Rapid Ingress / Overwatch (end-of-Movement checkpoint), AoC fires at **target selection during an attack** — so it needs a second, smaller reaction prompt in the shooting/fight targeting flow, offered to the **defending** seat. Practice-first: prompt the defender when their unit is picked as a target; PVP later (defender is the non-active client). Same per-battle-round use bookkeeping as the others.
+
 ## 2. Engine fit
 
 The turn engine drives one seat at a time (active seat only). Both reactions belong to the **non-active** seat and fire at one moment: when the active seat leaves Movement (Next from movement → shooting). So we add a single reaction checkpoint there.
@@ -56,6 +60,13 @@ On the shared DO board, the reaction happens on the **opponent's** turn, so the 
 5. **Round-1 Rapid Ingress:** hard block — the rule forbids it in battle round 1.
 
 ---
+
+## Progress
+
+- [x] `v2.16.30` — **Rapid Ingress (Practice)** + reaction checkpoint at end of opponent's Movement. Round-1 hard block, 1 CP, once per battle round, Aircraft excluded.
+- [ ] Fire Overwatch (Practice) — same checkpoint, Snap Shooting.
+- [ ] Armor of Contempt — move to the target-selection reaction hook.
+- [ ] PVP layer for all three.
 
 ## 6. Suggested build order once confirmed
 

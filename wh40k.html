@@ -280,6 +280,11 @@ canvas.dragging{cursor:grabbing;}
   <div id="warnText"></div>
   <button class="btn sm ghost wclose" id="btnWarnClose" title="Dismiss">–</button>
 </div>
+<div class="warnbar" id="reactionbar" role="status" style="display:none">
+  <div id="reactionText"></div>
+  <button class="btn sm gold" id="btnReactDo">Rapid Ingress</button>
+  <button class="btn sm" id="btnReactPass">Pass</button>
+</div>
 <canvas id="c"></canvas>
 <div class="dock">
   <div class="feed">
@@ -404,7 +409,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.28-demo-drop-fix";
+const BUILD = "v2.16.30-rapid-ingress";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -581,7 +586,7 @@ const ACTIONS = {
     more:"Later: spend 1 CP at the end of the other seat’s Movement to Ingress one reserved unit on their turn."
   },
   allocation: {
-    id:"allocation", phase:"shooting", label:"Allocation", announce:false, placeholder:false,
+    id:"allocation", phases:["shooting","fight"], label:"Allocation", announce:false, placeholder:false,
     short:"Target the unit, then tap which eligible model takes the next wound.",
     more:"Wounded troopers first, then fresh troopers, Character last. Tapping a model only sticks if it is in that current bucket. Feel No Pain on that model (if the sheet has it) is rolled per wound after a failed save."
   },
@@ -1133,6 +1138,7 @@ function renderPhases(){
   const nextBtn = document.getElementById("btnNext");
   if (!el) return;
   const rm = document.getElementById("btnResetMatch"); if (rm) rm.style.display = S.matchSnapshot ? "" : "none";
+  renderReactionBar();
   if (nextBtn){
     if (!inSetup()){
       nextBtn.textContent = "Next";
@@ -1385,6 +1391,7 @@ function terrainEditable(){
    PVP: also require the unit to be on your claimed seat. */
 function canControlUnit(u){
   if (!u) return false;
+  if (S.reaction && S.reaction.on){ return practice && u.seat === S.reaction.seat && !u.reserved; }
   if (inSetup()){
     if (!practice && u.seat !== mySeat) return false;
     return true;
@@ -1916,6 +1923,85 @@ function reservesCanArrive(){
   const seat = practice ? S.turn.activeSeat : mySeat;
   return reservedUnits(seat).length > 0;
 }
+/* ---- Reactions (Practice-first): Rapid Ingress at end of opponent's Movement ---- */
+function reactionSeat(){ return S.turn.activeSeat === 0 ? 1 : 0; }
+function isAircraft(u){ return unitHasKw(u, "AIRCRAFT"); }
+function reactUsed(seat, key){
+  const r = S.reactUsed && S.reactUsed[String(seat)];
+  return !!(r && r[key+"_R"+(S.turn.battleRound||1)]);
+}
+function markReactUsed(seat, key){
+  if (!S.reactUsed) S.reactUsed = { "0":{}, "1":{} };
+  if (!S.reactUsed[String(seat)]) S.reactUsed[String(seat)] = {};
+  S.reactUsed[String(seat)][key+"_R"+(S.turn.battleRound||1)] = true;
+}
+function rapidIngressAvailable(seat){
+  if ((S.turn.battleRound||1) < 2) return false;
+  if (((S.cp && S.cp[seat]) || 0) < 1) return false;
+  if (reactUsed(seat, "ri")) return false;
+  return reservedUnits(seat).some(u => !isAircraft(u));
+}
+function maybeOfferReaction(){
+  if (!practice) return false;
+  const rs = reactionSeat();
+  if (!rapidIngressAvailable(rs)) return false;
+  S.reaction = { on:true, seat:rs, kind:"rapidIngress", returnPhase:"shooting", placed:false };
+  placeSeat = rs;
+  logLine("Reaction \u2014 "+seatName(rs)+" may Rapid Ingress (1 CP) at the end of "+seatName(S.turn.activeSeat)+"'s Movement");
+  renderReactionBar(); renderReserveRow(); save(); draw();
+  return true;
+}
+function renderReactionBar(){
+  const bar = document.getElementById("reactionbar");
+  if (!bar) return;
+  if (!S.reaction || !S.reaction.on){ bar.style.display = "none"; return; }
+  const rs = S.reaction.seat;
+  bar.style.display = "";
+  const txt = document.getElementById("reactionText");
+  const doBtn = document.getElementById("btnReactDo");
+  const passBtn = document.getElementById("btnReactPass");
+  if (S.reaction.placed){
+    if (txt) txt.innerHTML = "<strong>"+esc(seatName(rs))+" Rapid Ingress:</strong> drag the arriving unit to a legal spot (&gt;8\u2033 from enemies), then Done.";
+    if (doBtn) doBtn.style.display = "none";
+    if (passBtn) passBtn.textContent = "Done";
+  } else {
+    if (txt) txt.innerHTML = "<strong>Reaction \u2014 "+esc(seatName(rs))+":</strong> Rapid Ingress (1 CP)? Pick a reserved unit, then Rapid Ingress \u2014 or Pass.";
+    if (doBtn) doBtn.style.display = "";
+    if (passBtn) passBtn.textContent = "Pass";
+  }
+}
+function doRapidIngress(){
+  if (!S.reaction || !S.reaction.on || S.reaction.placed) return;
+  const rs = S.reaction.seat;
+  const u = selectedUnit();
+  if (!u || !u.reserved || u.seat !== rs){ showWarn("<strong>Rapid Ingress:</strong> pick "+seatName(rs)+"\u2019s reserved unit first."); return; }
+  if (isAircraft(u)){ showWarn("<strong>Rapid Ingress:</strong> Aircraft cannot Rapid Ingress."); return; }
+  if (!spendCP(1, "Rapid Ingress", rs)) return;
+  const g = unitGroup(u), ds = hasDeepStrike(u);
+  const x0 = W/2, y0 = ds ? H/2 : (rs===0 ? 3 : H-3);
+  g.forEach((m, i) => {
+    m.reserved = false;
+    const fl = flagsOf(m);
+    fl.ingressed = true; fl.moved = true; fl.advanced = false; fl.fellBack = false; fl.remainedStationary = false;
+    m.x = Math.max(unitR(m), Math.min(W-unitR(m), x0 + (i-(g.length-1)/2)*1.6));
+    m.y = Math.max(unitR(m), Math.min(H-unitR(m), y0));
+  });
+  snapshotGroup(u);
+  markReactUsed(rs, "ri");
+  S.reaction.placed = true;
+  selectObj("u", u);
+  logLine(seatName(rs)+" Rapid Ingress \u2014 "+u.name+" arrives"+(ds?" (Deep Strike)":"")+".");
+  const bad = ingressIssues(u);
+  if (bad.length) showWarn("<strong>Rapid Ingress:</strong> "+bad.join("; ")+"."); else hideWarn();
+  renderReactionBar(); renderReserveRow(); renderActions(); save(); draw();
+}
+function endReaction(){
+  const rp = (S.reaction && S.reaction.returnPhase) || "shooting";
+  S.reaction = null;
+  placeSeat = S.turn.activeSeat;
+  renderReactionBar();
+  setPhase(rp);
+}
 function renderReserveRow(){
   const row = document.getElementById("rowReserves");
   const box = document.getElementById("reserveBtns");
@@ -1933,6 +2019,9 @@ function renderReserveRow(){
     kicker = seatName(view)+" to place";
   } else if (inSetup()){
     list = uniqueUnits(reservedUnits(practice ? view : mySeat));
+  } else if (S.reaction && S.reaction.on){
+    list = uniqueUnits(reservedUnits(S.reaction.seat));
+    kicker = seatName(S.reaction.seat)+" Reserves \u2014 Rapid Ingress";
   } else if (reservesCanArrive()){
     const seat = practice ? S.turn.activeSeat : mySeat;
     list = uniqueUnits(reservedUnits(seat));
@@ -2324,10 +2413,11 @@ function announceAction(){
     if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed ("+(syn?"3D6":"2D6")+" &lt; Ld). OC 0 until this seat’s next Command.");
     else hideWarn();
   } else if (a.id === "pileIn"){
+    unitGroup(u).forEach(m => { flagsOf(m).piling = true; });
     logLine(u.name+" Pile-in (honor 3″ toward nearest enemy)");
     document.getElementById("dice").textContent = "Pile-in declared — nudge up to 3″, stay in ER/coherency.";
   } else if (a.id === "consolidate"){
-    flagsOf(u).fought = true;
+    unitGroup(u).forEach(m => { flagsOf(m).fought = true; flagsOf(m).piling = true; });
     logLine(u.name+" Consolidate (honor 3″)");
     document.getElementById("dice").textContent = "Consolidate declared — nudge up to 3″.";
   }
@@ -2484,6 +2574,7 @@ function applyPhaseTool(prevPhase){
   else if (tool === "measure" || prevPhase === "shooting" || prevPhase === "fight") setTool("unit");
 }
 function setPhase(p){
+  if (S.reaction && S.reaction.on){ showWarn("<strong>Reaction:</strong> finish it first."); return; }
   if (!canDriveTurn()){
     showWarn("<strong>Turn:</strong> " + seatName(S.turn.activeSeat) + "'s turn.");
     return;
@@ -2497,7 +2588,7 @@ function setPhase(p){
   const prev = S.turn.phase;
   if (prev === "charge" && p !== "charge") resolveOpenCharges();
   if (prev !== p){
-    (S.units || []).forEach(u => { if (flagsOf(u).aoc) flagsOf(u).aoc = false; });
+    (S.units || []).forEach(u => { if (flagsOf(u).aoc) flagsOf(u).aoc = false; flagsOf(u).piling = false; });
   }
   S.turn.phase = p;
   selectedAction = null;
@@ -2508,6 +2599,7 @@ function setPhase(p){
 }
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
+  if (S.reaction && S.reaction.on){ showWarn("<strong>Reaction:</strong> resolve it above \u2014 Rapid Ingress or Pass."); return; }
   if (inSetup()){
     requestStartBattle();
     save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
@@ -2524,6 +2616,7 @@ document.getElementById("btnNext").onclick = () => {
       promptBattleShock();
     }
   }
+  if (S.turn.phase === "movement" && !(S.reaction && S.reaction.on) && maybeOfferReaction()){ return; }
   if (i < PHASES.length-1) setPhase(PHASES[i+1]);
   else {
     const prev = S.turn.phase;
@@ -3549,6 +3642,7 @@ document.getElementById("btnClearU").onclick = () => {
   S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw();
 };
 document.getElementById("btnDemo").onclick = demoForces;
+{ const _rd=document.getElementById("btnReactDo"); if(_rd) _rd.onclick=doRapidIngress; const _rp=document.getElementById("btnReactPass"); if(_rp) _rp.onclick=endReaction; }
 const placeSeatEl = document.getElementById("placeSeat");
 if (placeSeatEl) placeSeatEl.onchange = () => {
   placeSeat = placeSeatEl.value === "1" ? 1 : 0;
@@ -3939,6 +4033,12 @@ canvas.addEventListener("pointerdown", e => {
   if (tool==="combat"){
     const hu = hitUnit(wpt.x,wpt.y);
     if (hu){
+      if (canControlUnit(hu) && canDragUnit(hu) && unitGroup(hu).some(m => flagsOf(m).piling)){
+        selectObj("u", hu);
+        mode="move"; drag={kind:"u",id:hu.id,ox:wpt.x-hu.x,oy:wpt.y-hu.y};
+        moveOrigin={x:hu.x,y:hu.y,id:hu.id};
+        canvas.classList.add("dragging"); draw(); return;
+      }
       const active = S.turn.activeSeat;
       if (hu.seat === active){
         // Active player's model → attacker
@@ -4089,6 +4189,11 @@ function endPtr(e){
               const nd = nearestEnemyDist(u);
               if (nd <= 8.01) showWarn("<strong>Scouts:</strong> end more than 8″ from enemies (now "+nd.toFixed(1)+"″).");
             }
+          } else if (S.turn.phase === "fight" && unitGroup(u).some(m => flagsOf(m).piling)){
+            if (from && dist > 3){ const k=3/dist; u.x=from.x+(u.x-from.x)*k; u.y=from.y+(u.y-from.y)*k; }
+            snapshotGroup(u, u.id, from);
+            lastDragId = u.id;
+            logLine(u.name+" moved "+Math.min(dist,3).toFixed(1)+"″ (Pile-in / Consolidate)");
           } else {
             const f = flagsOf(u);
             if (f.remainedStationary){
