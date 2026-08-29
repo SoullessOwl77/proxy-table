@@ -404,7 +404,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.21-drop-pass";
+const BUILD = "v2.16.23-demo-kit";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -711,9 +711,9 @@ if (!window.PTSheets){
   window.PTSheets = {
     ABILITY_LIB: {},
     DATASHEETS: {
-      inf: { id:"demo-infantry", name:"Infantry", keywords:["INFANTRY"], M:6,T:4,Sv:3,Inv:0,W:2,Ld:6,OC:2,baseMm:32, weapons:[{name:"Rifle",kind:"ranged",A:2,skill:3,S:4,AP:0,D:1,rng:24},{name:"Blade",kind:"melee",A:3,skill:3,S:4,AP:0,D:1,rng:0}], abilities:[] },
-      cmd: { id:"demo-commander", name:"Commander", keywords:["INFANTRY","CHARACTER"], M:6,T:4,Sv:3,Inv:4,W:5,Ld:7,OC:1,baseMm:40, weapons:[{name:"Pistol",kind:"ranged",A:1,skill:2,S:4,AP:-1,D:1,rng:12},{name:"Blade",kind:"melee",A:5,skill:2,S:5,AP:-2,D:2,rng:0}], abilities:[{id:"feel-no-pain",x:5}] },
-      wlk: { id:"demo-walker", name:"Walker", keywords:["VEHICLE","WALKER"], M:8,T:10,Sv:3,Inv:0,W:7,Ld:7,OC:3,baseMm:80, weapons:[{name:"Cannon",kind:"ranged",A:3,skill:3,S:8,AP:-1,D:2,rng:36},{name:"Fist",kind:"melee",A:4,skill:3,S:8,AP:-2,D:2,rng:0}], abilities:[] }
+      inf: { id:"demo-infantry", name:"Infantry", keywords:["INFANTRY","GRENADES","SCOUTS"], M:6,T:4,Sv:3,Inv:0,W:2,Ld:6,OC:2,baseMm:32, weapons:[{name:"Rifle",kind:"ranged",A:2,skill:3,S:4,AP:0,D:1,rng:24,tags:["TORRENT"]},{name:"Blade",kind:"melee",A:3,skill:3,S:4,AP:0,D:1,rng:0}], abilities:[{id:"feel-no-pain",x:5},{id:"deep-strike"},{id:"scout",x:6},{id:"fights-first"}] },
+      cmd: { id:"demo-commander", name:"Commander", keywords:["INFANTRY","CHARACTER","GRENADES","INFILTRATORS"], M:6,T:4,Sv:3,Inv:4,W:5,Ld:7,OC:1,baseMm:40, weapons:[{name:"Pistol",kind:"ranged",A:1,skill:2,S:4,AP:-1,D:1,rng:12,tags:["PISTOL"]},{name:"Blade",kind:"melee",A:5,skill:2,S:5,AP:-2,D:2,rng:0}], abilities:[{id:"feel-no-pain",x:5},{id:"deep-strike"},{id:"scout",x:6},{id:"fights-first"}] },
+      wlk: { id:"demo-walker", name:"Walker", keywords:["VEHICLE","WALKER","TITANIC","GRENADES","DEEP STRIKE"], M:8,T:10,Sv:3,Inv:0,W:7,Ld:7,OC:3,baseMm:80, weapons:[{name:"Cannon",kind:"ranged",A:3,skill:3,S:8,AP:-1,D:2,rng:36},{name:"Fist",kind:"melee",A:4,skill:3,S:8,AP:-2,D:2,rng:0}], abilities:[{id:"feel-no-pain",x:5},{id:"deep-strike"},{id:"scout",x:6},{id:"fights-first"}] }
     },
     sheetOf(key){ return this.DATASHEETS[key] || null; },
     firstWeapon(sheet, kind){
@@ -1512,6 +1512,7 @@ function inEngagement(u){
 function hasDeepStrike(u){
   if (!u) return false;
   if (flagsOf(u).deepStrike) return true;
+  if ((u.abilities||[]).some(a => a && a.id === "deep-strike")) return true;
   return (u.keywords||[]).some(k => String(k).toUpperCase().replace(/-/g," ").includes("DEEP STRIKE"));
 }
 function nearBoardEdge(u){
@@ -1884,6 +1885,12 @@ function destroyLateReserves(){
   });
   if (gone.length) logLine("Destroyed — still in Reserves after BR3: "+gone.join(", "));
 }
+function reservesCanArrive(){
+  if (inSetup()) return false;
+  if ((S.turn && S.turn.phase) !== "movement") return false;
+  const seat = practice ? S.turn.activeSeat : mySeat;
+  return reservedUnits(seat).length > 0;
+}
 function renderReserveRow(){
   const row = document.getElementById("rowReserves");
   const box = document.getElementById("reserveBtns");
@@ -1891,7 +1898,7 @@ function renderReserveRow(){
   if (!row || !box) return;
   const view = reserveViewSeat();
   const step = S.deploy && S.deploy.on ? S.deploy.step : "";
-  let list;
+  let list = [];
   let kicker = "Reserves";
   if (inSetup() && step === "formation"){
     list = uniqueUnits(reservedUnits(view));
@@ -1899,8 +1906,12 @@ function renderReserveRow(){
   } else if (inSetup() && (step === "drops" || step === "infiltrate")){
     list = uniqueUnits(dropQueue(view));
     kicker = seatName(view)+" to place";
-  } else {
-    list = uniqueUnits(reservedUnits(inSetup() && practice ? view : (inSetup() ? mySeat : null)));
+  } else if (inSetup()){
+    list = uniqueUnits(reservedUnits(practice ? view : mySeat));
+  } else if (reservesCanArrive()){
+    const seat = practice ? S.turn.activeSeat : mySeat;
+    list = uniqueUnits(reservedUnits(seat));
+    kicker = seatName(seat)+" Reserves";
   }
   const kickEl = row.querySelector(".act-kicker");
   if (kickEl) kickEl.textContent = kicker;
@@ -1918,7 +1929,7 @@ function renderReserveRow(){
     if (inSetup() && step === "formation") hint.textContent = "Only "+seatName(view)+" is listed. Reserves = stays off the table. Switch edge to see the other list. Then Begin drops.";
     else if (inSetup() && (step === "drops" || step === "infiltrate")) hint.textContent = seatName(view)+" places. Select one → Deploy unit → drag → Next player to lock.";
     else if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
-    else hint.textContent = "Movement: select one, Optional → Ingress → Announce.";
+    else hint.textContent = "Movement: select one, Optional → Ingress → Announce. Usually battle round 2+.";
   }
 }
 function overlapsEnemy(u){
@@ -2398,6 +2409,7 @@ function startBattle(){
   });
   logLine("Battle started · Command · " + seatName(S.turn.activeSeat) + "'s turn");
   setTool("unit");
+  renderReserveRow();
   promptBattleShock();
 }
 function enterSetup(){
@@ -2466,7 +2478,7 @@ function setPhase(p){
   clearCombatPair();
   logLine("Phase → " + p);
   applyPhaseTool(prev);
-  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions();
+  save(); draw(); refreshTip(); refreshGuide(); updateTerrainTools(); renderActions(); renderReserveRow();
 }
 document.getElementById("btnNext").onclick = () => {
   showTip(TIPS.next);
@@ -3243,6 +3255,8 @@ function dropUnit(key, seat, x, y, groupId){
     abilities: (d.abilities || []).map(a => Object.assign({}, a)),
     x, y, rot: 0, groupId: groupId || null, reserved: false, flags: defaultFlags()
   };
+  if (hasDeepStrike(u)) flagsOf(u).deepStrike = true;
+  if ((u.abilities||[]).some(a => a && a.id === "fights-first")) flagsOf(u).fightsFirst = true;
   S.units.push(u); return u;
 }
 function placeDemoSeat(seat){
@@ -3524,7 +3538,7 @@ function setTool(t){
   tool = t;
   document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("on", b.dataset.tool===t));
   document.getElementById("rowTerrain").style.display = t==="terrain"?"":"none";
-  document.getElementById("rowUnits").style.display = t==="unit"?"":"none";
+  document.getElementById("rowUnits").style.display = (t==="unit" && inSetup())?"":"none";
   document.getElementById("rowMeasure").style.display = t==="measure"?"":"none";
   document.getElementById("rowCombat").style.display = t==="combat"?"":"none";
   if (t!=="combat") document.getElementById("selbar").classList.toggle("on", !!selected && selected.kind);

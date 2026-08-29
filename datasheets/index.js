@@ -88,9 +88,10 @@
   }
   function isPtsOnly(s) {
     if (!s) return false;
-    if (s.fanSourced || (s.source && s.source.kind === "fan")) return false;
     if (s.pendingStats) return true;
-    if (s.sheetComplete === false) return true;
+    const weps = (s.weapons || []).length;
+    const noLine = s.M == null && s.T == null;
+    if (s.sheetComplete === false && (noLine || !weps)) return true;
     return false;
   }
   function isFanSheet(s) {

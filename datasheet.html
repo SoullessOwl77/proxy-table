@@ -35,6 +35,8 @@ a{color:var(--brass);}
 .list button.on{background:var(--brass);color:#14110a;}
 .list button.pts-only{color:#e07070;}
 .list button.pts-only.on{background:#5a2424;color:#f0c0c0;border-color:#a8443c;}
+.list button.pack-src{color:#e0c56a;}
+.list button.pack-src.on{background:var(--brass);color:#14110a;border-color:#0006;}
 .list button.fan-src{color:#b388ff;}
 .list button.fan-src.on{background:#3a2a55;color:#e4d4ff;border-color:#7a4fd6;}
 h1.pts-only,#fName.pts-only{color:#e07070;}
@@ -197,7 +199,9 @@ function catalogFactions(){
   const set = {};
   Object.keys((PT && PT.DATASHEETS) || {}).forEach(k => {
     const s = PT.DATASHEETS[k];
-    if (s && s.faction) set[s.faction] = true;
+    if (!s || !s.faction) return;
+    if (s.ptsSource === "demo" || s.faction === "Demo") return;
+    set[s.faction] = true;
   });
   return Object.keys(set).sort();
 }
@@ -207,7 +211,7 @@ function paintFactionPick(){
   const facs = catalogFactions();
   const cur = PT.DATASHEETS[key];
   if (!factionFilter) factionFilter = (cur && cur.faction) || facs[0] || "";
-  el.innerHTML = facs.map(f => `<option value="${f}" ${f===factionFilter?"selected":""}>${f}</option>`).join("");
+  el.innerHTML = (facs.length ? facs : ["(catalog empty — title-tap Hub, then reopen)"]).map(f => `<option value="${f}" ${f===factionFilter?"selected":""}>${f}</option>`).join("");
 }
 function opt(sel, arr, cur){
   sel.innerHTML = arr.map(v => `<option value="${v}">${v}</option>`).join("");
@@ -236,7 +240,7 @@ function renderList(){
     const s = live[k];
     const miss = PT.isPtsOnly && PT.isPtsOnly(s);
     const fan = PT.isFanSheet && PT.isFanSheet(s);
-    const extra = miss ? " pts-only" : (fan ? " fan-src" : "");
+    const extra = miss ? " pts-only" : (fan ? " fan-src" : " pack-src");
     const flag = miss ? " · pts only" : (fan ? " · fan" : "");
     return `<button class="btn ${k===key?"on":""}${extra}" data-k="${k}" type="button">${s.name || k}${flag}</button>`;
   }).join("") || `<p class="hint">${sheetKeys().length ? "No match." : "Catalog did not load. Title-tap and reopen."}</p>`;
@@ -450,7 +454,6 @@ document.getElementById("btnMfmCheck").onclick = () => {
   msg.textContent = "MFM v" + diff.version + ": " + bits.join("; ") + (changed.length ? ". Accept or Keep on the highlighted sheet." : ".");
   if (changed.length) key = changed[0].key;
   render();
-};
 };
 document.getElementById("btnRevert").onclick = () => {
   const def = PT.defaults.sheets[key];
