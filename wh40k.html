@@ -404,7 +404,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.23-demo-kit";
+const BUILD = "v2.16.24-army-kit";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -2622,9 +2622,19 @@ document.getElementById("btnTipHide").onclick = () => {
 /* Walkthrough: phase do/don't. units argument reserved for future model-aware lines. */
 function getGuideBlock(phase, units){
   const block = GUIDE[phase] || GUIDE.command;
-  // Future: filter block.do / block.dont by entry.when against `units` on the table.
-  void units;
-  return block;
+  const u = selectedUnit && selectedUnit();
+  if (!u) return block;
+  const extra = [];
+  extra.push(u.name + " · P" + u.seat + (u.reserved ? " · Reserves" : ""));
+  if (isInfiltrator(u)) extra.push("Infiltrator — after normal drops, more than 8″ from the enemy DZ and enemy units.");
+  if (scoutInches(u)) extra.push("Scout " + scoutInches(u) + "″ after first turn is known.");
+  if (isTitanic(u)) extra.push("Titanic — this drop counts as two.");
+  if (hasGrenades(u)) extra.push("Grenades — 1 CP, 8″, 6 dice 4+=mortal wounds.");
+  if (hasDeepStrike(u)) extra.push("Deep Strike — Ingress from the board edge or DS, usually BR2+.");
+  const fnp = window.PTSheets && PTSheets.fnpOf ? PTSheets.fnpOf(u) : 0;
+  if (fnp) extra.push("Feel No Pain " + fnp + "+.");
+  if (unitHasKw(u, "CHARACTER")) extra.push("Character — wound other models in the unit first when you can.");
+  return { title: block.title, do: extra.concat(block.do || []), dont: block.dont || [], next: block.next || "" };
 }
 function refreshGuide(){
   const panel = document.getElementById("guide");
@@ -3217,6 +3227,7 @@ function selectObj(kind, obj){
   refreshTip();
   updateChargeRow();
   renderActions();
+  refreshGuide();
 }
 
 function addPreset(kind){

@@ -2,35 +2,23 @@
 (function () {
   const STORE = "pt_datasheets_v1";
   const ABILITY_LIB = {
-    "feel-no-pain": {
-      id: "feel-no-pain",
-      name: "Feel No Pain",
-      kind: "fnp",
-      announce: null,
-      note: "After a wound would be lost, roll one D6 per wound. On X+ it is not lost."
-    },
-    "deep-strike": {
-      id: "deep-strike",
-      name: "Deep Strike",
-      kind: "reserve",
-      announce: null,
-      note: "May start in Reserves and Ingress from the second battle round."
-    }
+    "feel-no-pain": { id: "feel-no-pain", name: "Feel No Pain", kind: "fnp", announce: null, note: "After a wound would be lost, roll one D6 per wound. On X+ it is not lost." },
+    "deep-strike": { id: "deep-strike", name: "Deep Strike", kind: "reserve", announce: null, note: "May start in Reserves and Ingress from the second battle round." }
   };
   const DATASHEETS_DEFAULT = {};
   const PACKS = {};
   const DETACHMENTS_DEFAULT = {};
-
+  const ENHANCEMENTS_DEFAULT = {};
+  const CHAPTER_KWS = ["SALAMANDERS","ULTRAMARINES","IMPERIAL FISTS","IRON HANDS","RAVEN GUARD","WHITE SCARS","CRIMSON FISTS","BLACK TEMPLARS","DARK ANGELS","BLOOD ANGELS","SPACE WOLVES","DEATHWATCH"];
   const BATTLE_SIZES = [
     { id: "incursion", name: "Incursion", pts: 1000, dp: 2, enhancements: 2, copies: 2, source: "core" },
     { id: "strike-force", name: "Strike Force", pts: 2000, dp: 3, enhancements: 4, copies: 3, source: "core" },
     { id: "onslaught", name: "Onslaught", pts: 3000, dp: 4, enhancements: 6, copies: 4, source: "proxy" }
   ];
   const MFM_HUB = "https://mfm.warhammer-community.com/en";
+  function clone(o) { return JSON.parse(JSON.stringify(o || {})); }
   function mfmSeed() { return window.PT_MFM_SEED || { version: "", units: {} }; }
-  function mfmNorm(s) {
-    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  }
+  function mfmNorm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
   function mfmEntryFor(sheet) {
     const seed = mfmSeed().units || {};
     if (sheet && sheet.id && seed[sheet.id]) return seed[sheet.id];
@@ -39,31 +27,16 @@
     const keys = Object.keys(seed);
     for (let i = 0; i < keys.length; i++) {
       const e = seed[keys[i]];
-      if (mfmNorm(e.name) === want || mfmNorm(keys[i]) === want) return e;
+      if (e && mfmNorm(e.name) === want) return e;
     }
     return null;
   }
-  function mfmFirstPts(entry) {
-    if (!entry || !entry.bands || !entry.bands.length) return null;
-    return entry.bands.find(b => !b.tier || b.tier === "unit" || String(b.tier).indexOf("1st") === 0) || entry.bands[0];
-  }
   function lookupMfm(sheet) {
     const entry = mfmEntryFor(sheet);
-    const slug = ((sheet && sheet.faction) || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const url = MFM_HUB + (slug ? "/" + slug : "");
-    if (!entry) {
-      return { hit: false, url, version: mfmSeed().version || "", message: "Not in the local MFM seed. Open the faction page and enter the cost." };
-    }
-    const first = mfmFirstPts(entry);
-    return {
-      hit: true,
-      url,
-      version: mfmSeed().version || "",
-      name: entry.name,
-      pts: first && first.pts,
-      bands: entry.bands,
-      message: "MFM v" + (mfmSeed().version || "?") + " · " + (first && first.pts) + " pts"
-    };
+    const url = MFM_HUB;
+    if (!entry) return { hit: false, message: "Not in the MFM seed.", url };
+    const band = (entry.bands || [])[0] || {};
+    return { hit: true, pts: band.pts, bands: entry.bands || [], version: mfmSeed().version || "", url, message: (sheet.name || sheet.id) + " · " + (band.pts != null ? band.pts + " pts" : "?") + " (MFM " + (mfmSeed().version || "") + ")" };
   }
   function applyMfmProposal(sheet) {
     const look = lookupMfm(sheet);
@@ -71,12 +44,8 @@
     sheet.ptsProposed = look.pts;
     sheet.ptsBands = (look.bands || []).map(b => ({ count: b.count, pts: b.pts, tier: b.tier || "unit" }));
     sheet.ptsMfmVersion = look.version;
-    if (sheet.pts == null) {
-      sheet.pts = look.pts;
-      sheet.ptsSource = "proposed";
-    } else if (sheet.pts !== look.pts) {
-      sheet.ptsSource = "proposed";
-    }
+    if (sheet.pts == null) { sheet.pts = look.pts; sheet.ptsSource = "proposed"; }
+    else if (sheet.pts !== look.pts) sheet.ptsSource = "proposed";
     return look;
   }
   function isDemoSheet(s) {
@@ -107,114 +76,40 @@
       const s = sheets[k];
       if (isDemoSheet(s)) return;
       const look = lookupMfm(s);
-      if (!look.hit) {
-        out.push({ key: k, name: s.name, kind: "missing", have: s.pts, want: null, url: look.url });
-        return;
-      }
-      if (s.pts !== look.pts) {
-        out.push({ key: k, name: s.name, kind: "changed", have: s.pts, want: look.pts, url: look.url });
-      }
+      if (!look.hit) { out.push({ key: k, name: s.name, kind: "missing", have: s.pts, want: null, url: look.url }); return; }
+      if (s.pts !== look.pts) out.push({ key: k, name: s.name, kind: "changed", have: s.pts, want: look.pts, url: look.url });
     });
-    return { version: mfmSeed().version, rows: out };
-  }
-
-  function clone(o) { return JSON.parse(JSON.stringify(o)); }
-  function slug(s) {
-    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "ability";
-  }
-  function loadStore() {
-    try { return JSON.parse(localStorage.getItem(STORE) || "null") || { lib: {}, sheets: {} }; }
-    catch (_) { return { lib: {}, sheets: {} }; }
+    return { version: mfmSeed().version || "", rows: out };
   }
   function currentLib() {
     const lib = clone(ABILITY_LIB);
-    const extra = loadStore().lib || {};
-    Object.keys(extra).forEach(k => { lib[k] = extra[k]; });
+    try { const raw = JSON.parse(localStorage.getItem(STORE) || "null"); if (raw && raw.lib) Object.assign(lib, raw.lib); } catch (_) {}
     return lib;
   }
   function currentSheets() {
     const sheets = clone(DATASHEETS_DEFAULT);
-    const extra = loadStore().sheets || {};
-    Object.keys(extra).forEach(k => { sheets[k] = extra[k]; });
+    try { const raw = JSON.parse(localStorage.getItem(STORE) || "null"); if (raw && raw.sheets) Object.assign(sheets, raw.sheets); } catch (_) {}
     return sheets;
   }
   function saveAll(lib, sheets) {
-    const pack = { lib: {}, sheets: {} };
-    Object.keys(lib || {}).forEach(id => {
-      if (JSON.stringify(lib[id]) !== JSON.stringify(ABILITY_LIB[id])) pack.lib[id] = lib[id];
-    });
-    Object.keys(sheets || {}).forEach(k => {
-      if (JSON.stringify(sheets[k]) !== JSON.stringify(DATASHEETS_DEFAULT[k])) pack.sheets[k] = sheets[k];
-    });
+    const pack = { v: 1, lib: {}, sheets: {} };
+    Object.keys(lib || {}).forEach(id => { if (JSON.stringify(lib[id]) !== JSON.stringify(ABILITY_LIB[id])) pack.lib[id] = lib[id]; });
+    Object.keys(sheets || {}).forEach(k => { if (JSON.stringify(sheets[k]) !== JSON.stringify(DATASHEETS_DEFAULT[k])) pack.sheets[k] = sheets[k]; });
     localStorage.setItem(STORE, JSON.stringify(pack));
   }
-  function parseStatNum(v, fallback) {
-    if (typeof v === "number" && v === v) return v;
-    const s = String(v == null ? "" : v).replace(/["″'+\s]/g, "").trim();
-    if (!s || /^n\/a$/i.test(s) || s === "–" || s === "—") return fallback;
-    const n = parseInt(s, 10);
-    return n === n ? n : fallback;
-  }
-  function parseDiceOrNum(v, fallback) {
-    if (typeof v === "number" && v === v) return v;
-    const s = String(v == null ? "" : v).replace(/\s/g, "").trim();
-    if (!s) return fallback;
-    if (/^\d+$/.test(s)) return parseInt(s, 10);
-    const m = s.match(/^(\d*)D(\d+)([+-]\d+)?$/i);
-    if (m) return ((m[1] || "1") + "D" + m[2] + (m[3] || "")).toUpperCase();
-    return fallback;
-  }
-  function parseRangeIn(w) {
-    if (typeof w.rng === "number" && w.rng === w.rng) return w.rng;
-    const raw = (w.rng != null && w.rng !== "") ? w.rng : w.range;
-    const s = String(raw == null ? "" : raw);
-    if (/melee/i.test(s)) return 0;
-    const m = s.match(/(\d+)/);
-    return m ? parseInt(m[1], 10) : 0;
-  }
-  function parseSkillIn(w) {
-    const raw = (w.skill != null && w.skill !== "") ? w.skill : (w.kind === "melee" ? w.WS : w.BS);
-    if (raw == null || raw === "") return 4;
-    const s = String(raw).trim();
-    if (/^n\/a$/i.test(s) || s === "–" || s === "—" || s === "-") return null;
-    const n = parseInt(s, 10);
-    return n === n ? n : 4;
-  }
-  function normalizeWeapon(w) {
-    if (!w) return null;
-    const kind = w.kind || (/melee/i.test(String(w.range || "")) ? "melee" : "ranged");
-    return {
-      name: w.name || "Weapon",
-      kind,
-      A: parseDiceOrNum(w.A, 1),
-      skill: parseSkillIn(Object.assign({}, w, { kind })),
-      S: parseStatNum(w.S, 4),
-      AP: parseStatNum(w.AP, 0),
-      D: parseDiceOrNum(w.D, 1),
-      rng: parseRangeIn(w),
-      tags: (w.tags || []).slice()
-    };
-  }
-  function firstWeapon(sheet, kind) {
-    const w = ((sheet && sheet.weapons) || []).find(x => x.kind === kind);
-    if (!w) return kind === "ranged"
-      ? { name: "Gun", kind: "ranged", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 24, tags: [] }
-      : { name: "Close combat", kind: "melee", A: 1, skill: 4, S: 4, AP: 0, D: 1, rng: 0, tags: [] };
-    return normalizeWeapon(w);
+  function slug(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+  function addAbility(name, extra) {
+    const id = slug(name);
+    live.lib[id] = Object.assign({ id, name, kind: "other", announce: null, pending: true, note: "" }, extra || {});
+    return live.lib[id];
   }
   function abilitiesOf(u) { return (u && u.abilities) || []; }
-  function fnpOf(u) {
-    const a = abilitiesOf(u).find(x => x.id === "feel-no-pain");
-    return a && a.x ? a.x : 0;
-  }
+  function fnpOf(u) { const a = abilitiesOf(u).find(x => x.id === "feel-no-pain"); return a && a.x ? a.x : 0; }
+
   const ARMY_STORE = "pt_40k_army_v1";
   function nid() { return "list_" + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36); }
   function emptyStore() {
-    return {
-      v: 2,
-      activeId: "list_default",
-      lists: [{ id: "list_default", name: "My list", units: [], faction: "", sizeId: "strike-force", detachments: [], enhancementCount: 0 }]
-    };
+    return { v: 2, activeId: "list_default", lists: [{ id: "list_default", name: "My list", units: [], faction: "", sizeId: "strike-force", detachments: [], enhancements: [], enhancementCount: 0 }] };
   }
   function migrateArmy(raw) {
     if (!raw) return emptyStore();
@@ -223,62 +118,41 @@
         if (!l.sizeId) l.sizeId = "strike-force";
         if (!l.faction) l.faction = "";
         if (!Array.isArray(l.detachments)) l.detachments = [];
-        if (l.enhancementCount == null) l.enhancementCount = 0;
+        if (!Array.isArray(l.enhancements)) l.enhancements = [];
+        if (l.enhancementCount == null) l.enhancementCount = l.enhancements.length || 0;
       });
       if (!raw.activeId || !raw.lists.some(l => l.id === raw.activeId)) raw.activeId = raw.lists[0].id;
       return raw;
     }
     if (Array.isArray(raw.units)) {
-      const id = "list_default";
-      return {
-        v: 2, activeId: id,
-        lists: [{ id, name: raw.name || "My list", units: raw.units, sizeId: "strike-force", detachments: [], enhancementCount: 0 }]
-      };
+      return { v: 2, activeId: "list_default", lists: [{ id: "list_default", name: raw.name || "My list", units: raw.units, faction: raw.faction || "", sizeId: raw.sizeId || "strike-force", detachments: raw.detachments || [], enhancements: raw.enhancements || [], enhancementCount: raw.enhancementCount || 0 }] };
     }
     return emptyStore();
   }
-  function loadArmyStore() {
-    try { return migrateArmy(JSON.parse(localStorage.getItem(ARMY_STORE) || "null")); }
-    catch (_) { return emptyStore(); }
-  }
-  function saveArmyStore(store) {
-    store.v = 2;
-    localStorage.setItem(ARMY_STORE, JSON.stringify(store));
-    return store;
-  }
-  function listById(id) {
-    return (loadArmyStore().lists || []).find(l => l.id === id) || null;
-  }
-  function activeList(store) {
-    store = store || loadArmyStore();
-    return (store.lists || []).find(l => l.id === store.activeId) || store.lists[0];
-  }
+  function loadArmyStore() { try { return migrateArmy(JSON.parse(localStorage.getItem(ARMY_STORE) || "null")); } catch (_) { return emptyStore(); } }
+  function saveArmyStore(st) { localStorage.setItem(ARMY_STORE, JSON.stringify(st)); }
+  function listById(id) { return (loadArmyStore().lists || []).find(l => l.id === id) || null; }
+  function activeList(store) { store = store || loadArmyStore(); return (store.lists || []).find(l => l.id === store.activeId) || store.lists[0]; }
   function emptyArmy() {
     const l = activeList();
-    return { v: 1, id: l.id, name: l.name, units: l.units, faction: l.faction || "", sizeId: l.sizeId, detachments: l.detachments, enhancementCount: l.enhancementCount };
+    return { v: 1, id: l.id, name: l.name, units: l.units, faction: l.faction || "", sizeId: l.sizeId, detachments: l.detachments, enhancements: l.enhancements || [], enhancementCount: (l.enhancements && l.enhancements.length) || l.enhancementCount || 0 };
   }
   function loadArmy() { const a = emptyArmy(); repriceList(a); return a; }
   function saveArmy(army) {
     const st = loadArmyStore();
     let l = st.lists.find(x => x.id === (army.id || st.activeId));
     if (!l) {
-      l = {
-        id: army.id || nid(), name: army.name || "My list", units: army.units || [],
-        faction: army.faction || "", sizeId: army.sizeId || "strike-force", detachments: army.detachments || [], enhancementCount: army.enhancementCount || 0
-      };
-      st.lists.push(l);
-      st.activeId = l.id;
+      l = { id: army.id || nid(), name: army.name || "My list", units: army.units || [], faction: army.faction || "", sizeId: army.sizeId || "strike-force", detachments: army.detachments || [], enhancements: army.enhancements || [], enhancementCount: (army.enhancements && army.enhancements.length) || army.enhancementCount || 0 };
+      st.lists.push(l); st.activeId = l.id;
     } else {
-      l.name = army.name || l.name;
-      l.units = army.units || [];
+      l.name = army.name || l.name; l.units = army.units || [];
       if (army.faction != null) l.faction = army.faction;
       if (army.sizeId) l.sizeId = army.sizeId;
       if (army.detachments) l.detachments = army.detachments;
-      if (army.enhancementCount != null) l.enhancementCount = army.enhancementCount;
+      if (army.enhancements) l.enhancements = army.enhancements;
+      l.enhancementCount = (l.enhancements && l.enhancements.length) || army.enhancementCount || 0;
     }
-    repriceList(l);
-    saveArmyStore(st);
-    return loadArmy();
+    repriceList(l); saveArmyStore(st); return loadArmy();
   }
   function setActiveList(id) {
     const st = loadArmyStore();
@@ -287,19 +161,15 @@
   }
   function addList(name) {
     const st = loadArmyStore();
-    const l = { id: nid(), name: name || ("List " + (st.lists.length + 1)), units: [], faction: "", sizeId: "strike-force", detachments: [], enhancementCount: 0 };
-    st.lists.push(l);
-    st.activeId = l.id;
-    saveArmyStore(st);
-    return l;
+    const l = { id: nid(), name: name || ("List " + (st.lists.length + 1)), units: [], faction: "", sizeId: "strike-force", detachments: [], enhancements: [], enhancementCount: 0 };
+    st.lists.push(l); st.activeId = l.id; saveArmyStore(st); return l;
   }
   function deleteList(id) {
     const st = loadArmyStore();
     st.lists = st.lists.filter(l => l.id !== id);
     if (!st.lists.length) st.lists = emptyStore().lists;
     if (!st.lists.some(l => l.id === st.activeId)) st.activeId = st.lists[0].id;
-    saveArmyStore(st);
-    return loadArmy();
+    saveArmyStore(st); return loadArmy();
   }
   const LIST_KIND = "proxy-table-40k-list";
   const LISTS_KIND = "proxy-table-40k-lists";
@@ -307,45 +177,20 @@
     list = list || activeList();
     if (!list) return null;
     return {
-      name: list.name || "List",
-      faction: list.faction || "",
-      sizeId: list.sizeId || "strike-force",
+      name: list.name || "List", faction: list.faction || "", sizeId: list.sizeId || "strike-force",
       detachments: (list.detachments || []).slice(),
-      enhancementCount: list.enhancementCount || 0,
-      units: (list.units || []).map(u => ({
-        sheetKey: u.sheetKey,
-        sheetId: u.sheetId,
-        name: u.name,
-        count: u.count,
-        gear: (u.gear || []).map(g => ({ name: g.name, count: g.count })),
-        pts: u.pts,
-        ptsSource: u.ptsSource || "",
-        copyIndex: u.copyIndex || 0,
-        ptsTier: u.ptsTier || ""
-      }))
+      enhancements: (list.enhancements || []).map(e => ({ id: e.id, name: e.name, pts: e.pts })),
+      enhancementCount: (list.enhancements && list.enhancements.length) || list.enhancementCount || 0,
+      units: (list.units || []).map(u => ({ sheetKey: u.sheetKey, sheetId: u.sheetId, name: u.name, count: u.count, gear: (u.gear || []).map(g => ({ name: g.name, count: g.count })), pts: u.pts, ptsSource: u.ptsSource || "", copyIndex: u.copyIndex || 0, ptsTier: u.ptsTier || "" }))
     };
   }
   function exportList(id) {
     const list = (id && listById(id)) || activeList();
-    return {
-      v: 1,
-      kind: LIST_KIND,
-      app: "proxy-table",
-      game: "wh40k",
-      exportedAt: new Date().toISOString(),
-      list: snapshotList(list)
-    };
+    return { v: 1, kind: LIST_KIND, app: "proxy-table", game: "wh40k", exportedAt: new Date().toISOString(), list: snapshotList(list) };
   }
   function exportAllLists() {
     const st = loadArmyStore();
-    return {
-      v: 1,
-      kind: LISTS_KIND,
-      app: "proxy-table",
-      game: "wh40k",
-      exportedAt: new Date().toISOString(),
-      lists: (st.lists || []).map(snapshotList)
-    };
+    return { v: 1, kind: LISTS_KIND, app: "proxy-table", game: "wh40k", exportedAt: new Date().toISOString(), lists: (st.lists || []).map(snapshotList) };
   }
   function incomingLists(raw) {
     if (!raw || typeof raw !== "object") return [];
@@ -363,112 +208,88 @@
     const added = [];
     incoming.forEach((src, n) => {
       const l = {
-        id: nid(),
-        name: src.name || ("Imported " + (st.lists.length + 1)),
-        faction: src.faction || "",
+        id: nid(), name: src.name || ("Imported " + (st.lists.length + 1)), faction: src.faction || "",
         sizeId: src.sizeId || "strike-force",
         detachments: Array.isArray(src.detachments) ? src.detachments.slice() : [],
-        enhancementCount: src.enhancementCount || 0,
+        enhancements: Array.isArray(src.enhancements) ? src.enhancements.map(e => ({ id: e.id, name: e.name, pts: e.pts })) : [],
+        enhancementCount: (src.enhancements && src.enhancements.length) || src.enhancementCount || 0,
         units: (src.units || []).map((u, i) => ({
           id: "au_" + Date.now().toString(36) + n.toString(36) + i.toString(36),
-          sheetKey: u.sheetKey,
-          sheetId: u.sheetId,
-          name: u.name,
-          count: Math.max(1, u.count || 1),
+          sheetKey: u.sheetKey, sheetId: u.sheetId, name: u.name, count: Math.max(1, u.count || 1),
           gear: (u.gear || []).map(g => ({ name: g.name, count: g.count || 0 })),
-          pts: u.pts,
-          ptsSource: u.ptsSource || "",
-          copyIndex: u.copyIndex || 0,
-          ptsTier: u.ptsTier || ""
+          pts: u.pts, ptsSource: u.ptsSource || "", copyIndex: u.copyIndex || 0, ptsTier: u.ptsTier || ""
         }))
       };
-      repriceList(l);
-      st.lists.push(l);
-      added.push(l);
+      repriceList(l); st.lists.push(l); added.push(l);
     });
     if (added.length) st.activeId = added[0].id;
     saveArmyStore(st);
-    return {
-      ok: true,
-      added: added.length,
-      lists: added,
-      message: added.length === 1 ? ("Imported " + added[0].name) : ("Imported " + added.length + " lists")
-    };
+    return { ok: true, added: added.length, message: "Imported " + added.length + " list" + (added.length === 1 ? "" : "s") + "." };
   }
-  function sizeById(id) { return BATTLE_SIZES.find(s => s.id === id) || null; }
-  function parseTier(tier) {
-    const raw = String(tier || "unit").toLowerCase();
-    if (!raw || raw === "unit") return { min: 1, max: Infinity, label: "any" };
-    const plus = raw.indexOf("+") >= 0;
-    const parts = raw.replace("+", "").split("-");
-    const ord = { "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5, "6th": 6 };
-    const num = s => ord[s] || parseInt(s, 10) || 1;
-    const min = num(parts[0]);
-    const max = plus ? Infinity : (parts[1] ? num(parts[1]) : min);
-    return { min, max, label: raw };
+  function parseNum(v, fallback) { const n = Number(String(v == null ? "" : v).replace(/[^\d.\-]+/g, "")); return n === n ? n : fallback; }
+  function parseAorD(v, fallback) { if (v == null || v === "") return fallback; if (typeof v === "number") return v; return String(v).toUpperCase().replace(/\s+/g, "") || fallback; }
+  function parseSkill(w) { const raw = w && (w.skill != null ? w.skill : (w.kind === "melee" ? w.WS : w.BS)); return parseNum(raw, 4); }
+  function parseRange(w) { if (!w) return 0; if (w.rng != null) return parseNum(w.rng, 0); const r = String(w.range || ""); if (/melee/i.test(r)) return 0; return parseNum(r, 0); }
+  function normalizeWeapon(w) {
+    if (!w) return null;
+    return { name: w.name, kind: w.kind, A: parseAorD(w.A, 1), skill: parseSkill(w), S: parseNum(w.S, 4), AP: parseNum(w.AP, 0), D: parseAorD(w.D, 1), rng: parseRange(w), tags: (w.tags || []).slice() };
   }
+  function firstWeapon(sheet, kind) { return ((sheet && sheet.weapons) || []).find(w => w.kind === kind) || null; }
+  function wepHasTag(w, tag) { const want = String(tag || "").toUpperCase().replace(/\s+/g, "-"); return ((w && w.tags) || []).some(t => String(t).toUpperCase().replace(/\s+/g, "-") === want); }
+  function isCloseQuarters(w) { return wepHasTag(w, "CLOSE-QUARTERS") || wepHasTag(w, "PISTOL"); }
+  function isSidearm(w) { return !!(w && w.kind === "ranged" && (isCloseQuarters(w) || /pistol/i.test(w.name || ""))); }
+  function defaultGear(sheet, count) { const n = Math.max(1, count || 1); return ((sheet && sheet.weapons) || []).map(w => ({ name: w.name, count: n })); }
+  function weaponsForIndex(sheet, gear, index) {
+    const names = {};
+    (gear || []).forEach(g => { if ((g.count || 0) > index) names[g.name] = true; });
+    const weps = ((sheet && sheet.weapons) || []).filter(w => !gear || !gear.length || names[w.name]);
+    return weps.length ? weps : ((sheet && sheet.weapons) || []).slice(0, 2);
+  }
+  function profileForIndex(sheet, index) {
+    const list = (sheet && sheet.profiles) || [];
+    if (!list.length) return { name: sheet.name, W: sheet.W };
+    if (index === 0 && list[0]) return list[0];
+    return list[1] || list[0] || { name: sheet.name, W: sheet.W };
+  }
+  function sizeById(id) { return BATTLE_SIZES.find(s => s.id === id) || BATTLE_SIZES[1]; }
+  function parseTier(t) { return String(t || "unit"); }
   function bandFor(sheet, count, copyIndex) {
-    copyIndex = Math.max(1, copyIndex || 1);
-    count = Math.max(1, count || 1);
-    const bands = ((sheet && sheet.ptsBands) || []).filter(b => b.count === count);
-    if (!bands.length) return null;
-    const hit = bands.find(b => {
-      const t = parseTier(b.tier);
-      return copyIndex >= t.min && copyIndex <= t.max;
+    const bands = (sheet && sheet.ptsBands) || [];
+    const copy = copyIndex || 1;
+    const want = [];
+    bands.forEach(b => {
+      const tier = parseTier(b.tier);
+      if (tier.indexOf("3rd") >= 0 && copy < 3) return;
+      if ((tier.indexOf("1st") >= 0 || tier.indexOf("2nd") >= 0) && copy >= 3) return;
+      if (tier.indexOf("4th") >= 0 && copy < 4) return;
+      want.push(b);
     });
-    return hit || bands[0];
+    const pool = want.length ? want : bands;
+    let hit = pool[0];
+    pool.forEach(b => { if (b.count <= count) hit = b; });
+    return hit || null;
   }
   function ptsForCount(sheet, count, copyIndex) {
-    count = Math.max(1, count || 1);
-    copyIndex = Math.max(1, copyIndex || 1);
-    if (!sheet) return { pts: null, source: "review", unknown: true, copyIndex, tier: "" };
-    const seed = mfmEntryFor(sheet);
-    const bands = (sheet.ptsBands && sheet.ptsBands.length)
-      ? sheet.ptsBands
-      : ((seed && seed.bands) || []);
-    const view = Object.assign({}, sheet, { ptsBands: bands });
-    const hit = bandFor(view, count, copyIndex);
-    if (hit && typeof hit.pts === "number") {
-      return {
-        pts: hit.pts,
-        source: sheet.ptsSource || "mfm",
-        unknown: sheet.ptsSource === "review",
-        copyIndex,
-        tier: hit.tier || "unit",
-        count
-      };
-    }
-    const def = (sheet.composition && sheet.composition.defaultCount) || 1;
-    if (typeof sheet.pts === "number" && count === def) {
-      return { pts: sheet.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review", copyIndex, tier: "unit", count };
-    }
-    if (sheet.ptsPer === "model" && typeof sheet.pts === "number") {
-      return { pts: sheet.pts * count, source: sheet.ptsSource || "mfm", unknown: false, copyIndex, tier: "unit", count };
-    }
-    return { pts: null, source: "review", unknown: true, copyIndex, tier: "", count };
+    if (!sheet) return { pts: null, source: "review", unknown: true, copyIndex: copyIndex || 1, tier: "unit", count };
+    const band = bandFor(sheet, count, copyIndex);
+    if (band && band.pts != null) return { pts: band.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review", copyIndex, tier: band.tier || "unit", count };
+    if (sheet.pts != null) return { pts: sheet.pts, source: sheet.ptsSource || "mfm", unknown: sheet.ptsSource === "review", copyIndex, tier: "unit", count };
+    return { pts: null, source: "review", unknown: true, copyIndex: copyIndex || 1, tier: "unit", count };
   }
-  function sheetKeyOf(u) { return (u && (u.sheetKey || u.sheetId || u.name)) || ""; }
-  function nextCopyIndex(list, sheetKey) {
-    const n = ((list && list.units) || []).filter(u => sheetKeyOf(u) === sheetKey).length;
-    return n + 1;
-  }
+  function nextCopyIndex(list, sheetKey) { return ((list && list.units) || []).filter(u => u.sheetKey === sheetKey).length + 1; }
   function repriceList(list) {
-    if (!list || !list.units) return list;
     const seen = {};
-    list.units.forEach(u => {
-      const sid = sheetKeyOf(u);
+    ((list && list.units) || []).forEach(u => {
+      const sid = u.sheetKey || u.sheetId || u.name;
       seen[sid] = (seen[sid] || 0) + 1;
       u.copyIndex = seen[sid];
       const sheet = live.sheets[u.sheetKey] || live.sheets[u.sheetId] || null;
       if (!sheet) return;
       const quote = ptsForCount(sheet, u.count || 1, u.copyIndex);
       if (!quote.unknown && quote.pts != null) {
-        u.pts = quote.pts;
-        u.ptsTier = quote.tier;
+        u.pts = quote.pts; u.ptsTier = quote.tier;
         if (u.ptsSource === "review") u.ptsSource = sheet.ptsSource || "mfm";
-      } else {
-        u.ptsTier = quote.tier || "";
-      }
+      } else u.ptsTier = quote.tier || "";
     });
     return list;
   }
@@ -479,6 +300,7 @@
       if (u.ptsSource === "review" || u.pts == null || u.pts === "") unknown++;
       else pts += Number(u.pts) || 0;
     });
+    ((list && list.enhancements) || []).forEach(e => { pts += Number(e.pts) || 0; });
     return { pts, unknown };
   }
   function formatPts(n, unknown) {
@@ -488,12 +310,43 @@
   }
   function detachmentOf(id) { return DETACHMENTS_DEFAULT[id] || null; }
   function detachmentsForFaction(faction) {
-    return Object.keys(DETACHMENTS_DEFAULT).map(k => DETACHMENTS_DEFAULT[k])
-      .filter(d => !faction || d.faction === faction);
+    return Object.keys(DETACHMENTS_DEFAULT).map(k => DETACHMENTS_DEFAULT[k]).filter(d => !faction || d.faction === faction);
   }
-  function sheetKeywords(sheet) {
-    return ((sheet && sheet.keywords) || []).map(k => String(k).toUpperCase());
+  function enhancementOf(id) { return ENHANCEMENTS_DEFAULT[id] || null; }
+  function enhancementsForList(list) {
+    const fac = (list && list.faction) || "";
+    const dets = (list && list.detachments) || [];
+    return Object.keys(ENHANCEMENTS_DEFAULT).map(k => ENHANCEMENTS_DEFAULT[k]).filter(e => {
+      if (fac && e.faction && e.faction !== fac) return false;
+      if (e.detIds && e.detIds.length && !e.detIds.some(id => dets.indexOf(id) >= 0)) return false;
+      return true;
+    });
   }
+  function sheetChapter(sheet) {
+    const kws = ((sheet && sheet.factionKeywords) || []).map(k => String(k).toUpperCase());
+    for (let i = 0; i < CHAPTER_KWS.length; i++) if (kws.indexOf(CHAPTER_KWS[i]) >= 0) return CHAPTER_KWS[i];
+    return "";
+  }
+  function chapterLockForList(list) {
+    const dets = (list && list.detachments) || [];
+    for (let i = 0; i < dets.length; i++) {
+      const d = detachmentOf(dets[i]);
+      if (d && d.chapter) return String(d.chapter).toUpperCase();
+    }
+    return "";
+  }
+  function chapterClash(list) {
+    const lock = chapterLockForList(list);
+    if (!lock) return null;
+    const bad = [];
+    ((list && list.units) || []).forEach(u => {
+      const sheet = live.sheets[u.sheetKey] || live.sheets[u.sheetId];
+      const ch = sheetChapter(sheet);
+      if (ch && ch !== lock) bad.push((u.name || "unit") + " (" + ch + ")");
+    });
+    return bad.length ? { lock, bad } : null;
+  }
+  function sheetKeywords(sheet) { return ((sheet && sheet.keywords) || []).map(k => String(k).toUpperCase()); }
   function copyCapForSheet(sheet, size) {
     const kws = sheetKeywords(sheet);
     if (kws.indexOf("EPIC HERO") >= 0) return 1;
@@ -509,12 +362,7 @@
     const dp = dets.reduce((n, d) => n + (d.dp || 0), 0);
     const tags = [];
     let uniqueClash = false;
-    dets.forEach(d => {
-      (d.uniqueTags || []).forEach(t => {
-        if (tags.indexOf(t) >= 0) uniqueClash = true;
-        else tags.push(t);
-      });
-    });
+    dets.forEach(d => { (d.uniqueTags || []).forEach(t => { if (tags.indexOf(t) >= 0) uniqueClash = true; else tags.push(t); }); });
     const counts = {};
     (list.units || []).forEach(u => {
       const sid = u.sheetId || u.sheetKey || u.name;
@@ -523,160 +371,48 @@
     });
     const copies = Object.keys(counts).map(sid => {
       const row = counts[sid];
-      const cap = copyCapForSheet(row.sheet, size);
-      return { name: row.name, n: row.n, cap, over: row.n > cap };
+      return { name: row.name, n: row.n, cap: copyCapForSheet(row.sheet, size), over: row.n > copyCapForSheet(row.sheet, size) };
     });
-    const enh = Number(list.enhancementCount) || 0;
+    const enh = ((list.enhancements || []).length) || Number(list.enhancementCount) || 0;
+    const clash = chapterClash(list);
     const overPts = !tot.unknown && tot.pts > size.pts;
     const overDp = dp > size.dp;
     const overEnh = enh > size.enhancements;
     const overCopies = copies.some(c => c.over);
     return {
-      size, pts: tot.pts, unknown: tot.unknown, overPts,
-      dp, dpBudget: size.dp, overDp,
-      enh, enhCap: size.enhancements, overEnh,
-      copies, overCopies, uniqueClash,
-      legal: !overPts && !tot.unknown && !overDp && !overEnh && !overCopies && !uniqueClash
+      size, pts: tot.pts, unknown: tot.unknown, overPts, dp, dpBudget: size.dp, overDp,
+      enh, enhCap: size.enhancements, overEnh, copies, overCopies, uniqueClash,
+      chapterLock: clash && clash.lock, chapterBad: clash && clash.bad,
+      legal: !overPts && !tot.unknown && !overDp && !overEnh && !overCopies && !uniqueClash && !clash
     };
-  }
-
-  function wepHasTag(w, tag) {
-    const want = String(tag || "").toUpperCase().replace(/\s+/g, "-");
-    return ((w && w.tags) || []).some(t => String(t).toUpperCase().replace(/\s+/g, "-") === want);
-  }
-  function isCloseQuarters(w) {
-    return wepHasTag(w, "CLOSE-QUARTERS") || wepHasTag(w, "PISTOL");
-  }
-  function isSidearm(w) {
-    return !!(w && (isCloseQuarters(w) || /pistol|slugga/i.test(w.name || "")));
-  }
-  function defaultGear(sheet, count) {
-    count = Math.max(1, count || (sheet.composition && sheet.composition.defaultCount) || 1);
-    const gear = (sheet.weapons || []).map(w => ({ name: w.name, count: 0 }));
-    const set = (name, n) => {
-      const g = gear.find(x => x.name === name);
-      if (g) g.count = Math.max(0, Math.min(count, n));
-    };
-    if (sheet.id === "boyz") {
-      set("Slugga", count);
-      set("Shoota", Math.max(0, count - 1));
-      set("Choppa", Math.max(0, count - 1));
-      set("Kustom shoota", count >= 1 ? 1 : 0);
-      set("Big choppa", count >= 1 ? 1 : 0);
-    } else {
-      const ranged = (sheet.weapons || []).filter(w => w.kind === "ranged");
-      const melee = (sheet.weapons || []).filter(w => w.kind === "melee");
-      const main = ranged.find(w => !isSidearm(w)) || ranged[0];
-      if (main) set(main.name, count);
-      ranged.filter(isSidearm).forEach(w => set(w.name, count));
-      if (melee[0]) set(melee[0].name, count);
-    }
-    return gear;
-  }
-  function weaponsForIndex(sheet, gear, index) {
-    const used = (gear && gear.length) ? gear : defaultGear(sheet, (sheet.composition && sheet.composition.defaultCount) || 1);
-    const names = used.filter(g => index < (g.count || 0)).map(g => g.name);
-    return (sheet.weapons || []).filter(w => names.indexOf(w.name) >= 0).map(normalizeWeapon);
-  }
-  function profileForIndex(sheet, index, total) {
-    const list = (sheet && sheet.profiles) || [];
-    if (!list.length) return { name: sheet.name, W: sheet.W };
-    const leader = list[0];
-    if (index === 0 && leader) return leader;
-    return list[1] || leader || { name: sheet.name, W: sheet.W };
   }
 
   const live = { lib: currentLib(), sheets: currentSheets() };
-
   window.PTSheetsPack = function (id, pack) {
     pack = pack || {};
     PACKS[id] = pack;
     Object.assign(ABILITY_LIB, pack.lib || {});
     Object.assign(DATASHEETS_DEFAULT, pack.sheets || {});
-    (pack.detachments || []).forEach(d => {
-      if (!d || !d.id) return;
-      DETACHMENTS_DEFAULT[d.id] = Object.assign({ faction: pack.faction || "" }, d);
-    });
+    (pack.detachments || []).forEach(d => { if (d && d.id) DETACHMENTS_DEFAULT[d.id] = Object.assign({ faction: pack.faction || "" }, d); });
+    (pack.enhancements || []).forEach(e => { if (e && e.id) ENHANCEMENTS_DEFAULT[e.id] = Object.assign({ faction: pack.faction || "" }, e); });
     if (window.PTSheets && window.PTSheets.reload) window.PTSheets.reload();
   };
-
   window.PTSheets = {
-    STORE,
-    TYPES: ["Infantry", "Character", "Vehicle", "Monster", "Swarm", "Mounted"],
-    EDITIONS: ["11th"],
-    PACKS,
+    STORE, TYPES: ["Infantry","Character","Vehicle","Monster","Swarm","Mounted"], EDITIONS: ["11th"], PACKS,
     defaults: { lib: ABILITY_LIB, sheets: DATASHEETS_DEFAULT },
     get ABILITY_LIB() { return live.lib; },
     get DATASHEETS() { return live.sheets; },
-    reload() {
-      live.lib = currentLib();
-      live.sheets = currentSheets();
-      return live;
-    },
-    save(lib, sheets) {
-      saveAll(lib || live.lib, sheets || live.sheets);
-      this.reload();
-    },
-    reset() {
-      localStorage.removeItem(STORE);
-      this.reload();
-    },
+    reload() { live.lib = currentLib(); live.sheets = currentSheets(); return live; },
+    save(lib, sheets) { saveAll(lib || live.lib, sheets || live.sheets); this.reload(); },
+    reset() { localStorage.removeItem(STORE); this.reload(); },
     sheetOf(key) { return live.sheets[key] || null; },
-    firstWeapon,
-    abilitiesOf,
-    fnpOf,
-    slug,
-    ARMY_STORE,
-    MFM_HUB,
-    BATTLE_SIZES,
-    lookupMfm,
-    applyMfmProposal,
-    mfmCatalogDiff,
-    isDemoSheet,
-    isPtsOnly,
-    isFanSheet,
-    mfmSeed,
-    loadArmy,
-    saveArmy,
-    emptyArmy,
-    loadArmyStore,
-    saveArmyStore,
-    listById,
-    activeList,
-    setActiveList,
-    addList,
-    deleteList,
-    LIST_KIND,
-    LISTS_KIND,
-    exportList,
-    exportAllLists,
-    importLists,
-    ptsForCount,
-    parseTier,
-    bandFor,
-    nextCopyIndex,
-    repriceList,
-    listTotal,
-    sizeById,
-    formatPts,
-    detachmentOf,
-    detachmentsForFaction,
-    validateList,
-    defaultGear,
-    weaponsForIndex,
-    profileForIndex,
-    normalizeWeapon,
-    wepHasTag,
-    isCloseQuarters,
-    isSidearm,
-    addAbility(name, extra) {
-      const id = slug(name);
-      if (!live.lib[id]) {
-        live.lib[id] = Object.assign({
-          id, name: name || id, kind: "other", announce: null, note: "", pending: true
-        }, extra || {});
-      }
-      return live.lib[id];
-    }
+    firstWeapon, abilitiesOf, fnpOf, slug, addAbility,
+    ARMY_STORE, MFM_HUB, BATTLE_SIZES, lookupMfm, applyMfmProposal, mfmCatalogDiff,
+    isDemoSheet, isPtsOnly, isFanSheet, mfmSeed,
+    loadArmy, saveArmy, emptyArmy, loadArmyStore, saveArmyStore, listById, activeList, setActiveList, addList, deleteList,
+    LIST_KIND, LISTS_KIND, exportList, exportAllLists, importLists,
+    ptsForCount, parseTier, bandFor, nextCopyIndex, repriceList, listTotal, sizeById, formatPts,
+    detachmentOf, detachmentsForFaction, enhancementOf, enhancementsForList, sheetChapter, chapterLockForList, chapterClash, validateList,
+    defaultGear, weaponsForIndex, profileForIndex, normalizeWeapon, wepHasTag, isCloseQuarters, isSidearm
   };
 })();

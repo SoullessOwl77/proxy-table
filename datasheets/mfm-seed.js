@@ -346,6 +346,12 @@
           { count: 1, pts: 65, tier: "unit" }
         ]
       },
+      "apothecary": {
+        name: "Apothecary", faction: "Space Marines", factionSlug: "space-marines",
+        bands: [
+          { count: 1, pts: 40, tier: "unit" }
+        ]
+      },
       "apothecary-biologis": {
         name: "Apothecary Biologis", faction: "Space Marines", factionSlug: "space-marines",
         bands: [
@@ -645,6 +651,19 @@
         bands: [
           { count: 1, pts: 220, tier: "1st-2nd" },
           { count: 1, pts: 240, tier: "3rd+" }
+        ]
+      },
+      "land-raider-redeemer": {
+        name: "Land Raider Redeemer", faction: "Space Marines", factionSlug: "space-marines",
+        bands: [
+          { count: 1, pts: 260, tier: "1st-2nd" },
+          { count: 1, pts: 280, tier: "3rd+" }
+        ]
+      },
+      "vulkan-hestan": {
+        name: "Vulkan He'stan", faction: "Space Marines", factionSlug: "space-marines",
+        bands: [
+          { count: 1, pts: 95, tier: "unit" }
         ]
       },
       "land-speeder": {

@@ -100,9 +100,9 @@ td input{width:72px;}
     <p class="hint" id="sizeHint"></p>
     <label class="field">Detachments</label>
     <div id="detBody"></div>
-    <label class="field">Enhancements taken</label>
-    <input id="fEnh" inputmode="numeric" value="0" style="max-width:80px">
-    <p class="hint">Count only until enhancement cards are ingested. Cap comes from battle size.</p>
+    <label class="field">Enhancements</label>
+    <div id="enhBody"></div>
+    <p class="hint" id="enhHint">Tick cards from the detachments you selected. Cap comes from battle size. Names and costs only — rules are not on this table.</p>
     <div class="banner" id="legalBox"></div>
     <h2>Build a unit</h2>
     <label class="field">Unit name on the table</label>
@@ -142,7 +142,7 @@ td input{width:72px;}
         <details><summary>Points and copies</summary>
           <p>The quote follows model count and how many copies of that datasheet are already in the list. Battle size also caps points, copies, detachment points, and enhancements. Going over still saves; you get a warning.</p></details>
         <details><summary>Detachments</summary>
-          <p>Battle size sets a DP budget. Tick only the detachments you are using. Enhancements are a count for now, not cards.</p></details>
+          <p>Battle size sets a DP budget. Tick only the detachments you are using. Some detachments lock the list to a chapter (example: Forgefather’s Seekers → Salamanders). Enhancement cards appear under the ticked detachments when that pack has them.</p></details>
         <details><summary>Adding a unit</summary>
           <p>Pick a sheet, set the model count and who carries which gun, then Save to list. If two sheets exist for different wargear, pick the one that matches.</p></details>
         <details><summary>Save, export, import</summary>
@@ -233,6 +233,7 @@ function paintLegal(){
   if (v.overEnh) bits.push("Over enhancements");
   if (v.overCopies) bits.push("Copy limit: " + v.copies.filter(c => c.over).map(c => c.name + " " + c.n + "/" + c.cap).join(", "));
   if (v.uniqueClash) bits.push("Two detachments share a unique tag");
+  if (v.chapterLock && v.chapterBad && v.chapterBad.length) bits.push(v.chapterLock + " lock: " + v.chapterBad.join(", "));
   el.className = "banner " + (v.legal ? "ok" : "bad");
   el.textContent = (v.legal ? "Legal. " : "Needs review. ") + bits.join(" · ");
   const sh = document.getElementById("sizeHint");
@@ -249,6 +250,7 @@ function warnIfIllegal(v){
   if (v.overEnh) why.push("Over enhancements: " + v.enh + " / " + v.enhCap);
   if (v.overCopies) why.push("Copy limit: " + v.copies.filter(c => c.over).map(c => c.name + " " + c.n + "/" + c.cap).join(", "));
   if (v.uniqueClash) why.push("Two detachments share a unique tag");
+  if (v.chapterLock && v.chapterBad && v.chapterBad.length) why.push(v.chapterLock + " only: " + v.chapterBad.join(", "));
   if (!why.length) why.push("Needs review.");
   alert("List over a limit\n\n" + why.join("\n") + "\n\nSaved anyway for Practice. Matched play should fix this.");
   return true;
@@ -263,8 +265,8 @@ function renderLists(){
   document.getElementById("listSize").innerHTML = PT.BATTLE_SIZES.map(s =>
     `<option value="${s.id}" ${s.id===(army.sizeId||"strike-force")?"selected":""}>${s.name} — ${s.pts.toLocaleString()} pts · ${s.dp} DP${s.source==="proxy"?" (house)":""}</option>`
   ).join("");
-  document.getElementById("fEnh").value = army.enhancementCount || 0;
   paintDets();
+  paintEnh();
   paintLegal();
 }
 function listFaction(){
@@ -281,17 +283,39 @@ function paintDets(){
   }
   el.innerHTML = dets.map(d => `<label class="det">
     <input type="checkbox" data-det="${d.id}" ${picked.indexOf(d.id)>=0?"checked":""}>
-    <span>${d.name} — ${d.dp} DP${d.disposition ? " · " + d.disposition : ""}</span>
+    <span>${d.name} — ${d.dp} DP${d.disposition ? " · " + d.disposition : ""}${d.chapter ? " · " + d.chapter + " only" : ""}</span>
   </label>`).join("");
+}
+function paintEnh(){
+  const el = document.getElementById("enhBody");
+  const hint = document.getElementById("enhHint");
+  if (!el) return;
+  const cards = PT.enhancementsForList ? PT.enhancementsForList(army) : [];
+  const picked = (army.enhancements || []).map(e => e.id);
+  if (!cards.length){
+    el.innerHTML = `<p class="hint">No enhancement cards catalogued for the ticked detachments yet. Cap is still ${ (PT.sizeById && PT.sizeById(army.sizeId) || {enhancements:4}).enhancements }.</p>`;
+    if (hint) hint.textContent = "Tick detachments first. Cards appear here when that detachment has been seeded.";
+    return;
+  }
+  el.innerHTML = cards.map(e => `<label class="det">
+    <input type="checkbox" data-enh="${e.id}" ${picked.indexOf(e.id)>=0?"checked":""}>
+    <span>${e.name} — ${e.pts != null ? e.pts + " pts" : "?"}${e.detIds && e.detIds.length ? " · " + e.detIds.join(", ") : ""}</span>
+  </label>`).join("");
+  if (hint) hint.textContent = "Tick cards from the detachments you selected. Cap comes from battle size. Names and costs only.";
 }
 function persistListMeta(){
   army.name = document.getElementById("listName").value.trim() || army.name;
   army.faction = faction;
   army.sizeId = document.getElementById("listSize").value;
-  army.enhancementCount = Math.max(0, parseInt(document.getElementById("fEnh").value, 10) || 0);
   army.detachments = [...document.querySelectorAll("#detBody [data-det]:checked")].map(el => el.dataset.det);
+  army.enhancements = [...document.querySelectorAll("#enhBody [data-enh]:checked")].map(el => {
+    const card = PT.enhancementOf && PT.enhancementOf(el.dataset.enh);
+    return { id: el.dataset.enh, name: card && card.name || el.dataset.enh, pts: card && card.pts || 0 };
+  });
+  army.enhancementCount = army.enhancements.length;
   PT.saveArmy(army);
   army = PT.loadArmy();
+  paintEnh();
   paintLegal();
 }
 document.getElementById("sheetList").onclick = e => {
@@ -382,7 +406,8 @@ document.getElementById("listPick").onchange = () => {
 };
 document.getElementById("listName").onchange = persistListMeta;
 document.getElementById("listSize").onchange = () => { persistListMeta(); warnIfIllegal(); };
-document.getElementById("fEnh").onchange = persistListMeta;
+const enhBodyEl = document.getElementById("enhBody");
+if (enhBodyEl) enhBodyEl.onchange = persistListMeta;
 document.getElementById("detBody").onchange = persistListMeta;
 function downloadJson(filename, obj){
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
@@ -452,6 +477,12 @@ document.getElementById("btnSave").onclick = () => {
   const used = listFactionFromUnits();
   if (s.faction && used.length && used.indexOf(s.faction) < 0) {
     document.getElementById("saveMsg").textContent = "Cannot add " + s.faction + " to a " + used.join("/") + " list.";
+    return;
+  }
+  const lock = PT.chapterLockForList && PT.chapterLockForList(army);
+  const ch = PT.sheetChapter && PT.sheetChapter(s);
+  if (lock && ch && ch !== lock) {
+    document.getElementById("saveMsg").textContent = lock + " lock — cannot add " + (s.name || "that unit") + " (" + ch + ").";
     return;
   }
   if (s.faction) { faction = s.faction; army.faction = faction; }

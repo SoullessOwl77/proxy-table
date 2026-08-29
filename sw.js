@@ -1,7 +1,7 @@
 /* Proxy Table service worker — app shell + card art caching, plus
    push notifications for challenges and nudges. */
 
-const SHELL = "pt-shell-v27";
+const SHELL = "pt-shell-v28";
 const ART = "pt-art-v1";
 const ART_LIMIT = 900;
 

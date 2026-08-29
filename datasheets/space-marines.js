@@ -12,7 +12,7 @@ PTSheetsPack("space-marines", {
     { id: "ceramite-sentinels", name: "Ceramite Sentinels", dp: 3, ptsSource: "mfm" },
     { id: "emperors-shield", name: "Emperor's Shield", dp: 2, ptsSource: "mfm" },
     { id: "firestorm-assault-force", name: "Firestorm Assault Force", dp: 2, ptsSource: "mfm" },
-    { id: "forgefathers-seekers", name: "Forgefather's Seekers", dp: 2, ptsSource: "mfm" },
+    { id: "forgefathers-seekers", name: "Forgefather's Seekers", dp: 2, ptsSource: "mfm", chapter: "SALAMANDERS" },
     { id: "fulguris-task-force", name: "Fulguris Task Force", dp: 1, ptsSource: "mfm" },
     { id: "gladius-task-force", name: "Gladius Task Force", dp: 3, ptsSource: "mfm" },
     { id: "hammer-of-avernii", name: "Hammer of Avernii", dp: 2, ptsSource: "mfm" },
@@ -103,8 +103,8 @@ PTSheetsPack("space-marines", {
       pendingStats: false,
       M: 6, T: 4, Sv: 3, Inv: 0, W: 4, Ld: 6, OC: 1, baseMm: 40,
       composition: { label: "1 Apothecary", defaultCount: 1 },
-      pts: null, ptsProposed: null, ptsSource: "review", ptsMfmVersion: "1.3",
-      ptsBands: [],
+      pts: 40, ptsProposed: 40, ptsSource: "mfm", ptsMfmVersion: "1.3",
+      ptsBands: [{ count: 1, pts: 40, tier: "unit" }],
       weapons: [{ name: "Absolvor bolt pistol", kind: "ranged", range: "18\"", A: "1", BS: "3", S: 5, AP: "-1", D: "2", tags: ["PISTOL"] }, { name: "Reductor pistol", kind: "ranged", range: "3\"", A: "1", BS: "3", S: 4, AP: "-4", D: "2", tags: ["PISTOL"] }, { name: "Close combat weapon", kind: "melee", range: "Melee", A: "4", WS: "3", S: 4, AP: "0", D: "1", tags: [] }],
       abilities: [{ id: "support", name: "Support", pending: true }, { id: "oath-of-moment", name: "Oath of Moment", pending: true }, { id: "narthecium", name: "Narthecium", pending: true }, { id: "gene-seed-recovery", name: "Gene-seed Recovery", pending: true }],
       source: { kind: "fan", label: "Wahapedia 11th (unofficial)", file: "", page: "", hub: "https://wahapedia.ru/wh40k11ed/factions/space-marines/Apothecary" }
@@ -2023,11 +2023,31 @@ PTSheetsPack("space-marines", {
       pendingStats: false,
       M: 6, T: 4, Sv: 2, Inv: 4, W: 5, Ld: 6, OC: 1, baseMm: 40,
       composition: { label: "1 Vulkan He'stan", defaultCount: 1 },
-      pts: null, ptsProposed: null, ptsSource: "review", ptsMfmVersion: "1.3",
-      ptsBands: [{ count: 1, pts: 0, tier: "unit" }],
+      pts: 95, ptsProposed: 95, ptsSource: "mfm", ptsMfmVersion: "1.3",
+      ptsBands: [{ count: 1, pts: 95, tier: "unit" }],
       weapons: [{ name: "Bolt pistol", kind: "ranged", range: "12\"", A: "1", BS: "2+", S: 4, AP: "0", D: "1", tags: ["PISTOL"] }, { name: "Gauntlet of the Forge", kind: "ranged", range: "12\"", A: "D6+3", BS: "N/A", S: 6, AP: "-1", D: "1", tags: ["IGNORES COVER", "PISTOL", "TORRENT"] }, { name: "Spear of Vulkan", kind: "melee", range: "Melee", A: "6", WS: "2+", S: 6, AP: "-2", D: "2", tags: ["DEVASTATING WOUNDS"] }],
       abilities: [{ id: "feel-no-pain", name: "Feel No Pain", pending: false, x: 6 }, { id: "leader", name: "Leader", pending: true }, { id: "oath-of-moment", name: "Oath of Moment", pending: true }, { id: "forgefather", name: "Forgefather", pending: true }, { id: "seeker-of-the-unbound", name: "Seeker of the Unbound", pending: true }],
       source: { kind: "official", label: "SM Faction Pack v1.2 p.48", file: "eng_wh40k_faction_pack_space_marines-kxoxqpsahz-u0lzirv0zl.pdf", page: 48, hub: "https://www.warhammer-community.com/en-gb/downloads/warhammer-40000/" }
+    },
+    "land-raider-redeemer": {
+      id: "land-raider-redeemer",
+      edition: "11th",
+      faction: "Space Marines",
+      factionKeywords: ["ADEPTUS ASTARTES"],
+      type: "Vehicle",
+      name: "Land Raider Redeemer",
+      keywords: ["VEHICLE", "TRANSPORT", "IMPERIUM", "LAND RAIDER", "REDEEMER"],
+      search: ["land raider redeemer", "space marines", "salamanders"],
+      fanSourced: false,
+      sheetComplete: false,
+      pendingStats: true,
+      M: null, T: null, Sv: null, Inv: 0, W: null, Ld: null, OC: null, baseMm: 120,
+      composition: { label: "1 Land Raider Redeemer", defaultCount: 1 },
+      pts: 260, ptsProposed: 260, ptsSource: "mfm", ptsMfmVersion: "1.3",
+      ptsBands: [{ count: 1, pts: 260, tier: "1st-2nd" }, { count: 1, pts: 280, tier: "3rd+" }],
+      weapons: [],
+      abilities: [],
+      source: { kind: "mfm", label: "MFM v1.3 points only — no pack card ingested yet", hub: "https://mfm.warhammer-community.com/en" }
     }
   }
 });
