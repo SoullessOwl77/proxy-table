@@ -64,9 +64,10 @@ On the shared DO board, the reaction happens on the **opponent's** turn, so the 
 ## Progress
 
 - [x] `v2.16.30` — **Rapid Ingress (Practice)** + reaction checkpoint at end of opponent's Movement. Round-1 hard block, 1 CP, once per battle round, Aircraft excluded.
-- [ ] Fire Overwatch (Practice) — same checkpoint, Snap Shooting.
-- [ ] Armor of Contempt — move to the target-selection reaction hook.
-- [ ] PVP layer for all three.
+- [x] `v2.16.31` — Fire Overwatch (Practice) — same checkpoint, Snap Shooting (hits on unmodified 6s), unengaged non-Titanic shooter, target within 24″, 1 CP, once per battle round.
+- [x] `v2.16.33` — Armor of Contempt moved to the combat-bar target-selection hook (defender reaction, 1 CP, AP−1 for the phase).
+- [x] `v2.16.34` — PVP layer for Rapid Ingress + Fire Overwatch (checkpoint reactions; whole-S sync, active client opens, reactor acts). Needs live two-device testing.
+- [ ] PVP Armor of Contempt — blocked on syncing `attackerId`/`targetId` into the board (defender client can't see the target otherwise).
 
 ## 6. Suggested build order once confirmed
 

@@ -90,12 +90,12 @@ canvas.dragging{cursor:grabbing;}
 .warnbar strong{color:#f0a8a8;}
 .warnbar .wclose{margin-left:4px;flex-shrink:0;}
 .lobby{
-  position:fixed;inset:0;z-index:18;display:none;align-items:center;justify-content:center;
+  position:fixed;inset:0;z-index:18;display:none;align-items:flex-start;justify-content:center;
   background:#0a0f0ef2;padding:18px;overflow:auto;
 }
 .lobby.on{display:flex;}
 .lobby .sheet{
-  width:min(520px,100%);background:linear-gradient(180deg,#24322e,#1b2825);
+  width:min(520px,100%);margin:auto;background:linear-gradient(180deg,#24322e,#1b2825);
   border:1px solid var(--brass-dim);border-radius:14px;padding:18px 18px 16px;
   box-shadow:0 18px 48px #000a;
 }
@@ -282,7 +282,8 @@ canvas.dragging{cursor:grabbing;}
 </div>
 <div class="warnbar" id="reactionbar" role="status" style="display:none">
   <div id="reactionText"></div>
-  <button class="btn sm gold" id="btnReactDo">Rapid Ingress</button>
+  <button class="btn sm gold" id="btnReactRI">Rapid Ingress</button>
+  <button class="btn sm gold" id="btnReactOw">Fire Overwatch</button>
   <button class="btn sm" id="btnReactPass">Pass</button>
 </div>
 <canvas id="c"></canvas>
@@ -296,6 +297,7 @@ canvas.dragging{cursor:grabbing;}
       <span class="name" id="tgtName">Target</span>
       <span class="meta" id="wepMeta"></span>
       <span class="spacer"></span>
+      <button class="btn sm" id="btnAoc" title="Defender: spend 1 CP so attacks against this unit are AP-1 this phase" style="display:none">Armor of Contempt</button>
       <button class="btn sm gold" id="btnResolve">Attack</button>
       <button class="btn sm" id="btnClearAtk">Clear</button>
     </div>
@@ -409,7 +411,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.30-rapid-ingress";
+const BUILD = "v2.16.34-pvp-reactions";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -555,11 +557,6 @@ const ACTIONS = {
     short:"1 CP — GRENADES / EXPLOSIVES unit, enemy within 8″. 6 dice, 4+ = 1 mortal wound.",
     more:"Shooting phase. Select your unit (needs GRENADES or EXPLOSIVES), pick an enemy in Combat or the nearest one within 8″, then Announce.\n\nRoll 6 D6. Each 4+ inflicts 1 mortal wound on that unit (allocation + FnP still apply). Teaching Core slice — not a Codex grenade profile.\n\nOnce per your turn. Shocked units cannot throw."
   },
-  armorOfContempt: {
-    id:"armorOfContempt", phases:["shooting","fight"], label:"Armor of Contempt", announce:true, cp:1,
-    short:"1 CP — your selected unit: worsen AP by 1 against it this phase.",
-    more:"Select one of your units that is being shot or fought, then Announce. Until this phase ends, attacks against that unit treat AP as 1 worse (AP−2 becomes AP−1; AP0 stays 0).\n\nOnce per your turn. Shocked units cannot receive it."
-  },
   advance: {
     id:"advance", phase:"movement", label:"Advance", announce:true, roll:"d6",
     short:"Declare instead of a Normal Move. Roll D6; move up to M+that. Usually cannot shoot or charge.",
@@ -582,7 +579,7 @@ const ACTIONS = {
   },
   rapidIngress: {
     id:"rapidIngress", phase:"movement", label:"Rapid Ingress", announce:false, placeholder:true,
-    short:"1 CP — arrive at the end of the opponent’s Movement. Not playable yet.",
+    short:"1 CP — arrive at the end of the opponent’s Movement. Offered automatically at the end of the opponent’s Movement.",
     more:"Later: spend 1 CP at the end of the other seat’s Movement to Ingress one reserved unit on their turn."
   },
   allocation: {
@@ -592,7 +589,7 @@ const ACTIONS = {
   },
   overwatch: {
     id:"overwatch", phase:"charge", label:"Overwatch", announce:false, placeholder:true,
-    short:"Shoot at a charging unit — not playable yet. Will spend CP / a Stratagem later.",
+    short:"Shoot at a charging unit — now a 1 CP reaction (Snap, hits on 6s) at the end of the opponent’s Movement.",
     more:"Building block: when a charge is announced, the target may Overwatch. Needs CP/Stratagem + shooting on charge declaration."
   },
   pileIn: {
@@ -639,7 +636,7 @@ const GUIDE = {
       "Note whose turn it is and the battle round. CP +1 already applied.",
       "Battle-shock: each damaged unit on this seat tests 2D6 vs Ld (Announce).",
       "Failed tests mark BS and drop that unit’s OC to 0 until its next Command.",
-      "Spend CP here or later this turn: Command Re-roll, Grenade (Shooting), Armor of Contempt (Shooting/Fight)."
+      "Spend CP here or later this turn: Command Re-roll, Grenade (Shooting), Armor of Contempt is a defender reaction — use it in Combat when your unit is the target."
     ],
     dont: [
       "Don’t skip Battle-shock on a wounded unit — Next will remind you.",
@@ -803,6 +800,7 @@ let lastRoll = null;
 /* While dragging a unit, rings stay on the start position until drop. */
 let moveOrigin = null;
 let lastDragId = null;
+let overwatchMode = false;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -1391,7 +1389,7 @@ function terrainEditable(){
    PVP: also require the unit to be on your claimed seat. */
 function canControlUnit(u){
   if (!u) return false;
-  if (S.reaction && S.reaction.on){ return practice && u.seat === S.reaction.seat && !u.reserved; }
+  if (S.reaction && S.reaction.on){ return (practice || mySeat === S.reaction.seat) && u.seat === S.reaction.seat && !u.reserved; }
   if (inSetup()){
     if (!practice && u.seat !== mySeat) return false;
     return true;
@@ -1935,6 +1933,8 @@ function markReactUsed(seat, key){
   if (!S.reactUsed[String(seat)]) S.reactUsed[String(seat)] = {};
   S.reactUsed[String(seat)][key+"_R"+(S.turn.battleRound||1)] = true;
 }
+function windowOffered(rs){ const r=S.reactUsed && S.reactUsed[String(rs)]; return !!(r && r["win_R"+(S.turn.battleRound||1)+"_a"+S.turn.activeSeat]); }
+function markWindowOffered(rs){ if(!S.reactUsed) S.reactUsed={"0":{},"1":{}}; if(!S.reactUsed[String(rs)]) S.reactUsed[String(rs)]={}; S.reactUsed[String(rs)]["win_R"+(S.turn.battleRound||1)+"_a"+S.turn.activeSeat]=true; }
 function rapidIngressAvailable(seat){
   if ((S.turn.battleRound||1) < 2) return false;
   if (((S.cp && S.cp[seat]) || 0) < 1) return false;
@@ -1942,9 +1942,11 @@ function rapidIngressAvailable(seat){
   return reservedUnits(seat).some(u => !isAircraft(u));
 }
 function maybeOfferReaction(){
-  if (!practice) return false;
   const rs = reactionSeat();
-  if (!rapidIngressAvailable(rs)) return false;
+  if (windowOffered(rs)) return false;
+  if (!rapidIngressAvailable(rs) && !overwatchAvailable(rs)) return false;
+  if (!practice && mySeat !== S.turn.activeSeat) return false;
+  markWindowOffered(rs);
   S.reaction = { on:true, seat:rs, kind:"rapidIngress", returnPhase:"shooting", placed:false };
   placeSeat = rs;
   logLine("Reaction \u2014 "+seatName(rs)+" may Rapid Ingress (1 CP) at the end of "+seatName(S.turn.activeSeat)+"'s Movement");
@@ -1958,16 +1960,31 @@ function renderReactionBar(){
   const rs = S.reaction.seat;
   bar.style.display = "";
   const txt = document.getElementById("reactionText");
-  const doBtn = document.getElementById("btnReactDo");
+  const riBtn = document.getElementById("btnReactRI");
+  const owBtn = document.getElementById("btnReactOw");
   const passBtn = document.getElementById("btnReactPass");
-  if (S.reaction.placed){
-    if (txt) txt.innerHTML = "<strong>"+esc(seatName(rs))+" Rapid Ingress:</strong> drag the arriving unit to a legal spot (&gt;8\u2033 from enemies), then Done.";
-    if (doBtn) doBtn.style.display = "none";
-    if (passBtn) passBtn.textContent = "Done";
+  const iAmReactor = practice || mySeat === rs;
+  if (!iAmReactor){
+    if (riBtn) riBtn.style.display = "none";
+    if (owBtn) owBtn.style.display = "none";
+    if (passBtn) passBtn.style.display = "none";
+    if (txt) txt.innerHTML = "<strong>Reaction:</strong> waiting for "+esc(seatName(rs))+" to react (Rapid Ingress / Fire Overwatch)\u2026";
+    return;
+  }
+  if (passBtn) passBtn.style.display = "";
+  const riShow = rapidIngressAvailable(rs) && !S.reaction.placed;
+  const owShow = overwatchAvailable(rs) && !S.reaction.owDone;
+  const anyDone = S.reaction.placed || S.reaction.owDone;
+  if (riBtn) riBtn.style.display = (riShow && S.reaction.mode !== "overwatch") ? "" : "none";
+  if (owBtn){ owBtn.style.display = ((owShow && S.reaction.mode !== "ri-place") || S.reaction.mode === "overwatch") ? "" : "none"; owBtn.textContent = (S.reaction.mode === "overwatch") ? "Fire" : "Fire Overwatch"; }
+  if (passBtn) passBtn.textContent = anyDone ? "Done" : "Pass";
+  if (!txt) return;
+  if (S.reaction.mode === "ri-place"){
+    txt.innerHTML = "<strong>"+esc(seatName(rs))+" Rapid Ingress:</strong> drag the arriving unit to a legal spot (&gt;8\u2033 from enemies), then Done.";
+  } else if (S.reaction.mode === "overwatch"){
+    txt.innerHTML = "<strong>"+esc(seatName(rs))+" Fire Overwatch:</strong> tap your shooter (unengaged, not Titanic), then an enemy within 24\u2033, then Fire.";
   } else {
-    if (txt) txt.innerHTML = "<strong>Reaction \u2014 "+esc(seatName(rs))+":</strong> Rapid Ingress (1 CP)? Pick a reserved unit, then Rapid Ingress \u2014 or Pass.";
-    if (doBtn) doBtn.style.display = "";
-    if (passBtn) passBtn.textContent = "Pass";
+    txt.innerHTML = "<strong>Reaction \u2014 "+esc(seatName(rs))+":</strong> 1 CP each. "+(riShow?"Rapid Ingress. ":"")+(owShow?"Fire Overwatch. ":"")+"Or Pass.";
   }
 }
 function doRapidIngress(){
@@ -1989,6 +2006,7 @@ function doRapidIngress(){
   snapshotGroup(u);
   markReactUsed(rs, "ri");
   S.reaction.placed = true;
+  S.reaction.mode = "ri-place";
   selectObj("u", u);
   logLine(seatName(rs)+" Rapid Ingress \u2014 "+u.name+" arrives"+(ds?" (Deep Strike)":"")+".");
   const bad = ingressIssues(u);
@@ -1999,8 +2017,46 @@ function endReaction(){
   const rp = (S.reaction && S.reaction.returnPhase) || "shooting";
   S.reaction = null;
   placeSeat = S.turn.activeSeat;
+  attackerId = null; targetId = null;
   renderReactionBar();
-  setPhase(rp);
+  if (practice){ setPhase(rp); } else { save(); }
+}
+function overwatchAvailable(seat){
+  if (((S.cp && S.cp[seat]) || 0) < 1) return false;
+  if (reactUsed(seat, "ow")) return false;
+  const shooters = (S.units||[]).filter(u => u.seat===seat && !u.reserved && !isTitanic(u) && !inEngagement(u) && modelGuns(u).length);
+  if (!shooters.length) return false;
+  const enemies = (S.units||[]).filter(u => u.seat!==seat && !u.reserved);
+  return shooters.some(sh => enemies.some(e => edgeDist(sh, e) <= 24.05));
+}
+function doFireOverwatch(){
+  if (!S.reaction || !S.reaction.on) return;
+  const rs = S.reaction.seat;
+  if (reactUsed(rs, "ow")){ showWarn("<strong>Overwatch:</strong> already used this battle round."); return; }
+  if (S.reaction.mode !== "overwatch"){
+    S.reaction.mode = "overwatch";
+    attackerId = null; targetId = null; preferAllocId = null;
+    document.getElementById("dice").textContent = "Overwatch \u2014 tap your shooter (unengaged, not Titanic), then an enemy within 24\u2033, then Fire.";
+    renderReactionBar(); draw();
+    return;
+  }
+  const atk = S.units.find(u=>u.id===attackerId);
+  const tgt = S.units.find(u=>u.id===targetId);
+  if (!atk || atk.seat!==rs){ showWarn("<strong>Overwatch:</strong> tap your shooter first."); return; }
+  if (isTitanic(atk)){ showWarn("<strong>Overwatch:</strong> Titanic units cannot Overwatch."); return; }
+  if (inEngagement(atk)){ showWarn("<strong>Overwatch:</strong> the shooter is engaged \u2014 pick an unengaged unit."); return; }
+  if (!modelGuns(atk).length){ showWarn("<strong>Overwatch:</strong> that unit has no ranged weapon."); return; }
+  if (!tgt || tgt.seat===rs){ showWarn("<strong>Overwatch:</strong> tap an enemy unit within 24\u2033."); return; }
+  if (edgeDist(atk, tgt) > 24.05){ showWarn("<strong>Overwatch:</strong> "+tgt.name+" is over 24\u2033 away."); return; }
+  if (!spendCP(1, "Fire Overwatch", rs)) return;
+  markReactUsed(rs, "ow");
+  overwatchMode = true;
+  logLine(seatName(rs)+" Fire Overwatch (Snap \u2014 hits on 6s) at "+tgt.name);
+  resolveAttack();
+  overwatchMode = false;
+  S.reaction.owDone = true;
+  S.reaction.mode = null;
+  renderReactionBar();
 }
 function renderReserveRow(){
   const row = document.getElementById("rowReserves");
@@ -3642,7 +3698,7 @@ document.getElementById("btnClearU").onclick = () => {
   S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw();
 };
 document.getElementById("btnDemo").onclick = demoForces;
-{ const _rd=document.getElementById("btnReactDo"); if(_rd) _rd.onclick=doRapidIngress; const _rp=document.getElementById("btnReactPass"); if(_rp) _rp.onclick=endReaction; }
+{ const _rri=document.getElementById("btnReactRI"); if(_rri) _rri.onclick=doRapidIngress; const _row=document.getElementById("btnReactOw"); if(_row) _row.onclick=doFireOverwatch; const _rp=document.getElementById("btnReactPass"); if(_rp) _rp.onclick=endReaction; }
 const placeSeatEl = document.getElementById("placeSeat");
 if (placeSeatEl) placeSeatEl.onchange = () => {
   placeSeat = placeSeatEl.value === "1" ? 1 : 0;
@@ -3791,6 +3847,17 @@ function renderCombatBar(){
   const tgt = S.units.find(u=>u.id===targetId);
   if (!atk || !tgt){ box.classList.remove("on"); return; }
   box.classList.add("on");
+  const aocBtn = document.getElementById("btnAoc");
+  if (aocBtn){
+    const ph = S.turn.phase;
+    const canAoc = (ph==="shooting"||ph==="fight") && tgt
+      && !unitGroup(tgt).some(m=>flagsOf(m).aoc)
+      && !unitGroup(tgt).some(m=>flagsOf(m).battleShock)
+      && (((S.cp && S.cp[tgt.seat])||0) >= 1)
+      && !stratUsedOf(tgt.seat)["armorOfContempt"]
+      && (practice || tgt.seat===mySeat);
+    aocBtn.style.display = canAoc ? "" : "none";
+  }
   document.getElementById("atkName").textContent = atk.name + " (" + seatName(atk.seat) + ")";
   document.getElementById("tgtName").textContent = unitLabel(tgt);
   const measure = closestModel(atk, unitModels(tgt)) || tgt;
@@ -3806,16 +3873,31 @@ function renderCombatBar(){
   ];
   document.getElementById("wepMeta").textContent = bits.join(" · ");
 }
+function doArmorOfContempt(){
+  const tgt = S.units.find(u=>u.id===targetId);
+  if (!tgt){ showWarn("<strong>Armor of Contempt:</strong> pick the target unit first."); return; }
+  if (S.turn.phase !== "shooting" && S.turn.phase !== "fight"){ showWarn("<strong>Armor of Contempt:</strong> only when a unit is being shot or fought."); return; }
+  const seat = tgt.seat;
+  if (!practice && seat !== mySeat){ showWarn("<strong>Armor of Contempt:</strong> only "+seatName(seat)+" can use it on their unit."); return; }
+  if (unitGroup(tgt).some(m=>flagsOf(m).aoc)){ showWarn("<strong>Armor of Contempt:</strong> already active on "+tgt.name+" this phase."); return; }
+  if (!canUseStrat("armorOfContempt", tgt, seat)) return;
+  if (!spendCP(1, "Armor of Contempt", seat)) return;
+  markStratUsed("armorOfContempt", seat);
+  unitGroup(tgt).forEach(m => { flagsOf(m).aoc = true; });
+  logLine(seatName(seat)+" Armor of Contempt on "+tgt.name+" \u2014 AP worsened by 1 against it this phase");
+  document.getElementById("dice").textContent = tgt.name+" AoC \u2014 AP \u22121 against it this phase";
+  save(); draw(); renderCombatBar(); renderActions();
+}
 function resolveAttack(){
   const atk = S.units.find(u=>u.id===attackerId);
   const tgt = S.units.find(u=>u.id===targetId);
   if (!atk || !tgt){ document.getElementById("dice").textContent = "Pick attacker then target."; return; }
-  if (atk.seat !== S.turn.activeSeat){
+  if (!overwatchMode && atk.seat !== S.turn.activeSeat){
     document.getElementById("dice").textContent = seatName(S.turn.activeSeat) + "'s turn — attacker must be their model.";
     return;
   }
   if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return; }
-  if (tgt.seat === S.turn.activeSeat){
+  if (!overwatchMode && tgt.seat === S.turn.activeSeat){
     document.getElementById("dice").textContent = "Target must be the enemy (not " + seatName(S.turn.activeSeat) + ").";
     return;
   }
@@ -3852,8 +3934,8 @@ function resolveAttack(){
   }
   const cov = inCover(measure, atk);
   const hitMod = cov ? -1 : 0;
-  const torrent = wepTag(w, "TORRENT") || w.skill == null;
-  const hitNeed = torrent ? null : Math.max(2, Math.min(7, (w.skill || 4) - hitMod));
+  const torrent = overwatchMode ? false : (wepTag(w, "TORRENT") || w.skill == null);
+  const hitNeed = overwatchMode ? 7 : (torrent ? null : Math.max(2, Math.min(7, (w.skill || 4) - hitMod)));
   const firstRec = pickRecipient(mates, preferAllocId) || measure;
   const synMelee = pw.kind === "melee" && inSynapseRange(atk);
   const atkS = (Number(w.S) || 0) + (synMelee ? 1 : 0);
@@ -4012,6 +4094,7 @@ function resolveAttack(){
 }
 document.getElementById("btnResolve").onclick = resolveAttack;
 document.getElementById("btnClearAtk").onclick = () => { clearCombatPair(); draw(); refreshTip(); renderCombatBar(); };
+{ const _ao=document.getElementById("btnAoc"); if(_ao) _ao.onclick=doArmorOfContempt; }
 
 const ptrs = new Map();
 let mode=null, drag=null;
@@ -4024,6 +4107,14 @@ canvas.addEventListener("pointerdown", e => {
   if (ptrs.size===2){
     mode="pinch"; const [a,b]=[...ptrs.values()];
     drag={dist:Math.hypot(a.x-b.x,a.y-b.y), scale:cam.scale}; return;
+  }
+  if (S.reaction && S.reaction.on && S.reaction.mode === "overwatch"){
+    const rhu = hitUnit(wpt.x, wpt.y);
+    if (rhu){
+      if (rhu.seat === S.reaction.seat){ attackerId = rhu.id; selectObj("u", rhu); document.getElementById("dice").textContent = "Shooter: "+rhu.name+" \u2014 tap an enemy within 24\u2033, then Fire."; }
+      else { targetId = rhu.id; document.getElementById("dice").textContent = "Target: "+rhu.name+" \u2014 tap Fire."; }
+      draw(); return;
+    }
   }
   if (tool==="measure"){
     if (!tape || tape.b) tape={a:wpt,b:null};

@@ -2,7 +2,7 @@
 
 Check items off with `[x]` as they land. Add notes under any item freely.
 
-**Current build:** `v2.16.30-rapid-ingress` (`wh40k.html`) · hub `v2.7.9-army` (`index.html`) · SW `pt-shell-v34`  
+**Current build:** `v2.16.34-pvp-reactions` (`wh40k.html`) · hub `v2.7.9-army` (`index.html`) · SW `pt-shell-v38`  
 **Handoff:** `artifacts/PROXY_TABLE_HANDOFF.md` (2026-08-29) — agreed cleanup in §6 is **not coded yet**.  
 **Baseline:** 11th edition Core Rules · skill `wh40k-rules`  
 **Constraint:** Do not change MTG game structure except for bug fixes. 40K stays in `wh40k.html`.
