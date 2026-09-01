@@ -17,7 +17,7 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 | Piece | File |
 |---|---|
 | Hub + MTG + Your Matches | `index.html` (`v2.7.9-army`) |
-| 40K table | `wh40k.html` (`v2.16.34-pvp-reactions`) |
+| 40K table | `wh40k.html` (`v2.16.35-reaction-visible`) |
 | Army builder | `army.html` |
 | Datasheet editor | `datasheet.html` |
 | Catalog | `datasheets/load.js` + `index.js` + faction packs + `mfm-seed.js` + `demo.js` |
@@ -32,9 +32,9 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | File | Version |
 |---|---|
-| `wh40k.html` | `v2.16.34-pvp-reactions` |
+| `wh40k.html` | `v2.16.35-reaction-visible` |
 | `index.html` | `v2.7.9-army` |
-| `sw.js` | `pt-shell-v38` |
+| `sw.js` | `pt-shell-v39` |
 
 If live is older, files were not copied or title-tap did not run.
 
@@ -72,6 +72,7 @@ Recent slices in this chat thread:
 - `v2.16.21-drop-pass` — Next player locks the drop (drag no longer auto-commits). Reserves row is current seat only. Strategic Reserves (`· SR`) do not block Start battle.
 - `v2.16.22-reserve-bar` — after Start battle the formation row hides; it returns in Movement if that seat still has units off the table.
 - `v2.16.23-demo-kit` — Demo Infantry / Commander / Walker carry the teaching abilities (FnP, DS, Scout, Fights First, GRENADES). Role keywords stay split so deploy still has a normal drop, an Infiltrator, and a Titanic.
+- `v2.16.35-reaction-visible` — Test fixes. **Critical:** the reaction bar (`#reactionbar`, class `warnbar`) was never visible — `.warnbar` is `display:none` in CSS and the code showed it with `style.display=""` (which lets the CSS win), so Rapid Ingress AND Fire Overwatch never appeared in any of .30–.34. Now shows with `display:"flex"`, plus a distinct `#reactionbar` style/position (green/brass, below the red warn bar). Undo button now also shows in the Fight phase when a pile-in/consolidate drag exists (`lastDragId`). Reserve button relabeled **Strategic Reserves**. Added a 3″ gold ring anchored at the pile-in start point during the drag. Confirmed SR units keep `reserved:true` through Start battle, so Rapid Ingress has units to offer. Re-test the whole reaction system — it was unreachable before this.
 - `v2.16.34-pvp-reactions` — Reaction system, PVP layer for the two end-of-Movement reactions (Rapid Ingress + Fire Overwatch). No worker change — `S.reaction` / `S.reactUsed` are board fields synced by the existing `pushState` (whole-S LWW by rev; no seat write-lock, so the non-active reactor client can write). Flow: the **active** client leaving Movement opens the window and syncs it (only the active client opens — `mySeat===activeSeat` gate); the **reactor** client (`mySeat===reaction.seat`) sees the bar and acts (place/drag a reserve, or snap-fire), pushing to the shared board; when the reactor taps Done/Pass the window clears and the active player presses Next to continue. A `windowOffered` key (round+activeSeat) opens the window once per opponent's Movement — prevents a re-offer loop when the reactor passes. `canControlUnit` now hands drive to the reactor in PVP too. The paused active client shows a “waiting for X to react” bar. Known limits: if the reactor is offline the active player is stuck until Reset (no skip-after-timeout yet). **AoC PVP deferred** — it hangs off `attackerId`/`targetId`, which are client-local globals (not in S), so the defender client can't see the target; needs targeting synced into the board first. Verified gating in Node; **needs live two-device testing.**
 - `v2.16.33-aoc-reaction` — Reaction system, slice 3 (Practice): **Armor of Contempt** moved to its correct home. Removed from the active-seat Optional actions row; it is now a defender reaction in the **combat bar** — when the active seat picks an attacker and an enemy target in Shooting/Fight, an Armor of Contempt button appears for the **target's** owner. Clicking spends 1 CP from that (defender) seat and sets AP−1 against that unit for the phase (the existing `aoc` mechanic; clears on phase change). Gated: defender has ≥1 CP, not already used, target not Battle-shocked, not already AoC'd. The old announce-handler branch is now dead code (unreachable — AoC is no longer in ACTIONS). Guide text updated. This completes the Practice layer for all three reactions (Rapid Ingress, Fire Overwatch, Armor of Contempt). **Remaining:** the PVP layer, where the non-active/defending client acts through the shared board.
 - `v2.16.32-lobby-scroll` — Mobile fix: the lobby modal was `align-items:center`, so on a phone a sheet taller than the viewport pushed its top (Battle size) off-screen with no way to scroll up. Changed the container to `align-items:flex-start` and gave `.sheet` `margin:auto` — centers when it fits, top stays reachable and scrollable when it doesn't. CSS-only.

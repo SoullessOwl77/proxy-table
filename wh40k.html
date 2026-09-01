@@ -89,6 +89,9 @@ canvas.dragging{cursor:grabbing;}
 .warnbar.on{display:flex;}
 .warnbar strong{color:#f0a8a8;}
 .warnbar .wclose{margin-left:4px;flex-shrink:0;}
+#reactionbar{top:calc(84px + env(safe-area-inset-top,0px));max-width:min(480px,88vw);background:#22332bf2;border-color:var(--brass-dim);}
+#reactionbar strong{color:var(--brass);}
+#reactionbar .btn{flex-shrink:0;}
 .lobby{
   position:fixed;inset:0;z-index:18;display:none;align-items:flex-start;justify-content:center;
   background:#0a0f0ef2;padding:18px;overflow:auto;
@@ -335,7 +338,7 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn" data-drop="wlk">Walker</button>
     <button class="btn ghost" id="btnClearU">Clear units</button>
     <select id="armyPick" title="Saved army units" style="max-width:160px;background:#1b2825;color:#e9e3d4;border:1px solid #0006;border-radius:6px;padding:6px;display:none"></select>
-    <button class="btn" id="btnReserve">Reserves</button>
+    <button class="btn" id="btnReserve" title="Mark the selected unit as Strategic Reserves — stays off the table until it arrives">Strategic Reserves</button>
     <button class="btn" id="btnDeepStrike">Deep Strike</button>
     <button class="btn gold" id="btnBeginDrops">Begin drops</button>
     <button class="btn gold" id="btnDeployUnit">Deploy unit</button>
@@ -411,7 +414,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.34-pvp-reactions";
+const BUILD = "v2.16.35-reaction-visible";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -1958,7 +1961,7 @@ function renderReactionBar(){
   if (!bar) return;
   if (!S.reaction || !S.reaction.on){ bar.style.display = "none"; return; }
   const rs = S.reaction.seat;
-  bar.style.display = "";
+  bar.style.display = "flex";
   const txt = document.getElementById("reactionText");
   const riBtn = document.getElementById("btnReactRI");
   const owBtn = document.getElementById("btnReactOw");
@@ -2158,7 +2161,7 @@ function renderActions(){
   } else {
     ann.style.display = "none";
   }
-  if (rev) rev.style.display = (phase === "movement" && u && canControlUnit(u) && groupMoveState(u).declared) ? "" : "none";
+  if (rev) rev.style.display = ((phase === "movement" && u && canControlUnit(u) && groupMoveState(u).declared) || (phase === "fight" && lastDragId && S.units.some(x=>x.id===lastDragId))) ? "" : "none";
   renderReserveRow();
   const cp = (S.cp && S.cp[S.turn.activeSeat]) || 0;
   if (!hint) return;
@@ -3245,6 +3248,9 @@ function draw(){
       drawRing(selU.x, selU.y, erReach(selU), "#a8443c99", 1.4);
     } else if (phase === "fight"){
       drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443caa", 1.8);
+      if (flagsOf(selU).piling && moveOrigin && moveOrigin.id === selU.id){
+        drawRing(moveOrigin.x, moveOrigin.y, rangeReach(selU, 3), "#c39a4e88", 1.5);
+      }
     } else {
       /* Movement: Advance expands the gold ring by the D6 */
       const fMove = flagsOf(selU);
