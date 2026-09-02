@@ -1,47 +1,29 @@
-# Test checklist — v2.16.28 → v2.16.34 (2026-08-30)
+# Test checklist — current build v2.16.37-aoc-prompt-ow-squad (2026-08-30)
 
-Check `[x]` as they pass; note issues under any item.
+## Charge (v2.16.36 — per unit)
+- [ ] Charge a multi-model squad: one 2D6 roll covers the whole unit; every model becomes draggable off that one roll.
+- [ ] Can't roll charge again for the same squad once it's rolled.
+- [ ] Each model drags up to the roll; overshoot clamps to the limit (doesn't fail).
+- [ ] Leave Charge phase (Next): charge holds if any model reached 2" of the target; whole unit snaps back if none did.
 
-## v2.16.28 — Demo drop fix
-- [ ] Both seats = Demo Forces, Enter table → manual quick-add buttons (Demo forces / Infantry / Commander / Walker) are hidden.
-- [ ] Begin drops → to-place list shows units (Infantry + Walker), not empty.
-- [ ] Infantry + Walker drop in the normal step; Commander comes up separately in the Infiltrate step (not bundled with infantry).
+## Consolidate / Pile-in (v2.16.36 — 3" cap fixed)
+- [ ] Announce Pile-in/Consolidate, then try to pick the unit up repeatedly — it can't exceed 3" from where you announced.
+- [ ] Inside the 3" bubble you can still reposition freely. The gold 3" ring stays anchored at the announce point.
 
-## v2.16.29 — Pile-in / Consolidate
-- [ ] Fight → select unit → Pile-in → can drag it, capped at 3" (past 3" snaps back).
-- [ ] Consolidate after fighting → same 3" drag.
-- [ ] Undo reverts a pile-in move; tapping an enemy still targets normally.
+## Fire Overwatch (v2.16.37 — whole squad fires)
+- [ ] Trigger Overwatch (reacting seat, unengaged gun unit within 24", 1 CP, round 2+). Tap shooter, tap enemy within 24", Fire.
+- [ ] The WHOLE shooting squad fires at the target (multiple models' weapons resolve), Snap (hits on 6s), 1 CP for the unit.
+- [ ] Titanic can't Overwatch; engaged shooter blocked; target >24" rejected.
 
-## v2.16.30 — Rapid Ingress (Practice)
-- [ ] Mark a unit Strategic Reserves in deploy; reach round 2+; Next out of the other seat's Movement → bar offers Rapid Ingress.
-- [ ] Pick reserve → Rapid Ingress → arrives, spends 1 CP; drag to legal spot (>8" warns); Done → continues to Shooting.
-- [ ] Round 1: not offered (hard block).
-- [ ] No reserves: Next out of Movement does NOT pause.
-- [ ] Once per battle round — not offered again after use.
-
-## v2.16.31 — Fire Overwatch (Practice)
-- [ ] Reacting seat: unengaged gun unit within 24" of an enemy, 1 CP, round 2+ → bar offers Fire Overwatch.
-- [ ] Fire Overwatch → tap shooter → tap enemy within 24" → Fire → Snap (hits only on 6s).
-- [ ] Titanic (demo Walker) can't Overwatch; engaged shooter blocked; target >24" rejected.
-- [ ] Both reactions available → shown in one window; do both, then Done.
-- [ ] Allocation guidance now shows in Fight too.
-
-## v2.16.32 — Lobby scroll (mobile)
-- [ ] Mobile: open lobby, scroll up → Battle size (top field) reachable.
-- [ ] Desktop: lobby still centered / normal.
-
-## v2.16.33 — Armor of Contempt (reaction)
-- [ ] Shooting/Fight → tap attacker then enemy → "Armor of Contempt" button appears on the combat bar.
-- [ ] Tap it → spends defender's 1 CP, AP-1 on that unit; resolve Attack → AP one worse.
-- [ ] No longer in the Optional actions row.
+## Armor of Contempt (v2.16.37 — reaction prompt)
+- [ ] Shooting/Fight: tap your attacker, then an enemy → the green reaction bar shows "Defend - [seat]: Armor of Contempt (1 CP) / Pass" (NOT a button next to Attack).
+- [ ] Tap Armor of Contempt → spends the defender's 1 CP, AP-1 on that unit; then resolve Attack → AP one worse. Pass dismisses.
 - [ ] Not offered on a Battle-shocked target, with no CP, or if already used.
 
-## v2.16.34 — PVP reactions (two devices)
-- [ ] Two devices same match; reacting seat has a reserve or Overwatch target, round 2+. Active Next out of Movement → active shows "waiting for X"; other device shows the reaction bar.
-- [ ] Reactor does Rapid Ingress / Overwatch → result appears on both devices.
-- [ ] Reactor Done/Pass → active presses Next → advances.
-- [ ] Reactor passes with no action → active can still proceed (no loop / re-offer).
+## Reaction system re-check (v2.16.35 made the bar visible)
+- [ ] Rapid Ingress: reserve on the reacting seat, round 2+, Next out of opponent's Movement → bar offers it; place, drag, Done.
+- [ ] Both Rapid Ingress and Fire Overwatch offered in one window when both available.
+- [ ] PVP (two devices): active shows "waiting"; other device acts; results sync; Done → active Next advances.
 
 ## Regression
-- [ ] Full Reset (to lobby) and Reset match (to Start-battle snapshot) still work.
-- [ ] VP objective ticker (obj count) updates; Undo behaves.
+- [ ] Undo works in Movement and in Fight (after a pile-in). Full Reset, Reset match, VP objective ticker all fine.

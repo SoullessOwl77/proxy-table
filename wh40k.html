@@ -300,7 +300,6 @@ canvas.dragging{cursor:grabbing;}
       <span class="name" id="tgtName">Target</span>
       <span class="meta" id="wepMeta"></span>
       <span class="spacer"></span>
-      <button class="btn sm" id="btnAoc" title="Defender: spend 1 CP so attacks against this unit are AP-1 this phase" style="display:none">Armor of Contempt</button>
       <button class="btn sm gold" id="btnResolve">Attack</button>
       <button class="btn sm" id="btnClearAtk">Clear</button>
     </div>
@@ -414,7 +413,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.35-reaction-visible";
+const BUILD = "v2.16.37-aoc-prompt-ow-squad";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -804,6 +803,7 @@ let lastRoll = null;
 let moveOrigin = null;
 let lastDragId = null;
 let overwatchMode = false;
+let aocPrompt = null;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -1172,6 +1172,7 @@ function clearCombatPair(){
   attackerId = null;
   targetId = null;
   preferAllocId = null;
+  aocPrompt = null;
   if (S) S.chargeRolls = {};
   const dice = document.getElementById("dice");
   if (dice) dice.textContent = "";
@@ -1197,26 +1198,30 @@ function minChargeNeed(u){
 }
 function failCharge(u, why){
   if (!u) return;
-  const cr = chargeRecord(u.id);
-  if (cr && cr.x != null){ u.x = cr.x; u.y = cr.y; }
   if (!S.chargeRolls) S.chargeRolls = {};
-  if (!cr) S.chargeRolls[u.id] = { d1:0, d2:0, total:0, x:u.x, y:u.y, failed:true };
-  else cr.failed = true;
-  const f = flagsOf(u);
-  f.charged = true;
-  f.chargeFailed = true;
-  logLine(u.name + " charge failed — " + why);
+  unitGroup(u).forEach(m => {
+    const cr = chargeRecord(m.id);
+    if (cr && cr.x != null){ m.x = cr.x; m.y = cr.y; }
+    if (!cr) S.chargeRolls[m.id] = { d1:0, d2:0, total:0, x:m.x, y:m.y, failed:true };
+    else cr.failed = true;
+    const fm = flagsOf(m); fm.charged = true; fm.chargeFailed = true;
+  });
+  logLine(u.name + (unitGroup(u).length>1?" unit":"") + " charge failed — " + why);
   showWarn("<strong>Charge failed:</strong> " + u.name + " — " + why);
   document.getElementById("dice").textContent = u.name + " charge failed — " + why;
 }
 function resolveOpenCharges(){
   const rolls = S.chargeRolls || {};
+  const seen = new Set();
   Object.keys(rolls).forEach(id => {
     const cr = rolls[id];
     if (!cr || cr.failed) return;
     const u = (S.units || []).find(x => x.id === id);
     if (!u){ cr.failed = true; return; }
-    if (!inEngagement(u)) failCharge(u, "did not end in 2″ Engagement Range");
+    const key = u.groupId || u.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (!unitGroup(u).some(m => inEngagement(m))) failCharge(u, "no model ended in 2″ Engagement Range");
   });
 }
 function unitDamaged(u){
@@ -1353,8 +1358,8 @@ function rollCharge(){
     document.getElementById("dice").textContent = "Select an active-player model first, then Roll charge.";
     return;
   }
-  if (chargeRecord(u.id) && !devOpenGates()){
-    showWarn("<strong>Charge:</strong> this model already rolled this phase.");
+  if (unitGroup(u).some(m => chargeRecord(m.id)) && !devOpenGates()){
+    showWarn("<strong>Charge:</strong> this unit already rolled this phase.");
     return;
   }
   const g = chargeGate(u);
@@ -1362,13 +1367,14 @@ function rollCharge(){
   if (inEngagement(u) && !devOpenGates()){ showWarn("<strong>Charge:</strong> already in Engagement Range — Fight instead."); return; }
   const d1 = d6(), d2 = d6(), total = d1 + d2;
   if (!S.chargeRolls) S.chargeRolls = {};
-  S.chargeRolls[u.id] = { d1, d2, total, x: u.x, y: u.y, failed: false };
-  const f = flagsOf(u);
-  f.charged = true;
-  f.chargeInches = total;
-  f.chargeFailed = false;
-  const need = minChargeNeed(u);
-  logLine(u.name + " charge roll " + d1 + "+" + d2 + " = " + total + "″");
+  const grp = unitGroup(u);
+  grp.forEach(m => {
+    S.chargeRolls[m.id] = { d1, d2, total, x: m.x, y: m.y, failed: false };
+    const fm = flagsOf(m); fm.charged = true; fm.chargeInches = total; fm.chargeFailed = false;
+  });
+  let need = Infinity;
+  grp.forEach(m => { need = Math.min(need, minChargeNeed(m)); });
+  logLine(u.name + (grp.length>1?" unit":"") + " charge roll " + d1 + "+" + d2 + " = " + total + "″");
   document.getElementById("dice").textContent = "Charge [" + d1 + "] [" + d2 + "] = " + total + "″ from base edge";
   setSimpleRoll("Charge", u.name, [d1, d2], d1+"+"+d2+" = "+total+"″ from base edge", { unitId: u.id });
   if (need === Infinity){
@@ -1959,7 +1965,21 @@ function maybeOfferReaction(){
 function renderReactionBar(){
   const bar = document.getElementById("reactionbar");
   if (!bar) return;
-  if (!S.reaction || !S.reaction.on){ bar.style.display = "none"; return; }
+  if (!S.reaction || !S.reaction.on){
+    if (aocPrompt){
+      bar.style.display = "flex";
+      const riB = document.getElementById("btnReactRI");
+      const owB = document.getElementById("btnReactOw");
+      const paB = document.getElementById("btnReactPass");
+      const tx = document.getElementById("reactionText");
+      if (owB) owB.style.display = "none";
+      if (riB){ riB.style.display = ""; riB.textContent = "Armor of Contempt"; }
+      if (paB){ paB.style.display = ""; paB.textContent = "Pass"; }
+      if (tx) tx.innerHTML = "<strong>Defend - "+esc(seatName(aocPrompt.seat))+":</strong> Armor of Contempt (1 CP)? AP-1 against this attack, or Pass.";
+      return;
+    }
+    bar.style.display = "none"; return;
+  }
   const rs = S.reaction.seat;
   bar.style.display = "flex";
   const txt = document.getElementById("reactionText");
@@ -2054,8 +2074,13 @@ function doFireOverwatch(){
   if (!spendCP(1, "Fire Overwatch", rs)) return;
   markReactUsed(rs, "ow");
   overwatchMode = true;
-  logLine(seatName(rs)+" Fire Overwatch (Snap \u2014 hits on 6s) at "+tgt.name);
-  resolveAttack();
+  logLine(seatName(rs)+" Fire Overwatch (Snap - hits on 6s) - "+atk.name+" unit fires at "+tgt.name);
+  const owShooters = unitGroup(atk).filter(m => modelGuns(m).length && !isTitanic(m));
+  for (const m of owShooters){
+    if (!targetId || !S.units.some(x=>x.id===targetId)) break;
+    attackerId = m.id;
+    resolveAttack();
+  }
   overwatchMode = false;
   S.reaction.owDone = true;
   S.reaction.mode = null;
@@ -2472,11 +2497,11 @@ function announceAction(){
     if (fail) showWarn("<strong>Battle-shocked:</strong> "+u.name+" failed ("+(syn?"3D6":"2D6")+" &lt; Ld). OC 0 until this seat’s next Command.");
     else hideWarn();
   } else if (a.id === "pileIn"){
-    unitGroup(u).forEach(m => { flagsOf(m).piling = true; });
+    unitGroup(u).forEach(m => { flagsOf(m).piling = true; flagsOf(m).pileOrigin = { x:m.x, y:m.y }; });
     logLine(u.name+" Pile-in (honor 3″ toward nearest enemy)");
     document.getElementById("dice").textContent = "Pile-in declared — nudge up to 3″, stay in ER/coherency.";
   } else if (a.id === "consolidate"){
-    unitGroup(u).forEach(m => { flagsOf(m).fought = true; flagsOf(m).piling = true; });
+    unitGroup(u).forEach(m => { flagsOf(m).fought = true; flagsOf(m).piling = true; flagsOf(m).pileOrigin = { x:m.x, y:m.y }; });
     logLine(u.name+" Consolidate (honor 3″)");
     document.getElementById("dice").textContent = "Consolidate declared — nudge up to 3″.";
   }
@@ -2647,7 +2672,7 @@ function setPhase(p){
   const prev = S.turn.phase;
   if (prev === "charge" && p !== "charge") resolveOpenCharges();
   if (prev !== p){
-    (S.units || []).forEach(u => { if (flagsOf(u).aoc) flagsOf(u).aoc = false; flagsOf(u).piling = false; });
+    (S.units || []).forEach(u => { if (flagsOf(u).aoc) flagsOf(u).aoc = false; flagsOf(u).piling = false; flagsOf(u).pileOrigin = null; });
   }
   S.turn.phase = p;
   selectedAction = null;
@@ -3248,8 +3273,9 @@ function draw(){
       drawRing(selU.x, selU.y, erReach(selU), "#a8443c99", 1.4);
     } else if (phase === "fight"){
       drawRing(ringAt.x, ringAt.y, erReach(selU), "#a8443caa", 1.8);
-      if (flagsOf(selU).piling && moveOrigin && moveOrigin.id === selU.id){
-        drawRing(moveOrigin.x, moveOrigin.y, rangeReach(selU, 3), "#c39a4e88", 1.5);
+      if (flagsOf(selU).piling){
+        const po = flagsOf(selU).pileOrigin || selU;
+        drawRing(po.x, po.y, rangeReach(selU, 3), "#c39a4e88", 1.5);
       }
     } else {
       /* Movement: Advance expands the gold ring by the D6 */
@@ -3704,7 +3730,7 @@ document.getElementById("btnClearU").onclick = () => {
   S.units=[]; attackerId=targetId=null; selectObj(null); logLine("Cleared units"); save(); draw();
 };
 document.getElementById("btnDemo").onclick = demoForces;
-{ const _rri=document.getElementById("btnReactRI"); if(_rri) _rri.onclick=doRapidIngress; const _row=document.getElementById("btnReactOw"); if(_row) _row.onclick=doFireOverwatch; const _rp=document.getElementById("btnReactPass"); if(_rp) _rp.onclick=endReaction; }
+{ const _rri=document.getElementById("btnReactRI"); if(_rri) _rri.onclick=()=>{ if(aocPrompt) doArmorOfContempt(); else doRapidIngress(); }; const _row=document.getElementById("btnReactOw"); if(_row) _row.onclick=doFireOverwatch; const _rp=document.getElementById("btnReactPass"); if(_rp) _rp.onclick=()=>{ if(aocPrompt){ aocPrompt=null; renderReactionBar(); } else endReaction(); }; }
 const placeSeatEl = document.getElementById("placeSeat");
 if (placeSeatEl) placeSeatEl.onchange = () => {
   placeSeat = placeSeatEl.value === "1" ? 1 : 0;
@@ -3851,10 +3877,9 @@ function renderCombatBar(){
   const box = document.getElementById("combat");
   const atk = S.units.find(u=>u.id===attackerId);
   const tgt = S.units.find(u=>u.id===targetId);
-  if (!atk || !tgt){ box.classList.remove("on"); return; }
+  if (!atk || !tgt){ box.classList.remove("on"); aocPrompt = null; renderReactionBar(); return; }
   box.classList.add("on");
-  const aocBtn = document.getElementById("btnAoc");
-  if (aocBtn){
+  {
     const ph = S.turn.phase;
     const canAoc = (ph==="shooting"||ph==="fight") && tgt
       && !unitGroup(tgt).some(m=>flagsOf(m).aoc)
@@ -3862,7 +3887,7 @@ function renderCombatBar(){
       && (((S.cp && S.cp[tgt.seat])||0) >= 1)
       && !stratUsedOf(tgt.seat)["armorOfContempt"]
       && (practice || tgt.seat===mySeat);
-    aocBtn.style.display = canAoc ? "" : "none";
+    aocPrompt = canAoc ? { tgtId: targetId, seat: tgt.seat } : null;
   }
   document.getElementById("atkName").textContent = atk.name + " (" + seatName(atk.seat) + ")";
   document.getElementById("tgtName").textContent = unitLabel(tgt);
@@ -3878,6 +3903,7 @@ function renderCombatBar(){
     cov ? ("Cover "+cov+" −1 hit") : "no cover"
   ];
   document.getElementById("wepMeta").textContent = bits.join(" · ");
+  renderReactionBar();
 }
 function doArmorOfContempt(){
   const tgt = S.units.find(u=>u.id===targetId);
@@ -4100,7 +4126,6 @@ function resolveAttack(){
 }
 document.getElementById("btnResolve").onclick = resolveAttack;
 document.getElementById("btnClearAtk").onclick = () => { clearCombatPair(); draw(); refreshTip(); renderCombatBar(); };
-{ const _ao=document.getElementById("btnAoc"); if(_ao) _ao.onclick=doArmorOfContempt; }
 
 const ptrs = new Map();
 let mode=null, drag=null;
@@ -4286,11 +4311,13 @@ function endPtr(e){
               const nd = nearestEnemyDist(u);
               if (nd <= 8.01) showWarn("<strong>Scouts:</strong> end more than 8″ from enemies (now "+nd.toFixed(1)+"″).");
             }
-          } else if (S.turn.phase === "fight" && unitGroup(u).some(m => flagsOf(m).piling)){
-            if (from && dist > 3){ const k=3/dist; u.x=from.x+(u.x-from.x)*k; u.y=from.y+(u.y-from.y)*k; }
+          } else if (S.turn.phase === "fight" && flagsOf(u).piling){
+            const po = flagsOf(u).pileOrigin || from || { x:u.x, y:u.y };
+            const dd = Math.hypot(u.x-po.x, u.y-po.y);
+            if (dd > 3){ const k=3/dd; u.x=po.x+(u.x-po.x)*k; u.y=po.y+(u.y-po.y)*k; }
             snapshotGroup(u, u.id, from);
             lastDragId = u.id;
-            logLine(u.name+" moved "+Math.min(dist,3).toFixed(1)+"″ (Pile-in / Consolidate)");
+            logLine(u.name+" pile/consolidate — "+Math.min(dd,3).toFixed(1)+"″ from start");
           } else {
             const f = flagsOf(u);
             if (f.remainedStationary){
@@ -4315,10 +4342,10 @@ function endPtr(e){
             const cr = chargeRecord(u.id);
             if (cr && !cr.failed && cr.x != null){
               const travelled = Math.hypot(u.x-cr.x, u.y-cr.y);
-              if (travelled > cr.total + 0.15){
-                failCharge(u, "moved "+travelled.toFixed(1)+"″ on a "+cr.total+"″ roll");
-              } else if (!inEngagement(u)){
-                failCharge(u, "ended "+edgeDist(u, closestModel(u, enemiesOf(u)) || u).toFixed(1)+"″ from the nearest enemy");
+              if (travelled > cr.total){
+                const kc = cr.total / travelled;
+                u.x = cr.x + (u.x-cr.x)*kc; u.y = cr.y + (u.y-cr.y)*kc;
+                showWarn("<strong>Charge:</strong> "+u.name+" capped to its "+cr.total+"″ roll.");
               }
             }
           }
