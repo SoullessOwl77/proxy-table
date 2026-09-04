@@ -17,11 +17,11 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 | Piece | File |
 |---|---|
 | Hub + MTG + Your Matches | `index.html` (`v2.7.10-howto`) |
-| 40K table | `wh40k.html` (`v2.16.44-howto-link`) |
+| 40K table | `wh40k.html` (`v2.16.46-walkthrough`) |
 | Army builder | `army.html` |
 | Datasheet editor | `datasheet.html` |
 | Catalog | `datasheets/load.js` + `index.js` + faction packs + `mfm-seed.js` + `demo.js` |
-| SW | `sw.js` (`pt-shell-v48`) |
+| SW | `sw.js` (`pt-shell-v50`) |
 | Shared guide model | `guide-data.js` (tooltips + walkthrough + tutorial) |
 | How-to-play tutorial | `howto.html` (paged, reads `guide-data.js`) |
 | Backend | `worker/` — D1 + Durable Object `Match` + webpush |
@@ -34,9 +34,9 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | File | Version |
 |---|---|
-| `wh40k.html` | `v2.16.44-howto-link` |
+| `wh40k.html` | `v2.16.46-walkthrough` |
 | `index.html` | `v2.7.10-howto` |
-| `sw.js` | `pt-shell-v48` |
+| `sw.js` | `pt-shell-v50` |
 
 If live is older, files were not copied or title-tap did not run.
 
@@ -74,6 +74,8 @@ Recent slices in this chat thread:
 - `v2.16.21-drop-pass` — Next player locks the drop (drag no longer auto-commits). Reserves row is current seat only. Strategic Reserves (`· SR`) do not block Start battle.
 - `v2.16.22-reserve-bar` — after Start battle the formation row hides; it returns in Movement if that seat still has units off the table.
 - `v2.16.23-demo-kit` — Demo Infantry / Commander / Walker carry the teaching abilities (FnP, DS, Scout, Fights First, GRENADES). Role keywords stay split so deploy still has a normal drop, an Infiltrator, and a Titanic.
+- `v2.16.46-walkthrough` — Added an interactive **spotlight walkthrough** on the 40K table, modelled on the hub's MTG tour (a cutout hole + caption box, Back/Next/Skip). `tourStart` snapshots S, drops demo forces for both seats and marks the game started, then steps through the board, the four tools, and each phase (switching phase so real controls show), spotlighting elements with beginner captions on what each does / what's optional / how you tap; `tourEnd` restores the pre-tour S (fully non-destructive). Launched by finishing the read-through (howto.html final button -> `wh40k.html?tour=1`) and replayable from a **Replay walkthrough** button in the Guide panel. Tour DOM inserted before the main script so handlers bind. SW -> pt-shell-v50. Node-verified. Not a backup build (next backup v2.16.49).
+- `v2.16.45-howto-newbie` — Rewrote the tutorial for a **zero-knowledge general audience**. All six `phases[*].tutorial` blocks and the three `asides` in `guide-data.js`, plus the overview page in `howto.html`, now define every term on first use (model vs unit, objectives/Victory Points, Command Points, Battle-shock, Strategic Reserves, Infiltrators, Scouts, Engagement Range, Objective Control, Cover, Hit/Wound/Save/Damage) in plain language. The overview now opens with what the game even is. In-app hover tooltips (short/more/do/dont) left terse and unchanged — those are for the player mid-game. SW bumped to pt-shell-v49 so clients re-fetch guide-data.js + howto.html. Node-verified. Not a backup build (next backup v2.16.49).
 - `v2.16.44-howto-link` — Added the **standalone How-to-play tutorial** (`howto.html`) and linked it: the hub's previously-disabled 40K "How to play" button now opens it, and the table's Guide panel has a "Full how-to-play guide" link. The tutorial is paged (Overview -> setup -> the five phases -> Reactions / CP / Scoring asides), Prev/Next + a jump nav + arrow keys + hash deep-links, and renders **entirely from `guide-data.js`** so it never drifts from the tooltips. New files `howto.html` + `guide-data.js` added to the SW SHELL cache. **Backup written:** `backups/backup_v2.16.44-howto-link_2026-09-04.zip` (61 files, excludes `.git`).
 - `v2.16.43-shared-guide` — **Unified the guidance model.** New `guide-data.js` (`window.PT_GUIDE`) is the single source for hover tooltips, the Guide walkthrough, and the tutorial. In `wh40k.html` the inline `TIPS` and `GUIDE` literals are now derived from `PT_GUIDE` at load (script included after `datasheets/load.js`, before the main script). Content corrected to current behavior: 11th setup sequence, whole-unit shooting/fighting, one-2D6-per-unit charge, fights-first order, reactions, scoreboard. Update guidance in one file and every surface follows. Node-verified all key coverage.
 - `v2.16.42-eleventh-setup` — **Setup rebuilt for 11th.** Decoupled first turn from the lobby: the lobby pick now sets Attacker/Defender (deploy order) only. New **Determine First Turn** deploy step after Infiltrator placement — a roll-off (`doRollFirstTurn`, D6 each, re-roll ties) then the winner chooses (`chooseFirstTurn`), which sets `activeSeat` and advances to the pre-battle (scouts) step. Start battle blocked until first turn is set. Reframed the Scouts step as Pre-battle abilities (Scout moves / Scout-to-Reserves / redeploys). Lobby + TIPS/GUIDE copy updated. Researched against 11th sources (New Recruit, Wahapedia 11e, Tabletop Battles). Node-verified.

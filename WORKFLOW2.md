@@ -2,7 +2,7 @@
 
 Check items off with `[x]` as they land. Add notes under any item freely.
 
-**Current build:** `v2.16.44-howto-link` (`wh40k.html`) · hub `v2.7.10-howto` (`index.html`) · SW `pt-shell-v48` · shared guide `guide-data.js` · tutorial `howto.html`
+**Current build:** `v2.16.46-walkthrough` (`wh40k.html`) · hub `v2.7.10-howto` (`index.html`) · SW `pt-shell-v50` · shared guide `guide-data.js` · tutorial `howto.html`
 **Handoff:** `PROXY_TABLE_HANDOFF.md` — read it + this file at the start of every chat.
 **Baseline:** 11th edition Core Rules · skill `wh40k-rules`.
 **Constraint:** Do not change MTG game structure except bug fixes. 40K stays in `wh40k.html`.

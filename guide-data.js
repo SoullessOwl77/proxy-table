@@ -28,21 +28,21 @@ window.PT_GUIDE = {
       ],
       next: "Start battle → Command. Terrain locks. Unit dragging waits for Movement / Charge / Fight.",
       tutorial: {
-        whatFor: "Setup builds the board and decides who deploys first, who takes the first turn, and where the pre-battle movers end up — all before dice start rolling.",
+        whatFor: "Before any dice are rolled, both players build the battlefield and place their armies. This step sets where everyone starts and who takes the first turn - the foundation the whole game sits on. (A 'model' is one miniature; a 'unit' is a group of models that acts together.)",
         yourMove: [
-          "In the lobby pick battle size, mission, an army for each edge, and who the Attacker is. The other seat is the Defender and deploys first.",
-          "Mark any units you want in Strategic Reserves, then Begin drops. Deployment alternates one unit at a time, Defender first; a Titanic unit counts as two drops.",
-          "After normal drops, place Infiltrators more than 8″ from the enemy deployment zone and enemy units.",
-          "Tap Roll first turn. A D6 is rolled for each seat (ties re-roll); the winner then taps who takes the first turn.",
-          "Resolve pre-battle abilities: make Scout moves (or send a Scout into Strategic Reserves) and any honor-system redeploys.",
-          "Tap Start battle. Terrain locks for the rest of the game and Command opens."
+          "In the lobby, choose the game size, the mission (what you score points for), and an army for each side. One side is the Attacker and the other is the Defender - the Defender places their models first.",
+          "You may hold some units off the table to arrive later; these are called Strategic Reserves. Decide which (if any) before you start, then place your units. Players take turns setting up one unit at a time, each inside their own deployment zone - the strip of table you are allowed to start in.",
+          "A few units set up differently. Infiltrators may deploy outside their zone as long as they stay more than 8 inches from the enemy. Place those after the normal units.",
+          "Tap Roll first turn. Each side rolls one die; the higher roll wins and chooses who goes first. Going first is not always the advantage, so it is a real decision.",
+          "Resolve pre-battle moves: units with the Scout ability make a small free move before the game begins, and you can shuffle any last repositioning.",
+          "When the board looks right, tap Start battle. The terrain locks in place and the first player's turn begins."
         ],
         watchOuts: [
-          "First turn is determined AFTER deployment, not in the lobby — the lobby only sets who deploys first.",
-          "You can't skip a later drop into Reserves; mark reserves before Begin drops.",
-          "Start battle stays blocked until the first turn is rolled and chosen."
+          "You decide who goes first AFTER everyone is deployed, not in the lobby - that is why the roll comes near the end of setup.",
+          "Once you begin placing, a unit you did not set aside as Reserves cannot suddenly be held back - decide reserves up front.",
+          "Start battle stays locked until you have rolled for the first turn."
         ],
-        whatsNext: "Command phase of the first player's turn."
+        whatsNext: "The first player's Command phase."
       }
     },
 
@@ -64,16 +64,16 @@ window.PT_GUIDE = {
       ],
       next: "When you're ready, Next → Movement.",
       tutorial: {
-        whatFor: "The Command phase opens each player's turn: you bank a Command Point and test any shaken units before the action starts.",
+        whatFor: "Every turn begins here. It is a short bookkeeping step: you gain a resource called a Command Point, and you check whether any of your battered units lose their nerve.",
         yourMove: [
-          "Read the top bar for whose turn it is and the battle round. Your CP has already gone up by 1.",
-          "For each of your units that has lost wounds, select it, then Optional → Battle-shock → Announce to roll 2D6 against its Leadership.",
-          "If you plan to use a once-per-turn Stratagem like Command Re-roll, remember you have the CP for it here or later this turn."
+          "Look at the top of the screen to see whose turn it is. You automatically gain 1 Command Point - think of these as tokens you spend later on special abilities called Stratagems.",
+          "Any of your units that have already taken casualties must take a Battle-shock test (a morale check): select the unit, then Optional, Battle-shock, Announce, to roll two dice against the unit's Leadership number.",
+          "If a unit fails, it is 'battle-shocked' and stops holding objectives until your next turn. If it passes, nothing happens. Units at full strength do not test at all."
         ],
         watchOuts: [
-          "Only damaged units test Battle-shock; a full-health unit doesn't.",
-          "A failed test drops the unit's Objective Control to 0 until its next Command — it stops holding objectives.",
-          "Command is not a movement or shooting step; nothing moves or fires here."
+          "Only damaged units test for Battle-shock; a full-strength unit never does.",
+          "Nothing moves or shoots in this phase - it is just upkeep before the action.",
+          "You can spend Command Points now or save them for later in your turn."
         ],
         whatsNext: "Movement phase."
       }
@@ -95,19 +95,20 @@ window.PT_GUIDE = {
       ],
       next: "When every model you wanted to move has moved (or stayed), Next → Shooting. The opponent may get a reaction first.",
       tutorial: {
-        whatFor: "Movement is where you reposition — advance toward objectives, fall back out of combat, or hold still to keep shooting.",
+        whatFor: "This is where you reposition your army - moving toward objectives, pulling out of danger, or holding still for a better shot. Everything is measured in inches from the edge of a model's base.",
         yourMove: [
-          "Select one of your models. The gold ring shows its Move in inches from the base edge.",
-          "Drag it so its base edge finishes on or inside that ring. For a squad, keep the models in a 2″ chain and within 9″ of each other.",
-          "To go further, declare Advance (Optional → Announce) for M plus a D6 — but that unit usually can't shoot or charge after.",
-          "To leave combat, declare Fall Back; to sit still and keep full shooting, declare Remain Stationary."
+          "Select one of your models. A gold ring appears showing how far it can move - that distance is the unit's Move stat, in inches.",
+          "Drag the model so it finishes on or inside that ring. If it is a squad of several models, keep them close - within 2 inches of each other, forming one connected group.",
+          "Need extra distance? Declare an Advance (Optional, then Announce) to add a die roll to your move - but a unit that Advances usually cannot shoot or charge this turn.",
+          "To pull a unit out of melee, declare Fall Back. To keep a unit still so it shoots at full effect, declare Remain Stationary."
         ],
         watchOuts: [
-          "Advancing and Falling Back usually cost you shooting and charging that turn.",
-          "Breaking a squad's coherency triggers a warning — keep the chain together.",
-          "When you finish moving, your opponent may react (Rapid Ingress or Fire Overwatch) before Shooting begins."
+          "Advancing or Falling Back usually costs that unit its shooting and its charge for the turn - it is a trade-off.",
+          "Keep squad members within 2 inches of each other; spreading them too far breaks up the unit (the app warns you).",
+          "You can only move your own units - the other player moves on their turn.",
+          "When you finish moving, your opponent may get to react before you shoot (see the Reactions page)."
         ],
-        whatsNext: "Shooting phase (after any opponent reaction)."
+        whatsNext: "Shooting phase."
       }
     },
 
@@ -127,16 +128,16 @@ window.PT_GUIDE = {
       ],
       next: "When you've shot with the units you want, Next → Charge.",
       tutorial: {
-        whatFor: "Shooting is your ranged attacks — whole units fire together at a chosen enemy target.",
+        whatFor: "Your units with ranged weapons open fire. A whole unit shoots together at one enemy target, and each shot is settled by a short chain of dice rolls.",
         yourMove: [
-          "Switch to the Combat tool. Tap one of your models to pick its unit, then tap an enemy unit inside gun range.",
-          "Glance at the Cover note on the bar, then tap Attack. The entire unit fires at that target.",
-          "Read the dice readout: it shows how many of the unit's models fired and lists any that couldn't, with the reason (out of range, locked in combat, and so on)."
+          "Switch to the Combat tool. Tap one of your models to choose its unit, then tap an enemy unit that is within range and that you can see.",
+          "Tap Attack. The whole unit fires at that target at once.",
+          "The dice resolve in four steps: roll to Hit (did the shot land), then to Wound (did it hurt - the weapon's Strength versus the target's Toughness), then the defender rolls a Save (its armour tries to stop it), and finally any hits that get through deal Damage. The app rolls it all and shows how many models fired and who could not."
         ],
         watchOuts: [
-          "A model within 2″ of an enemy is locked in combat and can't shoot — that's why a squad may fire fewer models than it has.",
-          "Cover is a −1 to hit in 11th, not a better save.",
-          "You can't target a unit you're within Engagement Range of with normal weapons."
+          "A model within 2 inches of an enemy is locked in melee and cannot shoot - that is often why only part of a squad fires.",
+          "A target standing in or behind terrain has Cover, which makes it harder to hit.",
+          "You cannot shoot a unit you are already in melee with using normal weapons - that is what the Fight phase is for."
         ],
         whatsNext: "Charge phase."
       }
@@ -158,16 +159,16 @@ window.PT_GUIDE = {
       ],
       next: "When charges are done, Next → Fight.",
       tutorial: {
-        whatFor: "Charging moves a unit into melee range so it can fight this turn — and units that charge get to strike first.",
+        whatFor: "Charging moves a unit into melee range so it can fight this turn. It is a gamble: you roll to see how far the unit can rush, and if it falls short it does not move at all.",
         yourMove: [
-          "Select a model in the unit you want to charge, then tap Roll charge. The single 2D6 result is the whole unit's charge range.",
-          "If the gold ring reaches an enemy, drag the unit so it ends inside the ring and within 2″ of that enemy.",
-          "If the roll falls short of every enemy, the charge fails and the unit stays where it was."
+          "Pick a unit that did not Advance or Fall Back. Select one of its models and tap Roll charge - you roll two dice, and that total is how many inches the whole unit can move.",
+          "If the roll is enough to reach within 2 inches of an enemy - close enough to fight, which is called Engagement Range - drag the unit into contact.",
+          "If the roll falls short of every enemy, the charge fails and the unit stays exactly where it was."
         ],
         watchOuts: [
-          "It's one roll per unit, not one per model.",
-          "A unit that Advanced or Fell Back this turn usually can't charge.",
-          "End outside the ring or short of 2″ and the whole charge fails — the unit snaps back."
+          "It is one roll for the whole unit, not one per model.",
+          "A unit that Advanced or Fell Back this turn usually cannot charge.",
+          "Charging pays off: units that charge get to strike first in the Fight phase."
         ],
         whatsNext: "Fight phase."
       }
@@ -189,18 +190,18 @@ window.PT_GUIDE = {
       ],
       next: "Tap Next to pass the turn (other seat's Command, or the next battle round — objectives score as you leave).",
       tutorial: {
-        whatFor: "The Fight phase is melee — every unit within 2″ of an enemy fights, in a set order, both players' units taking part.",
+        whatFor: "Melee combat. Every unit within 2 inches of an enemy fights, and unlike the other phases, both players' units take part - in a set order.",
         yourMove: [
-          "Tap the Fights First button to see who fights first: units that charged or have Fights First, then the rest, alternating with the non-active player.",
-          "With the Combat tool, tap one of your models that's within 2″ of an enemy, then the enemy, then Attack. The whole unit fights at once.",
-          "Work through the order until every engaged unit on both sides has fought once."
+          "Order matters first. Units that charged this turn, plus any unit with the Fights First ability, swing before everyone else. Tap the Fights First button to see the current order for the units in combat.",
+          "With the Combat tool, tap one of your models within 2 inches of an enemy, then tap that enemy, then Attack. The whole unit fights at once, using the same Hit, Wound, Save, Damage steps as shooting.",
+          "Work through the order - chargers and Fights First units, then the rest, with the players alternating - until every unit in combat has fought once."
         ],
         watchOuts: [
-          "Resolve chargers and Fights First units before normal units — the app reminds you if you jump ahead.",
-          "A unit fights only once per phase.",
-          "After the Fight phase, Next ends your turn and scores objectives — don't forget to press it."
+          "Resolve chargers and Fights First units before your ordinary units; the app reminds you if you jump ahead.",
+          "Each unit fights only once per turn.",
+          "After the Fight phase, ending your turn is what scores your objectives - do not forget to press Next."
         ],
-        whatsNext: "End of turn: objectives score, then the other player's Command (or the next battle round)."
+        whatsNext: "Your turn ends: you score the objectives you control, then it is the other player's Command phase (or the next round begins)."
       }
     }
   },
@@ -280,15 +281,15 @@ window.PT_GUIDE = {
   asides: {
     reactions: {
       title: "Reactions",
-      body: "At the end of your opponent's Movement phase you may get one reaction, each costing 1 CP and usable once per round. Rapid Ingress brings a unit in from Strategic Reserves early (never on battle round 1). Fire Overwatch lets a unit Snap-shoot — it hits only on unmodified 6s. Armor of Contempt is a defensive reaction you use in Combat when your unit is the target, softening incoming AP. The app pops a reaction bar when one is available."
+      body: "Most of the game happens on your own turn, but a few abilities let you act during your opponent's turn. These are Reactions, and each costs one Command Point. The common ones: Rapid Ingress lets a unit you kept in Strategic Reserves arrive early (never on the very first round); Fire Overwatch lets one of your units shoot at an enemy moving nearby, though hurried fire only lands on the best possible dice rolls; and Armor of Contempt is a defensive reaction you use when your unit is being attacked, blunting the incoming hits. When one is available, the app pops up a reaction bar so you do not miss the window."
     },
     command_points: {
       title: "Command Points and Stratagems",
-      body: "You gain 1 Command Point at the start of each of your Command phases. Stratagems spend CP for one-off effects: Command Re-roll (re-roll a roll), Grenade (a Shooting-phase attack), plus the reactions above. Each is once per your turn. The scoreboard's CP +/- lets you correct the count by hand."
+      body: "Command Points (CP) are a resource you spend on one-off special effects called Stratagems. You gain one at the start of each of your turns. Typical uses are re-rolling a bad dice roll, throwing a grenade, or the Reactions above. Most Stratagems can only be used once per turn, so pick your moment. The scoreboard has plus/minus buttons if you ever need to correct your CP total by hand."
     },
     scoring: {
-      title: "Scoring and the scoreboard",
-      body: "In Take and Hold you score primary VP at the end of each of your turns: 5 for holding 1+ objectives, another 5 for 2+, and 5 more for holding more than your opponent. The app tallies this automatically when you leave the Fight phase. Turn on the Scoreboard to see per-seat VP and CP, and use its +/- for secondary objectives and manual corrections."
+      title: "How you win: objectives and Victory Points",
+      body: "You win by scoring the most Victory Points, and most of them come from objectives - the marked spots on the table. In the Take and Hold mission, at the end of each of your turns you score for the objectives you control (a unit controls one if the total Objective Control stat of its nearby models beats the enemy's): 5 points for holding at least one, 5 more for holding two or more, and 5 more for holding more than your opponent. The app tallies this automatically when you end your turn out of the Fight phase, and you can turn on the Scoreboard to watch both sides' points and Command Points."
     }
   },
 

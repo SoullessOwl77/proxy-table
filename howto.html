@@ -86,18 +86,19 @@ ul.watch li::before{content:"!";position:absolute;left:0;top:5px;width:16px;heig
   if (!G){ document.getElementById("card").innerHTML = "<h2>Guide data didn't load</h2><p class='lede'>Reload the page — guide-data.js is required.</p>"; return; }
 
   var INTRO = {
-    label: "Overview",
-    title: "How a game flows",
-    lede: "This is a teaching proxy for Warhammer 40,000 (11th edition). A game is a set number of battle rounds; in each round both players take a full turn, and every turn runs through the same five phases. Here's the shape before we walk each part.",
+    label: "Start here",
+    title: "What this game is",
+    lede: "Warhammer 40,000 is a tabletop game where two players each command an army of miniatures on a table. You take turns moving your models, shooting, and fighting in melee; you measure everything in inches and settle every attack by rolling six-sided dice. You score points mainly by controlling marked spots on the table called objectives, and whoever has the most points when the game ends wins. This app is a practice table for learning that flow - it does not enforce the rules for you, so this guide explains what happens in each part and what to tap. Here is the shape of a game before we walk through it.",
     items: [
-      ["Before the battle", "Pick armies, deploy (Defender first), roll for the first turn, then resolve pre-battle abilities like Scout moves."],
-      ["Command", "Gain a Command Point and test any shaken units for Battle-shock."],
-      ["Movement", "Reposition your units. Your opponent may react at the end of it."],
-      ["Shooting", "Whole units fire at enemy targets."],
-      ["Charge", "Roll to close into melee range — chargers strike first."],
-      ["Fight", "Melee, in order, for every unit within 2 inches. Then the turn ends and objectives score."]
+      ["Model vs unit", "A model is one miniature. A unit is a group of models that moves and fights together, and most rules apply to the whole unit at once."],
+      ["Before the battle", "Both players pick an army, set up terrain, and take turns placing their units on their own half of the table. Then you roll a die to see who takes the first turn."],
+      ["Command", "The start of your turn. You collect a Command Point (a resource for special moves) and check whether any battered units panic."],
+      ["Movement", "Move your units across the table, measured in inches - toward objectives or into good firing positions."],
+      ["Shooting", "Units with ranged weapons shoot at enemy units they can see and reach."],
+      ["Charge", "Roll dice to rush a unit into contact with an enemy so it can fight in melee."],
+      ["Fight", "Units in close range swing at each other. Then your turn ends and you score the objectives you hold."]
     ],
-    next: "Tap Next to start with setting up the battle."
+    next: "A game runs a set number of rounds, and both players take a full turn each round. Tap Next to start with setting up your first game."
   };
 
   var order = (G.order || ["setup","command","movement","shooting","charge","fight"]);
@@ -168,7 +169,7 @@ ul.watch li::before{content:"!";position:absolute;left:0;top:5px;width:16px;heig
     document.getElementById("count").textContent = (cur+1) + " of " + pages.length;
     document.getElementById("prev").disabled = (cur === 0);
     var nx = document.getElementById("next");
-    nx.textContent = (cur === pages.length-1) ? "Done" : "Next";
+    nx.textContent = (cur === pages.length-1) ? "Try it on the table" : "Next";
     renderNav(cur);
     var key = pg.kind === "intro" ? "overview" : pg.key;
     if (history.replaceState) history.replaceState(null, "", "#" + key);
@@ -177,7 +178,7 @@ ul.watch li::before{content:"!";position:absolute;left:0;top:5px;width:16px;heig
 
   function go(i){
     if (i < 0) i = 0;
-    if (i > pages.length-1){ location.href = "./wh40k.html"; return; }
+    if (i > pages.length-1){ location.href = "./wh40k.html?tour=1"; return; }
     cur = i; render();
   }
 

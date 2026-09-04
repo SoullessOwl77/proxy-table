@@ -202,6 +202,13 @@ canvas.dragging{cursor:grabbing;}
   .rollpanel{width:min(260px,40vw);font-size:11px;}
   .log{max-width:100%;}
 }
+.tourhole{position:fixed;border-radius:9px;border:2px solid var(--brass);box-shadow:0 0 0 9999px #000d;pointer-events:none;z-index:95;transition:top .18s,left .18s,width .18s,height .18s;}
+.tourbox{position:fixed;z-index:96;width:272px;max-width:88vw;background:var(--felt-2);border:1px solid var(--brass-dim);border-radius:10px;padding:12px 14px;box-shadow:0 12px 34px #000c;}
+.tourbox h3{font-size:15px;font-weight:700;margin:0 0 5px;color:var(--parchment);}
+.tourbox p{margin:0;font-size:12.5px;line-height:1.5;color:var(--parchment);}
+.tourbox .tnav{display:flex;align-items:center;gap:7px;margin-top:11px;}
+.tourbox .tstep{font-size:10.5px;color:var(--parchment-dim);letter-spacing:.1em;flex:1;}
+body.tour .warnbar{display:none!important;}
 </style>
 </head>
 <body>
@@ -256,6 +263,7 @@ canvas.dragging{cursor:grabbing;}
   <div class="nextwhen" id="guideNext"></div>
   <div class="about" id="guideAbout"></div>
   <a class="howtolink" href="./howto.html" target="_blank" rel="noopener" style="display:block;margin-top:8px;font-size:12px;color:#c39a4e;text-decoration:none;border-top:1px solid #2a3a3688;padding-top:8px">Full how-to-play guide →</a>
+  <button class="btn sm" id="btnReplayTour" style="margin-top:6px;width:100%">Replay walkthrough</button>
 </aside>
 <aside class="devpanel" id="devpanel">
   <div class="gbar">
@@ -432,8 +440,19 @@ canvas.dragging{cursor:grabbing;}
     </div>
   </div>
 </div>
+<div class="tourhole" id="tourHole" style="display:none"></div>
+<div class="tourbox" id="tourBox" style="display:none">
+  <h3 id="tourTitle"></h3>
+  <p id="tourText"></p>
+  <div class="tnav">
+    <span class="tstep" id="tourStep"></span>
+    <button class="btn sm" id="tourBack">Back</button>
+    <button class="btn sm gold" id="tourNext">Next</button>
+    <button class="btn sm" id="tourQuit">Skip</button>
+  </div>
+</div>
 <script>
-const BUILD = "v2.16.44-howto-link";
+const BUILD = "v2.16.46-walkthrough";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -4529,6 +4548,98 @@ if (!practice){
     if (document.visibilityState === "hidden") { try { pushState(); } catch (_) {} }
   });
 }
+
+/* ---------- guided walkthrough (spotlight tour) ---------- */
+let tourAt = -1, tourPrevS = null, tourPrevTool = null;
+function tourPhaseSet(p){
+  S.turn.phase = p; selectedAction = null; clearCombatPair();
+  renderPhases(); renderActions(); refreshTip(); draw();
+}
+const TOUR = [
+  { sel:"#c", t:"The battlefield", d:"This is the table, 60 by 40 inches. Drag to pan, and pinch or scroll to zoom. We've put two demo armies down so you can see how a turn works - nothing here is scored, it's just to look around." },
+  { sel:"[data-tool='combat']", t:"Your four tools", d:"These change what tapping the table does. Terrain places scenery (setup only), Units selects and moves your models, Measure gives you a tape, and Combat is how you shoot and fight." },
+  { sel:"#phases", t:"Command phase", before:function(){ tourPhaseSet("command"); }, d:"A turn moves left to right through these five phases; the lit one is where you are. Command is first: you gain a Command Point to spend on special moves later, and you test any wounded units for nerve. Nothing moves or shoots here." },
+  { sel:"#rowActions", t:"Movement phase", before:function(){ tourPhaseSet("movement"); setTool("unit"); }, d:"Optional actions for a phase appear here. In Movement you can just drag a model inside its gold ring, or declare Advance for extra distance, Fall Back to escape combat, or Remain Stationary. Most of the time you simply move." },
+  { sel:"#c", t:"Shooting phase", before:function(){ tourPhaseSet("shooting"); setTool("combat"); }, d:"With the Combat tool, tap one of your models, then an enemy in range, then Attack - the whole unit fires at once. A model stuck in melee cannot shoot. Every die shows in the Rolls panel." },
+  { sel:"#phases", t:"Charge phase", before:function(){ tourPhaseSet("charge"); setTool("combat"); }, d:"Pick a unit and roll two dice - that is how far the whole unit can rush. Reach within 2 inches of an enemy and you lock into melee; fall short and it stays put. Charging lets you strike first next phase." },
+  { sel:"#rowActions", t:"Fight phase", before:function(){ tourPhaseSet("fight"); setTool("combat"); }, d:"Both players' units in melee fight, and order matters - chargers and Fights First units go first. Tap Fights First here to see the order, then tap your model, the enemy, and Attack. Each unit fights once." },
+  { sel:"#btnNext", t:"Moving on", d:"Next walks you through the phases. After Fight it ends your turn, scores the objectives you hold, and passes to the other player. During setup this same button reads Start battle." },
+  { sel:"#btnGuide", t:"Live walkthrough", d:"Guide opens a running do-and-don't for whatever phase you are in - the same advice as the read-through, but live while you play." },
+  { sel:"#btnRolls", t:"Dice math", d:"Rolls shows every hit, wound, save, and damage die from your last attack, so you can see exactly what happened." },
+  { sel:"#btnScore", t:"Scoreboard", d:"Score tracks Victory Points and Command Points for both sides. Objectives total automatically; the plus and minus buttons cover anything the app does not score for you." },
+  { sel:"#btnMenu", t:"Getting around", d:"Menu goes back to the hub, and Fit recentres the board. Your practice game saves on this device, so you can leave and come back." },
+  { sel:null, t:"You're ready", d:"That's a full turn, start to finish. Start a fresh practice game from the hub whenever you like, or tap Units then Demo forces to drop these pieces again. Nothing forces the rules here - it's a safe place to learn by doing." }
+];
+function tourStart(){
+  if (document.body.classList.contains("tour")) return;
+  if (!S) return;
+  try { tourPrevS = JSON.stringify(S); } catch(e){ tourPrevS = null; }
+  tourPrevTool = tool;
+  try { placeDemoSeat(0); placeDemoSeat(1); } catch(e){}
+  S.turn = { battleRound:1, activeSeat:0, phase:"command", deploymentDone:true };
+  if (!S.mission) S.mission = emptyMission("takehold");
+  (S.terrain||[]).forEach(function(t){ t.locked = true; });
+  selectedAction = null; clearCombatPair();
+  try { setTool("combat"); } catch(e){}
+  renderPhases(); renderActions(); refreshTip(); draw();
+  document.body.classList.add("tour");
+  tourShow(0);
+}
+function tourShow(i){
+  if (i < 0) i = 0;
+  if (i >= TOUR.length) return tourEnd();
+  tourAt = i;
+  const step = TOUR[i];
+  if (step.before){ try { step.before(); } catch(e){} }
+  const hole = document.getElementById("tourHole");
+  const box = document.getElementById("tourBox");
+  box.style.display = "";
+  document.getElementById("tourTitle").textContent = step.t;
+  document.getElementById("tourText").textContent = step.d;
+  document.getElementById("tourStep").textContent = (i+1)+" / "+TOUR.length;
+  document.getElementById("tourBack").style.visibility = i ? "" : "hidden";
+  document.getElementById("tourNext").textContent = (i === TOUR.length-1) ? "Done" : "Next";
+  const el = step.sel ? document.querySelector(step.sel) : null;
+  const r = el ? el.getBoundingClientRect() : null;
+  if (r && r.width > 4 && r.height > 4){
+    const pad = 6;
+    hole.style.display = "";
+    hole.style.left = (r.left - pad) + "px";
+    hole.style.top = (r.top - pad) + "px";
+    hole.style.width = (r.width + pad*2) + "px";
+    hole.style.height = (r.height + pad*2) + "px";
+    const bw = box.offsetWidth, bh = box.offsetHeight;
+    let top = r.bottom + 10;
+    if (top + bh > innerHeight - 8) top = Math.max(8, r.top - bh - 10);
+    let left = r.left + r.width/2 - bw/2;
+    left = Math.max(8, Math.min(left, innerWidth - bw - 8));
+    box.style.top = Math.max(8, Math.min(top, innerHeight - bh - 8)) + "px";
+    box.style.left = left + "px";
+  } else {
+    hole.style.display = "none";
+    const bw = box.offsetWidth, bh = box.offsetHeight;
+    box.style.top = Math.max(8, innerHeight/2 - bh/2) + "px";
+    box.style.left = Math.max(8, innerWidth/2 - bw/2) + "px";
+  }
+}
+function tourEnd(){
+  tourAt = -1;
+  document.getElementById("tourHole").style.display = "none";
+  document.getElementById("tourBox").style.display = "none";
+  document.body.classList.remove("tour");
+  if (tourPrevS){ try { S = JSON.parse(tourPrevS); } catch(e){} tourPrevS = null; }
+  selectedAction = null; clearCombatPair();
+  try { if (tourPrevTool) setTool(tourPrevTool); } catch(e){}
+  try { renderPhases(); renderActions(); refreshTip(); if (typeof renderLobby === "function") renderLobby(); draw(); save(); } catch(e){}
+}
+(function(){
+  const nx = document.getElementById("tourNext"); if (nx) nx.onclick = function(){ tourShow(tourAt + 1); };
+  const bk = document.getElementById("tourBack"); if (bk) bk.onclick = function(){ tourShow(tourAt - 1); };
+  const qt = document.getElementById("tourQuit"); if (qt) qt.onclick = tourEnd;
+  const rt = document.getElementById("btnReplayTour"); if (rt) rt.onclick = function(){ tourStart(); };
+  addEventListener("resize", function(){ if (tourAt >= 0) tourShow(tourAt); });
+  try { if (new URLSearchParams(location.search).get("tour") === "1") setTimeout(tourStart, 350); } catch(e){}
+})();
 </script>
 </body>
 </html>
