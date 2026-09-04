@@ -17,7 +17,7 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 | Piece | File |
 |---|---|
 | Hub + MTG + Your Matches | `index.html` (`v2.7.9-army`) |
-| 40K table | `wh40k.html` (`v2.16.38-unit-fire-scoreboard`) |
+| 40K table | `wh40k.html` (`v2.16.39-volley-report`) |
 | Army builder | `army.html` |
 | Datasheet editor | `datasheet.html` |
 | Catalog | `datasheets/load.js` + `index.js` + faction packs + `mfm-seed.js` + `demo.js` |
@@ -32,9 +32,9 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | File | Version |
 |---|---|
-| `wh40k.html` | `v2.16.38-unit-fire-scoreboard` |
+| `wh40k.html` | `v2.16.39-volley-report` |
 | `index.html` | `v2.7.9-army` |
-| `sw.js` | `pt-shell-v42` |
+| `sw.js` | `pt-shell-v43` |
 
 If live is older, files were not copied or title-tap did not run.
 
@@ -72,6 +72,7 @@ Recent slices in this chat thread:
 - `v2.16.21-drop-pass` — Next player locks the drop (drag no longer auto-commits). Reserves row is current seat only. Strategic Reserves (`· SR`) do not block Start battle.
 - `v2.16.22-reserve-bar` — after Start battle the formation row hides; it returns in Movement if that seat still has units off the table.
 - `v2.16.23-demo-kit` — Demo Infantry / Commander / Walker carry the teaching abilities (FnP, DS, Scout, Fights First, GRENADES). Role keywords stay split so deploy still has a normal drop, an Infiltrator, and a Titanic.
+- `v2.16.39-volley-report` — Volley accountability. `resolveAttack` now RETURNS a short reason string on every skip (out of range, in engagement range, friendly, etc.) instead of just a silent `return`. `resolveUnitAttack` collects non-firing models into `volleySkipped` and reports them: dice readout shows "N of M fired", each skipped model is logged ("X did not fire — out of range (Y in)"), and the Rolls panel lists them. Answers the "why didn't that one fire?" question and reveals whether a 4-of-5 was a real range/ER skip. Rifle TORRENT auto-hit and dead-target auto-advance (no shooter lost on a kill) confirmed as correct. **Backup written:** `backups/backup_v2.16.39-volley-report_2026-09-04.zip`.
 - `v2.16.38-unit-fire-scoreboard` — Batch build: **whole-unit shooting & fighting** (Attack loops the unit's models via `resolveUnitAttack`), **scrollable all-rolls readout** (`volley` array + `renderRollPanel`/`rollBlockHtml` list), and a **toggleable honor-system scoreboard** (`Score` button → `#scorepanel`: per-seat VP = auto primary + manual secondary +/-, and CP auto +1/turn + manual +/-). `scoreAdj` is an additive synced board field. Node-verified; VM was flaky, applied in two passes.
 - `v2.16.37-aoc-prompt-ow-squad` — Two combat reworks from testing. **Fire Overwatch now fires the whole shooting squad** at the target (loops `resolveAttack` over each non-Titanic model with a ranged weapon, Snap; stops if the target unit is wiped), not one model; still 1 CP for the unit. **Armor of Contempt moved off the combat bar to a reaction-bar prompt** (like Rapid Ingress): when the active seat picks an attacker + target in Shooting/Fight and the defender can AoC, the green reaction bar shows "Defend - [seat]: Armor of Contempt (1 CP) / Pass" (client-local `aocPrompt`, driven from `renderCombatBar`; the RI button doubles as the AoC button, Pass dismisses). Old `#btnAoc` removed. Note: AoC is still Practice-only (its trigger reads client-local `targetId`, which doesn't sync — PVP AoC still needs targeting synced into the board). Node-checked.
 - `v2.16.36-charge-perunit` — Combat correctness from testing. **Charge is now one 2D6 per unit** (was per model): rolling with any squad model rolls once and stamps the same total on every model in the group; re-roll blocked once any member has rolled; `need` is the min across the squad; each model's drag clamps to the roll (no per-drag fail); the end-in-ER check moved to `resolveOpenCharges` and is per-unit (succeeds if ANY model reached 2" ER, else the whole unit snaps back via a group-wide `failCharge`). **Consolidate/Pile-in repeat-move fixed**: was capped to 3" from each pickup point, so you could walk a unit 3" at a time; now each model stores a `pileOrigin` at announce and every drag clamps to 3" from that fixed point (adjustable inside the bubble, never beyond). The 3" ring now anchors at `pileOrigin` persistently. Verified the math in Node. **Next build:** Armor of Contempt moves to a reaction-bar prompt (like Rapid Ingress) when your unit is targeted, and Fire Overwatch fires the whole chosen squad (per user testing).

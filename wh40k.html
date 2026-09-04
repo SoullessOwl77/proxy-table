@@ -428,7 +428,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.38-unit-fire-scoreboard";
+const BUILD = "v2.16.39-volley-report";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -815,6 +815,7 @@ let rollsOn = false;
 /* Structured last attack for the Rolls panel (and future “pick which dice” UI). */
 let lastRoll = null;
 let volley = null;
+let volleySkipped = [];
 let scoreOn = false;
 /* While dragging a unit, rings stay on the start position until drop. */
 let moveOrigin = null;
@@ -2094,7 +2095,7 @@ function doFireOverwatch(){
   markReactUsed(rs, "ow");
   overwatchMode = true;
   logLine(seatName(rs)+" Fire Overwatch (Snap - hits on 6s) - "+atk.name+" unit fires at "+tgt.name);
-  volley = [];
+  volley = []; volleySkipped = [];
   const owShooters = unitGroup(atk).filter(m => modelGuns(m).length && !isTitanic(m));
   for (const m of owShooters){
     if (!targetId || !S.units.some(x=>x.id===targetId)) break;
@@ -2934,9 +2935,11 @@ function renderRollPanel(){
   if (!list.length){ body.className = "empty"; body.textContent = "Resolve an attack to see each roll here."; return; }
   body.className = "";
   let html = "";
-  if (list.length > 1){
+  const showingVolley = Array.isArray(volley) && volley.length;
+  if (showingVolley && (list.length > 1 || (Array.isArray(volleySkipped) && volleySkipped.length))){
     let H=0,W=0,U=0,D=0; list.forEach(R=>{ H+=R.hitN||0; W+=R.woundN||0; U+=R.unsaved||0; D+=R.dmg||0; });
-    html += `<div class="summary"><strong>Unit volley</strong> — ${list.length} models · ${H} hits · ${W} wounds · ${U} unsaved · ${D} damage</div>`;
+    html += `<div class="summary"><strong>Unit volley</strong> — ${list.length} fired · ${H} hits · ${W} wounds · ${U} unsaved · ${D} damage</div>`;
+    if (Array.isArray(volleySkipped) && volleySkipped.length){ html += `<div class="summary">Did not fire: ${volleySkipped.map(sk=>esc(sk.name)+" — "+esc(sk.reason)).join("; ")}</div>`; }
   }
   html += list.map((R,i)=> (list.length>1 ? `<div class="step"><h4>Model ${i+1}${R.wepName?" — "+R.wepName:""}</h4></div>` : "") + rollBlockHtml(R)).join("");
   body.innerHTML = html;
@@ -3947,19 +3950,19 @@ function doArmorOfContempt(){
 function resolveAttack(){
   const atk = S.units.find(u=>u.id===attackerId);
   const tgt = S.units.find(u=>u.id===targetId);
-  if (!atk || !tgt){ document.getElementById("dice").textContent = "Pick attacker then target."; return; }
+  if (!atk || !tgt){ document.getElementById("dice").textContent = "Pick attacker then target."; return "no target"; }
   if (!overwatchMode && atk.seat !== S.turn.activeSeat){
     document.getElementById("dice").textContent = seatName(S.turn.activeSeat) + "'s turn — attacker must be their model.";
-    return;
+    return "not your model";
   }
-  if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return; }
+  if (atk.seat === tgt.seat){ document.getElementById("dice").textContent = "Target must be the other force."; return "friendly fire"; }
   if (!overwatchMode && tgt.seat === S.turn.activeSeat){
     document.getElementById("dice").textContent = "Target must be the enemy (not " + seatName(S.turn.activeSeat) + ").";
-    return;
+    return "invalid target";
   }
   if (S.turn.phase === "shooting"){
     const g = shootGate(atk);
-    if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Shooting:</strong> "+g); return; }
+    if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Shooting:</strong> "+g); return g; }
   }
   if (S.turn.phase === "charge"){
     const g = chargeGate(atk);
@@ -3976,17 +3979,17 @@ function resolveAttack(){
       if (!window.PTSheets.isCloseQuarters(w)){
         document.getElementById("dice").textContent = "In Engagement Range — only [CLOSE-QUARTERS] / [PISTOL] can shoot here.";
         showWarn("<strong>Shooting:</strong> engaged — fire a Close Quarters weapon at that unit, or Fight.");
-        return;
+        return "in engagement range";
       }
     }
     if (pw.dist > (w.rng||24)+0.05 && !devOpenGates()){
       document.getElementById("dice").textContent = "Out of range ("+pw.dist.toFixed(1)+"\" > "+w.rng+"\").";
-      return;
+      return "out of range ("+pw.dist.toFixed(1)+" in)";
     }
   } else if (!unitInER(atk, mates) && !devOpenGates()){
     document.getElementById("dice").textContent = "Not in 2\" Engagement Range.";
     showWarn("<strong>Fight:</strong> not in 2″ Engagement Range of that unit.");
-    return;
+    return "not in engagement range";
   }
   const cov = inCover(measure, atk);
   const hitMod = cov ? -1 : 0;
@@ -4155,16 +4158,21 @@ function resolveUnitAttack(){
   if (!atk0 || !tgt0){ resolveAttack(); return; }
   const phase = S.turn.phase;
   const shooters = unitGroup(atk0).filter(m => (phase==="fight"||phase==="charge") ? true : modelGuns(m).length);
-  volley = [];
+  volley = []; volleySkipped = [];
   for (const m of shooters){
     if (!targetId || !S.units.some(x=>x.id===targetId)) break;
     attackerId = m.id;
-    resolveAttack();
+    const before = volley.length;
+    const reason = resolveAttack();
+    if (volley.length === before) volleySkipped.push({ name: m.name, reason: reason || "could not fire" });
   }
   if (S.units.some(x=>x.id===atk0.id)) attackerId = atk0.id;
-  if (volley.length){
+  if (volley.length || volleySkipped.length){
     let H=0,W=0,U=0,D=0; volley.forEach(R=>{ H+=R.hitN||0; W+=R.woundN||0; U+=R.unsaved||0; D+=R.dmg||0; });
-    document.getElementById("dice").textContent = "Unit volley: "+volley.length+" firing — "+H+" hits, "+W+" wounds, "+D+" damage";
+    let msg = "Unit volley: "+volley.length+" of "+shooters.length+" fired \u2014 "+H+" hits, "+W+" wounds, "+D+" damage";
+    if (volleySkipped.length) msg += " \u00b7 "+volleySkipped.length+" did not fire";
+    document.getElementById("dice").textContent = msg;
+    volleySkipped.forEach(sk => logLine(sk.name+" did not fire \u2014 "+sk.reason));
     setRolls(true); renderRollPanel();
   }
 }
