@@ -183,6 +183,16 @@ canvas.dragging{cursor:grabbing;}
 .rollpanel .die.fail{border-color:var(--blood);color:#d4a0a0;}
 .rollpanel .die.skip{opacity:.45;}
 .rollpanel .math{color:var(--parchment-dim);font-size:11px;margin-top:2px;}
+.scorepanel{position:fixed;bottom:calc(120px + env(safe-area-inset-bottom,0px));left:calc(var(--rail-l) + var(--edge-l) + 8px);z-index:5;width:min(300px,42vw);max-height:min(44vh,340px);overflow:auto;background:#1b2825f6;border:1px solid var(--brass-dim);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px #0008;display:none;font-size:12px;line-height:1.4;}
+.scorepanel.on{display:block;}
+.scorepanel .rbar{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.scorepanel .rbar h3{flex:1;font-family:Fraunces,serif;font-size:15px;font-weight:600;margin:0;}
+.scorepanel .scoreseat{border-top:1px solid #0006;padding:6px 0;}
+.scorepanel .scoreseat .nm{font-weight:700;color:var(--brass);margin-bottom:2px;}
+.scorepanel .line{display:flex;align-items:center;gap:8px;margin:3px 0;}
+.scorepanel .line .sub{color:var(--parchment-dim);font-size:11px;}
+.scorepanel .adj{margin-left:auto;display:flex;gap:4px;}
+.scorepanel .adj .btn{min-width:28px;}
 .rollpanel .empty{color:var(--parchment-dim);font-style:italic;}
 @media (max-width:900px){
   :root{ --rail-l:76px; --rail-r:80px; }
@@ -203,6 +213,7 @@ canvas.dragging{cursor:grabbing;}
   <a class="btn sm" id="btnMenu" href="./index.html" title="Back to the game chooser and your matches">Menu</a>
   <button class="btn sm" id="btnGuide" title="Phase walkthrough — what to do and what to avoid">Guide</button>
   <button class="btn sm" id="btnRolls" title="Show hit / wound / save / damage math for the last attack">Rolls</button>
+  <button class="btn sm" id="btnScore" title="Scoreboard — VP and CP, with honor-system +/- adjusters">Score</button>
   <button class="btn sm" id="btnDev" title="Practice: Dev off plays like a match (rules enforced, real dice). Dev on skips gates and queues dice." style="display:none">Dev</button>
   <button class="btn sm danger" id="btnReset" title="Reset">Full Reset</button>
   <button class="btn sm danger" id="btnResetMatch" title="Restore the board to the Start-battle snapshot (BR1, terrain locked)" style="display:none">Reset match</button>
@@ -278,6 +289,10 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn sm ghost" id="btnRollsHide" title="Hide dice math">–</button>
   </div>
   <div id="rollBody" class="empty">Resolve an attack to see each roll here.</div>
+</aside>
+<aside class="scorepanel" id="scorepanel">
+  <div class="rbar"><h3>Scoreboard</h3><button class="btn sm ghost" id="btnScoreHide" title="Hide">–</button></div>
+  <div id="scoreBody"></div>
 </aside>
 <div class="warnbar" id="warnbar" role="status">
   <div id="warnText"></div>
@@ -413,7 +428,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.37-aoc-prompt-ow-squad";
+const BUILD = "v2.16.38-unit-fire-scoreboard";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -799,6 +814,8 @@ let guideOn = false;
 let rollsOn = false;
 /* Structured last attack for the Rolls panel (and future “pick which dice” UI). */
 let lastRoll = null;
+let volley = null;
+let scoreOn = false;
 /* While dragging a unit, rings stay on the start position until drop. */
 let moveOrigin = null;
 let lastDragId = null;
@@ -816,6 +833,7 @@ function emptyBoard(){
     zones:[{seat:0, depthIn:ZONE},{seat:1, depthIn:ZONE}],
     turn:{ battleRound:1, activeSeat:0, phase:"setup", deploymentDone:false },
     cp:{ "0":1, "1":0 },
+    scoreAdj:{ "0":0, "1":0 },
     log:[], players:{ "0": practice ? who : "", "1": "" },
     chargeRolls:{},
     ready:{ "0":false, "1":false },
@@ -1140,6 +1158,7 @@ function renderPhases(){
   if (!el) return;
   const rm = document.getElementById("btnResetMatch"); if (rm) rm.style.display = S.matchSnapshot ? "" : "none";
   renderReactionBar();
+  if (scoreOn) renderScorePanel();
   if (nextBtn){
     if (!inSetup()){
       nextBtn.textContent = "Next";
@@ -2075,6 +2094,7 @@ function doFireOverwatch(){
   markReactUsed(rs, "ow");
   overwatchMode = true;
   logLine(seatName(rs)+" Fire Overwatch (Snap - hits on 6s) - "+atk.name+" unit fires at "+tgt.name);
+  volley = [];
   const owShooters = unitGroup(atk).filter(m => modelGuns(m).length && !isTitanic(m));
   for (const m of owShooters){
     if (!targetId || !S.units.some(x=>x.id===targetId)) break;
@@ -2878,24 +2898,13 @@ function setSimpleRoll(title, name, rolls, note, extra){
   lastRoll = Object.assign({ kind:"simple", title, name, rolls, note, rerolled:false }, extra || {});
   renderRollPanel();
 }
-function renderRollPanel(){
-  const body = document.getElementById("rollBody");
-  if (!lastRoll){
-    body.className = "empty";
-    body.textContent = "Resolve an attack to see each roll here.";
-    return;
-  }
-  body.className = "";
-  const R = lastRoll;
+function rollBlockHtml(R){
+  if (!R) return "";
   if (R.kind === "simple"){
-    let html = `<div class="summary"><strong>${R.title}</strong> · ${R.name}<br>${R.note || ""}</div>
-      <div class="step"><h4>Roll</h4><div>`;
-    (R.rolls || []).forEach(n => {
-      html += `<span class="die ok">${n}</span>`;
-    });
+    let html = `<div class="summary"><strong>${R.title}</strong> · ${R.name}<br>${R.note || ""}</div><div class="step"><h4>Roll</h4><div>`;
+    (R.rolls || []).forEach(n => { html += `<span class="die ok">${n}</span>`; });
     html += `</div></div>`;
-    body.innerHTML = html;
-    return;
+    return html;
   }
   const skillLabel = R.kind === "ranged" ? "BS" : "WS";
   let html = `<div class="summary"><strong>${R.atkName}</strong> → <strong>${R.tgtName}</strong><br>
@@ -2904,36 +2913,32 @@ function renderRollPanel(){
     Need: hit ${R.hitNeed}+ · wound ${R.woundNeed}+ · save ${R.saveLabel}<br>
     Result: ${R.hitN} hit · ${R.woundN} wound · ${R.unsaved} unsaved · ${R.dmg} damage
     ${R.destroyed ? " · destroyed" : " · target "+R.tgtWoundsLeft+"/"+R.tgtW+" W"}</div>`;
-  R.dice.forEach((d, i) => {
+  (R.dice || []).forEach((d, i) => {
     html += `<div class="step"><h4>Attack ${i+1}</h4>`;
-    html += `<div>Hit <span class="die ${d.hit.ok?"ok":"fail"}">${d.hit.roll}</span>
-      <span class="math">need ${d.hit.need}+${d.hit.modNote || ""} → ${d.hit.ok?"HIT":"miss"}</span></div>`;
-    if (d.wound){
-      html += `<div>Wound <span class="die ${d.wound.ok?"ok":"fail"}">${d.wound.roll}</span>
-        <span class="math">S${R.S} vs T${R.T} need ${d.wound.need}+ → ${d.wound.ok?"WOUND":"fail"}</span></div>`;
-    } else {
-      html += `<div class="math">Wound — skipped</div>`;
-    }
-    if (d.save){
-      html += `<div>Save <span class="die ${d.save.ok?"ok":"fail"}">${d.save.roll}</span>
-        <span class="math">${d.save.how} → ${d.save.ok?"saved":"fail (damage)"}</span></div>`;
-    } else if (d.wound && d.wound.ok){
-      html += `<div class="math">Save — skipped</div>`;
-    }
-    if (d.fnp && d.fnp.rolls && d.fnp.rolls.length){
-      const ignored = d.fnp.rolls.length - (d.fnp.kept || 0);
-      html += `<div>FnP ${d.fnp.rolls.map(r =>
-        `<span class="die ${r >= d.fnp.need ? "ok" : "fail"}">${r}</span>`
-      ).join(" ")}
-        <span class="math">need ${d.fnp.need}+ · ${ignored} ignored · ${d.fnp.kept} go through</span></div>`;
-    }
-    if (d.dmg){
-      html += `<div>Damage <span class="die ok">${d.dmg}</span> <span class="math">applied to ${d.onto || "target"}</span></div>`;
-    } else if (d.fnp && d.save && !d.save.ok){
-      html += `<div class="math">Damage — all ignored by Feel No Pain</div>`;
-    }
+    html += `<div>Hit <span class="die ${d.hit.ok?"ok":"fail"}">${d.hit.roll}</span> <span class="math">need ${d.hit.need}+${d.hit.modNote || ""} → ${d.hit.ok?"HIT":"miss"}</span></div>`;
+    if (d.wound){ html += `<div>Wound <span class="die ${d.wound.ok?"ok":"fail"}">${d.wound.roll}</span> <span class="math">S${R.S} vs T${R.T} need ${d.wound.need}+ → ${d.wound.ok?"WOUND":"fail"}</span></div>`; }
+    else { html += `<div class="math">Wound — skipped</div>`; }
+    if (d.save){ html += `<div>Save <span class="die ${d.save.ok?"ok":"fail"}">${d.save.roll}</span> <span class="math">${d.save.how} → ${d.save.ok?"saved":"fail (damage)"}</span></div>`; }
+    else if (d.wound && d.wound.ok){ html += `<div class="math">Save — skipped</div>`; }
+    if (d.fnp && d.fnp.rolls && d.fnp.rolls.length){ const ignored = d.fnp.rolls.length - (d.fnp.kept || 0); html += `<div>FnP ${d.fnp.rolls.map(r => `<span class="die ${r >= d.fnp.need ? "ok" : "fail"}">${r}</span>`).join(" ")} <span class="math">need ${d.fnp.need}+ · ${ignored} ignored · ${d.fnp.kept} go through</span></div>`; }
+    if (d.dmg){ html += `<div>Damage <span class="die ok">${d.dmg}</span> <span class="math">applied to ${d.onto || "target"}</span></div>`; }
+    else if (d.fnp && d.save && !d.save.ok){ html += `<div class="math">Damage — all ignored by Feel No Pain</div>`; }
     html += `</div>`;
   });
+  return html;
+}
+function renderRollPanel(){
+  const body = document.getElementById("rollBody");
+  if (!body) return;
+  const list = (Array.isArray(volley) && volley.length) ? volley : (lastRoll ? [lastRoll] : []);
+  if (!list.length){ body.className = "empty"; body.textContent = "Resolve an attack to see each roll here."; return; }
+  body.className = "";
+  let html = "";
+  if (list.length > 1){
+    let H=0,W=0,U=0,D=0; list.forEach(R=>{ H+=R.hitN||0; W+=R.woundN||0; U+=R.unsaved||0; D+=R.dmg||0; });
+    html += `<div class="summary"><strong>Unit volley</strong> — ${list.length} models · ${H} hits · ${W} wounds · ${U} unsaved · ${D} damage</div>`;
+  }
+  html += list.map((R,i)=> (list.length>1 ? `<div class="step"><h4>Model ${i+1}${R.wepName?" — "+R.wepName:""}</h4></div>` : "") + rollBlockHtml(R)).join("");
   body.innerHTML = html;
 }
 document.getElementById("btnRolls").onclick = () => {
@@ -2942,6 +2947,25 @@ document.getElementById("btnRolls").onclick = () => {
 };
 document.getElementById("btnRolls").addEventListener("pointerenter", () => showTip(TIPS.rolls));
 document.getElementById("btnRollsHide").onclick = () => setRolls(false);
+function setScore(on){ scoreOn=!!on; const p=document.getElementById("scorepanel"); const b=document.getElementById("btnScore"); if(p)p.classList.toggle("on",scoreOn); if(b){b.classList.toggle("on",scoreOn);b.classList.toggle("gold",scoreOn);} if(scoreOn) renderScorePanel(); }
+function renderScorePanel(){
+  const body=document.getElementById("scoreBody"); if(!body) return;
+  const mv=(S.mission&&S.mission.vp)||{"0":0,"1":0}; const adj=S.scoreAdj||{"0":0,"1":0}; const cp=S.cp||{"0":0,"1":0};
+  function row(seat){ const prim=mv[String(seat)]||0,sec=adj[String(seat)]||0,tot=prim+sec;
+    return `<div class="scoreseat"><div class="nm">${esc(seatName(seat))}</div>`+
+      `<div class="line"><span>VP <strong>${tot}</strong> <span class="sub">(${prim} primary + ${sec} secondary)</span></span>`+
+      `<span class="adj"><button class="btn sm" data-score="${seat}" data-d="-1">–</button><button class="btn sm" data-score="${seat}" data-d="1">+</button></span></div>`+
+      `<div class="line"><span>CP <strong>${cp[String(seat)]||0}</strong></span>`+
+      `<span class="adj"><button class="btn sm" data-cp="${seat}" data-d="-1">–</button><button class="btn sm" data-cp="${seat}" data-d="1">+</button></span></div></div>`; }
+  body.innerHTML=row(0)+row(1);
+}
+document.getElementById("btnScore").onclick=()=>setScore(!scoreOn);
+document.getElementById("btnScoreHide").onclick=()=>setScore(false);
+document.getElementById("scoreBody").addEventListener("click",e=>{
+  const sb=e.target.closest("[data-score]"), cb=e.target.closest("[data-cp]");
+  if(sb){ const seat=sb.dataset.score,d=+sb.dataset.d; if(!S.scoreAdj)S.scoreAdj={"0":0,"1":0}; S.scoreAdj[seat]=Math.max(0,(S.scoreAdj[seat]||0)+d); logLine(seatName(+seat)+" secondary "+(d>0?"+":"")+d+" VP (now "+S.scoreAdj[seat]+")"); save(); renderScorePanel(); }
+  else if(cb){ const seat=cb.dataset.cp,d=+cb.dataset.d; if(!S.cp)S.cp={"0":0,"1":0}; S.cp[seat]=Math.max(0,(S.cp[seat]||0)+d); logLine(seatName(+seat)+" CP "+(d>0?"+":"")+d+" (now "+S.cp[seat]+")"); save(); renderScorePanel(); renderActions(); }
+});
 let devQueue = [];
 let devOn = false;
 let devSkipGates = true;
@@ -4108,6 +4132,7 @@ function resolveAttack(){
     tgtWoundsLeft: left.reduce((n,m) => n + Math.max(0, m.wounds ?? m.W), 0),
     dice
   };
+  if (Array.isArray(volley)) volley.push(lastRoll);
   let line = atk.name+" → "+unitLabel(tgt)+" "+w.name+": hit "+hitN+"/"+attacks+" wound "+woundN+" dmg "+dmg;
   if (cov) line += " (cover −1)";
   if (killed.length) line += " — removed "+killed.join(", ");
@@ -4124,7 +4149,26 @@ function resolveAttack(){
   renderRollPanel();
   save(); draw(); refreshTip(); renderActions();
 }
-document.getElementById("btnResolve").onclick = resolveAttack;
+function resolveUnitAttack(){
+  const atk0 = S.units.find(u=>u.id===attackerId);
+  const tgt0 = S.units.find(u=>u.id===targetId);
+  if (!atk0 || !tgt0){ resolveAttack(); return; }
+  const phase = S.turn.phase;
+  const shooters = unitGroup(atk0).filter(m => (phase==="fight"||phase==="charge") ? true : modelGuns(m).length);
+  volley = [];
+  for (const m of shooters){
+    if (!targetId || !S.units.some(x=>x.id===targetId)) break;
+    attackerId = m.id;
+    resolveAttack();
+  }
+  if (S.units.some(x=>x.id===atk0.id)) attackerId = atk0.id;
+  if (volley.length){
+    let H=0,W=0,U=0,D=0; volley.forEach(R=>{ H+=R.hitN||0; W+=R.woundN||0; U+=R.unsaved||0; D+=R.dmg||0; });
+    document.getElementById("dice").textContent = "Unit volley: "+volley.length+" firing — "+H+" hits, "+W+" wounds, "+D+" damage";
+    setRolls(true); renderRollPanel();
+  }
+}
+document.getElementById("btnResolve").onclick = resolveUnitAttack;
 document.getElementById("btnClearAtk").onclick = () => { clearCombatPair(); draw(); refreshTip(); renderCombatBar(); };
 
 const ptrs = new Map();

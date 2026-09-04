@@ -2,7 +2,7 @@
 
 Check items off with `[x]` as they land. Add notes under any item freely.
 
-**Current build:** `v2.16.37-aoc-prompt-ow-squad` (`wh40k.html`) · hub `v2.7.9-army` (`index.html`) · SW `pt-shell-v41`  
+**Current build:** `v2.16.38-unit-fire-scoreboard` (`wh40k.html`) · hub `v2.7.9-army` (`index.html`) · SW `pt-shell-v42`  
 **Handoff:** `artifacts/PROXY_TABLE_HANDOFF.md` (2026-08-29) — agreed cleanup in §6 is **not coded yet**.  
 **Baseline:** 11th edition Core Rules · skill `wh40k-rules`  
 **Constraint:** Do not change MTG game structure except for bug fixes. 40K stays in `wh40k.html`.
@@ -10,6 +10,13 @@ Check items off with `[x]` as they land. Add notes under any item freely.
 **Project path:** `artifacts/proxy-table/` (`wh40k.html`, `index.html`, `sw.js`, `worker/`, `army.html`, `datasheet.html`, `datasheets/`)
 
 ---
+
+## Queued fixes — SHIPPED in v2.16.38
+
+- [x] Whole-unit shooting & fighting.
+- [x] Scrollable all-rolls readout.
+- [x] Toggleable honor-system scoreboard (auto primary VP + manual secondary +/-; CP auto +1/turn + manual +/-).
+
 
 ## Already shipped (do not re-litigate)
 
