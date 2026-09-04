@@ -458,8 +458,8 @@ body.targeting #myFieldInner .card,body.targeting #oppFieldInner .card{opacity:.
             <span class="d">Editable card template the army manager will reuse.</span></button>
           <button class="bigbtn" type="button" id="menu40kArmy"><span class="t">Army manager</span>
             <span class="d">Build a unit from a datasheet, lock gear, drop it on the table.</span></button>
-          <button class="bigbtn" type="button" disabled><span class="t">How to play</span>
-            <span class="d">A walk through one battle round on the real map.</span></button>
+          <button class="bigbtn" type="button" id="menu40kHowto"><span class="t">How to play</span>
+            <span class="d">Step-by-step guide: setup, then each phase on its own page.</span></button>
         </div>
       </div>
     </div>
@@ -781,7 +781,7 @@ SIDEBOARD
 /* Bumped every time I hand you a new index.html. It's shown on the sign-in
    panel and next to your name in the menu bar, so you can confirm at a glance
    which build the browser actually loaded. */
-const BUILD = "v2.7.9-army";
+const BUILD = "v2.7.10-howto";
 
 /* Deployed Worker API. Override at runtime if needed by setting
    window.PT_API_BASE before this script runs. */
@@ -1319,6 +1319,7 @@ function open40kTable(id){ location.href = "./wh40k.html?match=" + encodeURIComp
 $("#menu40kPractice").onclick = () => { location.href = "./wh40k.html"; };
 $("#menu40kSheets").onclick = () => { location.href = "./datasheet.html"; };
 $("#menu40kArmy").onclick = () => { location.href = "./army.html"; };
+$("#menu40kHowto").onclick = () => { location.href = "./howto.html"; };
 $("#menu40kChallenge").onclick = () => { challengeGame = "wh40k"; switchTab("tabName"); open("#challengeModal"); };
 $("#menu40kCode").onclick = () => { challengeGame = "wh40k"; switchTab("tabCode"); open("#challengeModal"); };
 function switchTab(id){

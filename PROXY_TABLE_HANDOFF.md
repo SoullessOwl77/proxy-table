@@ -16,12 +16,14 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | Piece | File |
 |---|---|
-| Hub + MTG + Your Matches | `index.html` (`v2.7.9-army`) |
-| 40K table | `wh40k.html` (`v2.16.39-volley-report`) |
+| Hub + MTG + Your Matches | `index.html` (`v2.7.10-howto`) |
+| 40K table | `wh40k.html` (`v2.16.44-howto-link`) |
 | Army builder | `army.html` |
 | Datasheet editor | `datasheet.html` |
 | Catalog | `datasheets/load.js` + `index.js` + faction packs + `mfm-seed.js` + `demo.js` |
-| SW | `sw.js` (`pt-shell-v28`) |
+| SW | `sw.js` (`pt-shell-v48`) |
+| Shared guide model | `guide-data.js` (tooltips + walkthrough + tutorial) |
+| How-to-play tutorial | `howto.html` (paged, reads `guide-data.js`) |
 | Backend | `worker/` — D1 + Durable Object `Match` + webpush |
 
 **Rules baseline:** 11th edition Core Rules (~2026-06-01). Skills: `wh40k-rules`, `wh40k-datasheet` (draft and wait — do not invent paid Codex text). Official hubs: Warhammer Community downloads + `https://mfm.warhammer-community.com/en`. No live MFM scrape; seed + on-demand lookup only.
@@ -32,9 +34,9 @@ Vanilla HTML/JS PWA for tabletop proxy play. Teaching-first 40K (11th edition). 
 
 | File | Version |
 |---|---|
-| `wh40k.html` | `v2.16.39-volley-report` |
-| `index.html` | `v2.7.9-army` |
-| `sw.js` | `pt-shell-v43` |
+| `wh40k.html` | `v2.16.44-howto-link` |
+| `index.html` | `v2.7.10-howto` |
+| `sw.js` | `pt-shell-v48` |
 
 If live is older, files were not copied or title-tap did not run.
 
@@ -72,6 +74,11 @@ Recent slices in this chat thread:
 - `v2.16.21-drop-pass` — Next player locks the drop (drag no longer auto-commits). Reserves row is current seat only. Strategic Reserves (`· SR`) do not block Start battle.
 - `v2.16.22-reserve-bar` — after Start battle the formation row hides; it returns in Movement if that seat still has units off the table.
 - `v2.16.23-demo-kit` — Demo Infantry / Commander / Walker carry the teaching abilities (FnP, DS, Scout, Fights First, GRENADES). Role keywords stay split so deploy still has a normal drop, an Infiltrator, and a Titanic.
+- `v2.16.44-howto-link` — Added the **standalone How-to-play tutorial** (`howto.html`) and linked it: the hub's previously-disabled 40K "How to play" button now opens it, and the table's Guide panel has a "Full how-to-play guide" link. The tutorial is paged (Overview -> setup -> the five phases -> Reactions / CP / Scoring asides), Prev/Next + a jump nav + arrow keys + hash deep-links, and renders **entirely from `guide-data.js`** so it never drifts from the tooltips. New files `howto.html` + `guide-data.js` added to the SW SHELL cache. **Backup written:** `backups/backup_v2.16.44-howto-link_2026-09-04.zip` (61 files, excludes `.git`).
+- `v2.16.43-shared-guide` — **Unified the guidance model.** New `guide-data.js` (`window.PT_GUIDE`) is the single source for hover tooltips, the Guide walkthrough, and the tutorial. In `wh40k.html` the inline `TIPS` and `GUIDE` literals are now derived from `PT_GUIDE` at load (script included after `datasheets/load.js`, before the main script). Content corrected to current behavior: 11th setup sequence, whole-unit shooting/fighting, one-2D6-per-unit charge, fights-first order, reactions, scoreboard. Update guidance in one file and every surface follows. Node-verified all key coverage.
+- `v2.16.42-eleventh-setup` — **Setup rebuilt for 11th.** Decoupled first turn from the lobby: the lobby pick now sets Attacker/Defender (deploy order) only. New **Determine First Turn** deploy step after Infiltrator placement — a roll-off (`doRollFirstTurn`, D6 each, re-roll ties) then the winner chooses (`chooseFirstTurn`), which sets `activeSeat` and advances to the pre-battle (scouts) step. Start battle blocked until first turn is set. Reframed the Scouts step as Pre-battle abilities (Scout moves / Scout-to-Reserves / redeploys). Lobby + TIPS/GUIDE copy updated. Researched against 11th sources (New Recruit, Wahapedia 11e, Tabletop Battles). Node-verified.
+- `v2.16.41-fights-first` — Fight-order teaching slice. New helpers `isFirstFighter` (charged-and-not-failed OR has Fights First), `unitEngaged`, `fightOrderLists`, `firstFightPending`. The **Fights First** action button is now live (placeholder removed): tapping it (and `refreshTip`) calls `showFightOrder`, which reads the current table and shows a Tip listing engaged units as “fight first (chargers + Fights First) → then the rest, non-active player first,” with a (done) tag on already-fought units and a short line counting first-fighters still owed a fight. `resolveUnitAttack` adds a **non-blocking** soft-warn: fighting a normal unit while un-fought first-fighters remain in engagement pops a warnbar reminder but still resolves (engine is active-seat-only, so true cross-player alternation stays manual). ASCII-only strings to sidestep the em-dash encoding. Node-verified.
+- `v2.16.40-fight-once` — Bugfix: the Fight phase had no once-per-phase gate, so a unit could keep attacking until the enemy vanished. Shooting was fine (the `shot` flag + `shootGate` blocks re-fire); Fight set a `fought` flag but nothing checked it. Added a Fight gate in `resolveAttack`: a model with `fought` (and not dev-open) is skipped with reason "already fought this phase" — so a second Attack click reports all models as already fought instead of resolving again. Clears each turn via `beginSeatTurn`.
 - `v2.16.39-volley-report` — Volley accountability. `resolveAttack` now RETURNS a short reason string on every skip (out of range, in engagement range, friendly, etc.) instead of just a silent `return`. `resolveUnitAttack` collects non-firing models into `volleySkipped` and reports them: dice readout shows "N of M fired", each skipped model is logged ("X did not fire — out of range (Y in)"), and the Rolls panel lists them. Answers the "why didn't that one fire?" question and reveals whether a 4-of-5 was a real range/ER skip. Rifle TORRENT auto-hit and dead-target auto-advance (no shooter lost on a kill) confirmed as correct. **Backup written:** `backups/backup_v2.16.39-volley-report_2026-09-04.zip`.
 - `v2.16.38-unit-fire-scoreboard` — Batch build: **whole-unit shooting & fighting** (Attack loops the unit's models via `resolveUnitAttack`), **scrollable all-rolls readout** (`volley` array + `renderRollPanel`/`rollBlockHtml` list), and a **toggleable honor-system scoreboard** (`Score` button → `#scorepanel`: per-seat VP = auto primary + manual secondary +/-, and CP auto +1/turn + manual +/-). `scoreAdj` is an additive synced board field. Node-verified; VM was flaky, applied in two passes.
 - `v2.16.37-aoc-prompt-ow-squad` — Two combat reworks from testing. **Fire Overwatch now fires the whole shooting squad** at the target (loops `resolveAttack` over each non-Titanic model with a ranged weapon, Snap; stops if the target unit is wiped), not one model; still 1 CP for the unit. **Armor of Contempt moved off the combat bar to a reaction-bar prompt** (like Rapid Ingress): when the active seat picks an attacker + target in Shooting/Fight and the defender can AoC, the green reaction bar shows "Defend - [seat]: Armor of Contempt (1 CP) / Pass" (client-local `aocPrompt`, driven from `renderCombatBar`; the RI button doubles as the AoC button, Pass dismisses). Old `#btnAoc` removed. Note: AoC is still Practice-only (its trigger reads client-local `targetId`, which doesn't sync — PVP AoC still needs targeting synced into the board). Node-checked.
@@ -206,3 +213,4 @@ User copies from this folder to OneDrive deploy path, then title-taps.
 - Do not “fix” 40K sync by splitting boards like MTG.
 - Do not start LoS or a wargear tree while §6 is open.
 - After any table edit: bump `BUILD` in `wh40k.html` and `SHELL` in `sw.js`, then tell the user to copy those files and title-tap.
+- **Backups & docs standing rule:** a build = any change that bumps `v#`. Back up (zip to `backups/`) on every 5th patch increment (.29, .34, .39, .44 …) and on any minor/major rollover (rollover resets the count). **Every time a backup is written, also refresh `WORKFLOW2.md` (status + build line) and this file's build table** so the trackers never drift.

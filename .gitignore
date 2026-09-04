@@ -1,0 +1,3 @@
+
+# zip writes temp files like ziXXXXXX in the output dir; never commit them
+backups/zi*

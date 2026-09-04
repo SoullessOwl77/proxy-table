@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Proxy Table — 40K</title>
 <script src="./datasheets/load.js"></script>
+<script src="./guide-data.js"></script>
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#141d1b">
 <link rel="icon" href="./icon-192.png">
@@ -254,6 +255,7 @@ canvas.dragging{cursor:grabbing;}
   <ul class="dont" id="guideDont"></ul>
   <div class="nextwhen" id="guideNext"></div>
   <div class="about" id="guideAbout"></div>
+  <a class="howtolink" href="./howto.html" target="_blank" rel="noopener" style="display:block;margin-top:8px;font-size:12px;color:#c39a4e;text-decoration:none;border-top:1px solid #2a3a3688;padding-top:8px">Full how-to-play guide →</a>
 </aside>
 <aside class="devpanel" id="devpanel">
   <div class="gbar">
@@ -358,6 +360,9 @@ canvas.dragging{cursor:grabbing;}
     <button class="btn gold" id="btnDeployUnit">Deploy unit</button>
     <button class="btn gold" id="btnPassDrop">Next player</button>
     <button class="btn" id="btnScoutMove">Scout move</button>
+    <button class="btn gold" id="btnRollFirst" style="display:none">Roll first turn</button>
+    <button class="btn gold" id="btnFirst0" style="display:none">P1 goes first</button>
+    <button class="btn gold" id="btnFirst1" style="display:none">P2 goes first</button>
     <span class="hint" id="reserveSetupHint" style="display:none">Off the table first: mark Strategic Reserves, then Begin drops. Place, then Next player — that locks the drop.</span>
   </div>
   <div class="row" id="rowReserves" style="display:none">
@@ -404,7 +409,7 @@ canvas.dragging{cursor:grabbing;}
       <select id="lobbyArmy2"></select>
     </div>
     <p class="hint" id="lobbyArmyHint"><a href="./army.html">Army generator</a> · costs from the <a href="https://mfm.warhammer-community.com/en" target="_blank" rel="noopener">Munitorum Field Manual</a></p>
-    <label for="lobbyFirst">Who goes first (Attacker)</label>
+    <label for="lobbyFirst">Attacker (Defender deploys first; first turn is rolled after deployment)</label>
     <select id="lobbyFirst"></select>
     <label for="lobbyMission">Mission</label>
     <select id="lobbyMission">
@@ -428,7 +433,7 @@ canvas.dragging{cursor:grabbing;}
   </div>
 </div>
 <script>
-const BUILD = "v2.16.39-volley-report";
+const BUILD = "v2.16.44-howto-link";
 const STORE = "pt_wh40k_practice";
 const API_BASE = window.PT_API_BASE || "https://proxytable-api.proxytable.workers.dev";
 const W = 60, H = 44, ZONE = 12;
@@ -459,98 +464,16 @@ const MISSIONS = {
   }
 };
 const PHASES = ["command","movement","shooting","charge","fight"];
-const TIPS = {
-  setup: {
-    title:"Setup",
-    short:"Place terrain and units. Start battle when the board is ready. You do not come back here with Next.",
-    more:"Lobby first: battle size, mission, who goes first, and an army for each edge. Force disposition is Dawn of War (12″ long-edge DZs). The player who does not go first is the Defender and places first.\n\nArmies come in as a battle formation (off the table). Mark Strategic Reserves before Begin drops — you cannot skip a later drop into Reserves. Alternate units. Titanic counts as two. Infiltrators set up after everyone else. Scout moves after first turn is known.\n\nObjectives score at the end of your turn: 5 VP for holding 1+, 5 for 2+, 5 if you hold more than the opponent.\n\nStart battle locks terrain and opens Command."
-  },
-  command: {
-    title:"Command phase",
-    short:"Start of this player’s turn. Battle-shock on damaged units. CP +1. Stratagems spend CP.",
-    more:"At the start of your Command this table refreshes that seat’s unit flags and adds 1 Command Point (building block for Stratagems).\n\nBattle-shock is a real Command step: each damaged unit on this seat must test. Select it → Optional → Battle-shock → Announce. 2D6 vs Leadership (Synapse units roll 3D6). Fail = token marked BS and OC 0 until this seat’s next Command.\n\nStratagems: Command Re-roll, Grenade, and Armor of Contempt each cost 1 CP, once per your turn."
-  },
-  movement: {
-    title:"Movement phase",
-    short:"Default drag = Normal Move (M″ from base edge). Optional: Advance (M+D6), Fall Back, Remain Stationary. Multi-model units must stay in coherency.",
-    more:"Declare Advance / Fall Back / Remain with Optional → Announce before (or instead of) a Normal Move.\n\nAdvance: roll D6; gold ring becomes M+that from the base edge; usually cannot shoot or charge.\nFall Back: leave 2″ ER; usually cannot shoot or charge.\nRemain Stationary: choose not to move.\n\nCoherency (real rule for multi-model units):\n• Models that share a unit (green dashed links) must form one group: each model within 2″ base-edge of another so the unit is a single chain — not every model within 2″ of every other model.\n• Also, every model in that unit must be within 9″ of every other model (stops long conga lines).\n• Single models (e.g. the Walker alone) have no coherency partners.\n\nIf a move breaks coherency, a warning appears. Don’t end on enemy bases."
-  },
-  shooting: {
-    title:"Shooting phase",
-    short:"Eligible units fire. Sequence: Hit → Wound → Save → Damage. Cover is −1 to hit.",
-    more:"Pick Combat, tap your model then an enemy in range and not in 2″ ER. Roll to hit on BS (1 always fails, 6 always hits). Then Strength vs Toughness to wound. Then armour save, worsened by AP; an Invulnerable save ignores AP. Cover (−1 to hit) if the target’s base overlaps Light/Dense, or the shot crosses Light/Dense between the two models."
-  },
-  charge: {
-    title:"Charge phase",
-    short:"Try to close to 2″ of an enemy. Success is a 2D6 vs the remaining distance.",
-    more:"Eligible units that did not Advance or Fall Back can charge. Select the model, tap Roll charge for 2D6. If the roll cannot reach 2″ ER of any enemy, the charge fails and the model stays put. If it can, gold ring = that many inches from the start; end inside the ring and in ER. Drop short or outside the ring and the charge fails — model snaps back. Fighting is the Fight phase."
-  },
-  fight: {
-    title:"Fight phase",
-    short:"Models within 2″ use melee. Use Combat to resolve Hit → Wound → Save → Damage.",
-    more:"Engagement Range is 2″. Pile-in and Consolidate are 3″ moves (honor-system here). Chargers and Fights First units usually strike first; then players alternate. This table uses the same attack engine as shooting, with WS and the melee profile."
-  },
-  terrain: {
-    title:"Terrain tool",
-    short:"Place, rotate, lock, or Generate a starter layout. Categories: Exposed, Light, Dense.",
-    more:"During setup (Command, before the battle starts) you can Generate, place, rotate, and lock pieces. The first time you leave Command (Next → Movement), all terrain locks for the rest of the battle — same as real 40K. Practice Reset returns to setup."
-  },
-  unit: {
-    title:"Units tool",
-    short:"Drop demo forces or single models. Drag to move. Gold ring = M″ from base edge; red = 2″ ER.",
-    more:"One token is one model. Blue is seat 0, red is seat 1. Green dashed lines link models that share a group (one unit). Multi-model groups must stay in coherency (2″ chain + 9″ span). A warning fires if a move breaks that."
-  },
-  measure: {
-    title:"Measure",
-    short:"Tap two points. The tape shows inches on the 60″ × 44″ table.",
-    more:"All distances in 40K are in inches. Shooting range is edge-to-edge (base to base). The tape is for you; it is not synced to the other player."
-  },
-  combat: {
-    title:"Combat tool",
-    short:"Tap your model, then an enemy, then Attack. Uses guns in Shooting, melee in Fight.",
-    more:"Hit uses BS or WS. Cover −1 if the target’s base overlaps Light/Dense, or the shot line crosses Light/Dense. Wound compares Strength to Toughness (equal = 4+). Save uses Sv modified by AP, or Inv if the model has one. Damage comes off remaining wounds; 0 wounds removes the model."
-  },
-  next: {
-    title:"Next",
-    short:"In setup: Start battle. After that: Command → Movement → Shooting → Charge → Fight, then the other seat’s Command.",
-    more:"Setup has its own Start battle button (same control). After the battle starts, Next only walks the five phases. It does not return to Setup."
-  },
-  fit: {
-    title:"Fit",
-    short:"Resets pan/zoom so the full 60″ × 44″ table is centered on screen.",
-    more:"Pinch or scroll to zoom any time. Fit is the “I’m lost, show me the whole board” button. It does not move models or change the phase."
-  },
-  menu: {
-    title:"Menu",
-    short:"Leaves this table and returns to the hub (matches + game chooser).",
-    more:"Practice progress is saved in this browser. PVP stays on the server — rejoin from Your Matches."
-  },
-  guide: {
-    title:"Guide",
-    short:"Phase walkthrough plus the same teaching notes as Army help.",
-    more:"On by default in Practice, off in PVP. Toggle any time.\n\nThis table is a teaching proxy, not tournament-legal. One faction per list. Normal names = official pack or card. Purple = fan (Wahapedia) — check the app if a fight depends on it. Red = points only, no stat line; those tokens will not shoot. Onslaught 3000 pts / 4 DP is a house rule; Core only prints Incursion and Strike Force.\n\nLists live on this device. Export / import is on the Army page."
-  },
-  rolls: {
-    title:"Dice math",
-    short:"Shows every hit, wound, save, and damage roll from the last Attack.",
-    more:"Toggle with Rolls. Each attack is listed with the number needed and pass/fail. Structured for a later step where you can choose which dice count."
-  },
-  exposed: {
-    title:"Exposed terrain",
-    short:"Does not grant Cover. Still useful as a footprint for placement and blocking.",
-    more:"Obstacles and similar pieces are Exposed in this proxy. They do not apply the −1 to hit Cover penalty. True blocking LoS is still simplified — treat absolute blocked shots as honor-system."
-  },
-  light: {
-    title:"Light cover",
-    short:"Target on it, or shot through it → shooters take −1 to hit.",
-    more:"11th edition Cover is a hit penalty, not a better armour save. Woods and hills use Light here. Dense uses the same Cover rule in this slice. Stand the target on the piece, or put the piece between the models."
-  },
-  dense: {
-    title:"Dense cover",
-    short:"Same as Light on this table: −1 to hit if on it or shot through it.",
-    more:"Ruins are Dense. In a full game Dense also tightens visibility more strictly. Here it matches Light for Cover. Lock ruins after you like the layout."
-  }
-};
+const TIPS = (function(){
+  const g = (window.PT_GUIDE) || { phases:{}, tips:{} };
+  const t = {};
+  Object.keys(g.phases || {}).forEach(function(k){
+    const p = g.phases[k];
+    t[k] = { title:p.title, short:p.short, more:p.more };
+  });
+  Object.keys(g.tips || {}).forEach(function(k){ t[k] = g.tips[k]; });
+  return t;
+})();
 
 /* Phase optional actions. placeholder:true = tip only (building block for later). */
 const ACTIONS = {
@@ -620,106 +543,24 @@ const ACTIONS = {
     more:"Announce Consolidate after the unit has fought, then nudge up to 3″."
   },
   fightsFirst: {
-    id:"fightsFirst", phase:"fight", label:"Fights First", announce:false, placeholder:true,
-    short:"Chargers and some units fight before others — order is not automated yet.",
-    more:"Full sequence: Fights First (including units that charged) → remaining units, alternating. Practice order by hand for now."
+    id:"fightsFirst", phase:"fight", label:"Fights First", announce:false,
+    short:"Tap to see who fights first - units that charged or have Fights First go before the rest.",
+    more:"Order: units that charged or have Fights First fight first (the active player picks one, then alternate). After those are done, remaining units alternate with the non-active player choosing first. Tap this button any time in the Fight phase for the live list of engaged units."
   }
 };
 
 /* Phase walkthrough. Shape supports future unit-aware lines:
    each do/dont entry may later be { text, when: { keywords:[], role:"" } }.
    getGuideBlock() already passes the unit list for that filtering. */
-const GUIDE = {
-  setup: {
-    title: "Setup",
-    do: [
-      "Lobby: size, mission, who goes first, army on each edge. Dawn of War 12″ DZs. Defender deploys first.",
-      "Formation: armies start off the table. Mark who stays in Strategic Reserves, then Begin drops. Alternate. Titanic = two drops for the opponent.",
-      "Infiltrators after normal drops (>8″ from enemy DZ and units). Scouts after first turn is known.",
-      "Generate or place terrain. Objectives score at the end of your turn.",
-      "Same colors as Army help: normal = official pack/card, purple = fan, red = points only.",
-      "Tap Start battle when the board is ready."
-    ],
-    dont: [
-      "Don’t mix factions on one list — Tyranids stay with Tyranids, Marines with Marines.",
-      "Don’t drop a red (points-only) unit and expect guns to work.",
-      "Don’t expect Next to bring you back here — use Setup or Reset."
-    ],
-    next: "Start battle → Command. Terrain locks. Unit dragging waits for Movement / Charge / Fight."
-  },
-  command: {
-    title: "Command phase",
-    do: [
-      "Note whose turn it is and the battle round. CP +1 already applied.",
-      "Battle-shock: each damaged unit on this seat tests 2D6 vs Ld (Announce).",
-      "Failed tests mark BS and drop that unit’s OC to 0 until its next Command.",
-      "Spend CP here or later this turn: Command Re-roll, Grenade (Shooting), Armor of Contempt is a defender reaction — use it in Combat when your unit is the target."
-    ],
-    dont: [
-      "Don’t skip Battle-shock on a wounded unit — Next will remind you.",
-      "Don’t spend CP you don’t have — each of those three is 1 CP, once per your turn.",
-      "Don’t move models or shoot — Command is not a movement phase.",
-      "Don’t move terrain — it locked when the battle started."
-    ],
-    next: "When you’re ready, Next → Movement."
-  },
-  movement: {
-    title: "Movement phase",
-    do: [
-      "Select an active-player model. Gold ring = M″ reach from the base edge.",
-      "Drag so the base edge stays on or inside the gold ring when you stop.",
-      "Multi-model groups (green links): keep a 2″ chain and ≤9″ between farthest models."
-    ],
-    dont: [
-      "Don’t leave a squad model stranded more than 2″ from the rest of its unit.",
-      "Don’t move the other seat’s models — only the active player’s force moves.",
-      "Don’t end on top of an enemy model."
-    ],
-    next: "When every model you wanted to move has moved (or stayed), Next → Shooting."
-  },
-  shooting: {
-    title: "Shooting phase",
-    do: [
-      "Select a model — blue ring is its gun range; red is 2″ ER (don’t shoot into that).",
-      "Combat tool: tap active-player model, then an enemy inside the blue ring.",
-      "Check Cover on the bar. Attack → Hit → Wound → Save → Damage."
-    ],
-    dont: [
-      "Don’t shoot with the other seat’s models — only the active player attacks.",
-      "Don’t shoot into 2″ Engagement Range with normal guns (Fight is for that).",
-      "Don’t pick a friendly model as the target."
-    ],
-    next: "When you’ve shot with the models you want, Next → Charge."
-  },
-  charge: {
-    title: "Charge phase",
-    do: [
-      "Select an active-player model, then tap Roll charge (2D6).",
-      "If the roll cannot reach 2″ ER of any enemy, it fails and the model stays.",
-      "If it can: gold ring from the start point — end inside it and in the red 2″ ER."
-    ],
-    dont: [
-      "Don’t move farther than the gold ring — that’s a failed charge, snap-back.",
-      "Don’t stop short of ER — that’s also a failed charge.",
-      "Don’t resolve fights yet — that is the Fight phase."
-    ],
-    next: "When charges are done, Next → Fight."
-  },
-  fight: {
-    title: "Fight phase",
-    do: [
-      "Select a model — red ring is 2″ Engagement Range only.",
-      "Combat tool: tap active-player model in the red ring of an enemy, then the enemy, then Attack.",
-      "Watch wounds on the token; destroyed models disappear."
-    ],
-    dont: [
-      "Don’t attack with the inactive seat — wait for their turn.",
-      "Don’t swing at targets outside 2″.",
-      "Don’t skip ending the turn — after Fight, Next starts the other player’s Command."
-    ],
-    next: "Tap Next to pass the turn (other seat’s Command, or next battle round)."
-  }
-};
+const GUIDE = (function(){
+  const g = (window.PT_GUIDE) || { phases:{} };
+  const G = {};
+  Object.keys(g.phases || {}).forEach(function(k){
+    const p = g.phases[k];
+    G[k] = { title:p.title, do:(p.do||[]).slice(), dont:(p.dont||[]).slice(), next:p.next||"" };
+  });
+  return G;
+})();
 const PRESETS = {
   ruin:     { preset:"ruin",     category:"dense",   w:8, h:6, label:"Ruin" },
   woods:    { preset:"woods",    category:"light",   w:8, h:8, label:"Woods" },
@@ -1050,8 +891,8 @@ function renderLobby(){
     }
   }
   document.getElementById("lobbySub").textContent = practice
-    ? "Pick size, mission, an army for each edge, and who starts. First player is the Attacker; the other is the Defender and places first. Over-points warns but Practice can continue."
-    : "Agree battle size, mission, and who goes first. First player is the Attacker; the other is the Defender and places first. Armies do not have to match. Over-points blocks start.";
+    ? "Pick size, mission, an army for each edge, and who is the Attacker. The other is the Defender and deploys first; the first turn is rolled after deployment. Over-points warns but Practice can continue."
+    : "Agree battle size, mission, and who is the Attacker. The other is the Defender and deploys first; the first turn is rolled after deployment. Armies do not have to match. Over-points blocks start.";
 }
 function writeMyLobby(){
   if (!S.lobby) S.lobby = emptyLobby();
@@ -1103,12 +944,11 @@ function commitLobby(){
     showWarn("<strong>Over points:</strong> " + over.pts.toLocaleString() + " / " + over.cap.toLocaleString() + ". Practice can continue.");
   }
   const first = Number(S.lobby.first[String(mySeat)]);
-  if (first === 0 || first === 1) S.turn.activeSeat = first;
   spawnSeatArmy(mySeat);
   if (practice) spawnSeatArmy(mySeat === 0 ? 1 : 0);
   const atk = (first === 0 || first === 1) ? first : 0;
   const def = atk === 0 ? 1 : 0;
-  S.deploy = { on:true, step:"formation", attacker: atk, defender: def, dropSeat: def, extra: 0 };
+  S.deploy = { on:true, step:"formation", attacker: atk, defender: def, dropSeat: def, extra: 0, firstWinner: null, firstTurn: null };
   S.mission = emptyMission(S.lobby.mission || "takehold");
   S.lobby.ready = S.lobby.ready || { "0":false, "1":false };
   S.lobby.ready[String(mySeat)] = true;
@@ -1563,6 +1403,24 @@ function revertMove(){
 function inEngagement(u){
   return S.units.some(o => !o.reserved && o.seat !== u.seat && edgeDist(u,o) <= 2.01);
 }
+function unitEngaged(u){ return unitGroup(u).some(m => inEngagement(m)); }
+function isFirstFighter(u){
+  const f = flagsOf(u);
+  return !!(f.fightsFirst || (f.charged && !f.chargeFailed));
+}
+function fightOrderLists(){
+  const seen = {}, first = [], rest = [];
+  S.units.forEach(u => {
+    if (u.reserved) return;
+    if (u.groupId){ if (seen[u.groupId]) return; seen[u.groupId] = true; }
+    if (!unitEngaged(u)) return;
+    (isFirstFighter(u) ? first : rest).push(u);
+  });
+  return { first, rest };
+}
+function firstFightPending(){
+  return fightOrderLists().first.filter(u => !flagsOf(u).fought);
+}
 function hasDeepStrike(u){
   if (!u) return false;
   if (flagsOf(u).deepStrike) return true;
@@ -1738,15 +1596,15 @@ function maybeAdvanceDeployStep(){
     const left = dropQueue(0).length + dropQueue(1).length;
     if (!left){
       const inf = formationUnits().filter(isInfiltrator);
-      S.deploy.step = inf.length ? "infiltrate" : "scouts";
+      S.deploy.step = inf.length ? "infiltrate" : "firstturn";
       S.deploy.dropSeat = S.deploy.defender;
       S.deploy.extra = 0;
-      logLine(inf.length ? "Infiltrators may set up outside their DZ (>8″ from enemy DZ and units)" : "Scout moves — select a Scout unit, then Scout move");
+      logLine(inf.length ? "Infiltrators may set up outside their DZ (>8″ from enemy DZ and units)" : "Deployment done — determine the first turn: Roll first turn.");
     }
   } else if (S.deploy.step === "infiltrate"){
     if (!dropQueue(0).length && !dropQueue(1).length){
-      S.deploy.step = "scouts";
-      logLine("Scout moves — after first turn is known. 6″ from your DZ, stay 8″ from enemies — or pull a reserved Scout into your DZ");
+      S.deploy.step = "firstturn";
+      logLine("Infiltrators placed — determine the first turn: Roll first turn.");
     }
   }
 }
@@ -1856,6 +1714,26 @@ function passDeployPriority(){
   }
   renderReserveRow(); refreshArmyPick(); save(); draw(); renderActions();
 }
+function doRollFirstTurn(){
+  if (!inSetup() || !S.deploy || !S.deploy.on || S.deploy.step !== "firstturn") return;
+  let a, b;
+  do { a = d6(); b = d6(); } while (a === b);
+  const winner = a > b ? 0 : 1;
+  S.deploy.firstWinner = winner;
+  logLine("First-turn roll-off — "+seatName(0)+" "+a+", "+seatName(1)+" "+b+". "+seatName(winner)+" wins and chooses who goes first.");
+  showWarn("<strong>Roll-off:</strong> "+seatName(0)+" rolled "+a+", "+seatName(1)+" rolled "+b+". "+seatName(winner)+" wins - pick who takes the first turn.");
+  save(); draw(); renderReserveRow();
+}
+function chooseFirstTurn(seat){
+  if (!inSetup() || !S.deploy || !S.deploy.on || S.deploy.step !== "firstturn" || S.deploy.firstWinner == null) return;
+  S.deploy.firstTurn = seat;
+  S.turn.activeSeat = seat;
+  S.deploy.step = "scouts";
+  S.deploy.dropSeat = S.deploy.defender;
+  logLine(seatName(seat)+" takes the first turn. Pre-battle abilities next - Scout moves and honor-system redeploys, then Start battle.");
+  showWarn("<strong>First turn:</strong> "+seatName(seat)+" goes first. Resolve Scout moves and any redeploys, then Start battle.");
+  save(); draw(); refreshTip(); renderActions(); renderReserveRow(); updateTerrainTools();
+}
 function doScoutMove(){
   if (!inSetup() || !S.deploy || S.deploy.step !== "scouts"){
     showWarn("<strong>Scouts:</strong> finish drops first.");
@@ -1886,6 +1764,10 @@ function finishDeployIfReady(){
   if (!S.deploy || !S.deploy.on) return true;
   if (S.deploy.step === "formation"){
     showWarn("<strong>Start battle:</strong> mark Reserves, then Begin drops and place units.");
+    return false;
+  }
+  if (S.deploy.step === "firstturn"){
+    showWarn("<strong>Start battle:</strong> determine the first turn (Roll first turn) before starting.");
     return false;
   }
   if (S.deploy.step === "drops" || S.deploy.step === "infiltrate"){
@@ -2147,9 +2029,19 @@ function renderReserveRow(){
   if (hint){
     if (inSetup() && step === "formation") hint.textContent = "Only "+seatName(view)+" is listed. Strategic Reserves = stays off the table. Switch edge to see the other list. Then Begin drops.";
     else if (inSetup() && (step === "drops" || step === "infiltrate")) hint.textContent = seatName(view)+" places. Select one → Deploy unit → drag → Next player to lock.";
+    else if (inSetup() && step === "firstturn") hint.textContent = "Determine the first turn: Roll first turn, then the winner picks who goes first.";
+    else if (inSetup() && step === "scouts") hint.textContent = "Pre-battle abilities: Scout moves (or send a Scout to Strategic Reserves) and honor-system redeploys. Then Start battle.";
     else if (inSetup()) hint.textContent = "Off the table until you Ingress in Movement.";
     else hint.textContent = "Movement: select one, Optional → Ingress → Announce. Usually battle round 2+.";
   }
+  const inFirst = inSetup() && S.deploy && S.deploy.on && S.deploy.step === "firstturn";
+  const won = inFirst && S.deploy.firstWinner != null;
+  const rf = document.getElementById("btnRollFirst");
+  if (rf) rf.style.display = (inFirst && !won) ? "" : "none";
+  const f0 = document.getElementById("btnFirst0");
+  if (f0){ f0.style.display = won ? "" : "none"; f0.textContent = seatName(0)+" goes first"; }
+  const f1 = document.getElementById("btnFirst1");
+  if (f1){ f1.style.display = won ? "" : "none"; f1.textContent = seatName(1)+" goes first"; }
 }
 function overlapsEnemy(u){
   return S.units.some(o => !o.reserved && o.id !== u.id && o.seat !== u.seat && edgeDist(u,o) <= 0.05);
@@ -2234,11 +2126,31 @@ function renderActions(){
     hint.textContent = u.name + (bits.length ? " · "+bits.join(" · ") : " · no flags yet");
   } else hint.textContent = "Select a model, tap an action for rules (More), then Announce if it is a declare.";
 }
+function showFightOrder(){
+  const lists = fightOrderLists();
+  const first = lists.first, rest = lists.rest;
+  const tag = u => seatName(u.seat)+" "+u.name+(flagsOf(u).fought ? " (done)" : "");
+  let more;
+  if (!first.length && !rest.length){
+    more = "No units are in engagement range yet. Charge or move into base contact first, then check back.";
+  } else {
+    const a = first.length ? first.map(tag).join(" / ") : "(none)";
+    const b = rest.length ? rest.map(tag).join(" / ") : "(none)";
+    more = "Fight first (units that charged + Fights First): "+a+".   Then, alternating and starting with the non-active player: "+b+".   (done) = already fought this phase.";
+  }
+  const pend = firstFightPending();
+  let short;
+  if (pend.length) short = pend.length+" first-fighter"+(pend.length>1?"s":"")+" still to fight before the normal units.";
+  else if (first.length || rest.length) short = "First-fighters done - remaining units just alternate now.";
+  else short = "Nobody in engagement range yet.";
+  showTip({ title:"Fights First", short:short, more:more });
+}
 function pickAction(id){
   const a = ACTIONS[id];
   if (!a) return;
   selectedAction = id;
-  showTip({ title:a.label, short:a.short, more:a.more });
+  if (id === "fightsFirst") showFightOrder();
+  else showTip({ title:a.label, short:a.short, more:a.more });
   renderActions();
 }
 function doCommandReroll(u){
@@ -2612,7 +2524,7 @@ function startBattle(){
   if (!inSetup()) return;
   lockAllTerrain("Setup done — terrain locked for battle");
   S.turn.phase = "command";
-  S.turn.activeSeat = S.turn.activeSeat || 0;
+  S.turn.activeSeat = (S.deploy && (S.deploy.firstTurn === 0 || S.deploy.firstTurn === 1)) ? S.deploy.firstTurn : (S.turn.activeSeat || 0);
   if (who) S.players[String(mySeat)] = who;
   S.ready = { "0":false, "1":false };
   S.resetAsk = { "0":false, "1":false };
@@ -2823,6 +2735,7 @@ function showTip(pack){
 }
 function refreshTip(){
   if (selectedAction && ACTIONS[selectedAction]){
+    if (selectedAction === "fightsFirst"){ showFightOrder(); return; }
     const a = ACTIONS[selectedAction];
     showTip({ title:a.label, short:a.short, more:a.more });
     return;
@@ -3784,6 +3697,12 @@ const btnPassDrop = document.getElementById("btnPassDrop");
 if (btnPassDrop) btnPassDrop.onclick = passDeployPriority;
 const btnScoutMove = document.getElementById("btnScoutMove");
 if (btnScoutMove) btnScoutMove.onclick = doScoutMove;
+const btnRollFirst = document.getElementById("btnRollFirst");
+if (btnRollFirst) btnRollFirst.onclick = doRollFirstTurn;
+const btnFirst0 = document.getElementById("btnFirst0");
+if (btnFirst0) btnFirst0.onclick = () => chooseFirstTurn(0);
+const btnFirst1 = document.getElementById("btnFirst1");
+if (btnFirst1) btnFirst1.onclick = () => chooseFirstTurn(1);
 document.getElementById("btnClearM").onclick = () => { tape=null; draw(); };
 document.getElementById("btnChargeRoll").onclick = rollCharge;
 document.getElementById("btnAnnounce").onclick = announceAction;
@@ -3967,6 +3886,11 @@ function resolveAttack(){
   if (S.turn.phase === "charge"){
     const g = chargeGate(atk);
     if (g){ document.getElementById("dice").textContent = g; showWarn("<strong>Charge:</strong> "+g); return; }
+  }
+  if (S.turn.phase === "fight" && flagsOf(atk).fought && !devOpenGates()){
+    document.getElementById("dice").textContent = atk.name+" already fought this phase.";
+    showWarn("<strong>Fight:</strong> "+atk.name+" already fought this phase.");
+    return "already fought this phase";
   }
   const mates = unitModels(tgt);
   const measure = closestModel(atk, mates) || tgt;
@@ -4157,6 +4081,12 @@ function resolveUnitAttack(){
   const tgt0 = S.units.find(u=>u.id===targetId);
   if (!atk0 || !tgt0){ resolveAttack(); return; }
   const phase = S.turn.phase;
+  if (phase === "fight" && !isFirstFighter(atk0)){
+    const pend = firstFightPending().filter(u => u.id !== atk0.id && (!atk0.groupId || u.groupId !== atk0.groupId));
+    if (pend.length){
+      showWarn("<strong>Fights First:</strong> "+pend.map(u=>seatName(u.seat)+" "+u.name).join(", ")+" should fight before "+atk0.name+". Continuing anyway - this is just the order reminder.");
+    }
+  }
   const shooters = unitGroup(atk0).filter(m => (phase==="fight"||phase==="charge") ? true : modelGuns(m).length);
   volley = []; volleySkipped = [];
   for (const m of shooters){
